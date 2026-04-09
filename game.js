@@ -556,8 +556,8 @@ function fitMobileViewport() {
     return;
   }
 
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+  const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+  const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   const hudHeight = hudEl ? hudEl.offsetHeight : 0;
   const notesHeight = notesEl ? notesEl.offsetHeight : 0;
 
@@ -577,6 +577,14 @@ function fitMobileViewport() {
   if (stageWrapEl) {
     stageWrapEl.style.width = `${WORLD.width}px`;
   }
+}
+
+function scheduleMobileViewportFit() {
+  fitMobileViewport();
+  requestAnimationFrame(() => {
+    fitMobileViewport();
+  });
+  setTimeout(fitMobileViewport, 120);
 }
 
 function selectedShipModel() {
@@ -2734,11 +2742,19 @@ overlay.addEventListener("click", (event) => {
 showShipSelectionMenu();
 setupTouchControls();
 fitMobileViewport();
-window.addEventListener("resize", fitMobileViewport);
-window.addEventListener("orientationchange", () => {
-  setTimeout(fitMobileViewport, 60);
-});
+window.addEventListener("resize", scheduleMobileViewportFit);
+window.addEventListener("orientationchange", scheduleMobileViewportFit);
+window.addEventListener("pageshow", scheduleMobileViewportFit);
+window.addEventListener("focus", scheduleMobileViewportFit);
 if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", fitMobileViewport);
+  window.visualViewport.addEventListener("resize", scheduleMobileViewportFit);
+}
+if (window.matchMedia) {
+  const orientationMedia = window.matchMedia("(orientation: landscape)");
+  if (typeof orientationMedia.addEventListener === "function") {
+    orientationMedia.addEventListener("change", scheduleMobileViewportFit);
+  } else if (typeof orientationMedia.addListener === "function") {
+    orientationMedia.addListener(scheduleMobileViewportFit);
+  }
 }
 requestAnimationFrame(gameLoop);
