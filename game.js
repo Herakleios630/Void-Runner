@@ -95,12 +95,55 @@ const SHIP_MODELS = {
   },
 };
 
+const DIFFICULTY_MODES = {
+  easy: {
+    id: "easy",
+    title: "Einfach",
+    description: "Langsamere Gegner, weniger Spawn-Druck, +50% Schiff-HP.",
+    playerHpMult: 1.5,
+    objectSpeedMult: 0.78,
+    edgeSpeedMult: 0.82,
+    enemyProjectileSpeedMult: 0.86,
+    bossHpMult: 0.86,
+    spawnRateMult: 0.86,
+    edgeSpawnRateMult: 0.9,
+    bossAggroMult: 0.86,
+  },
+  medium: {
+    id: "medium",
+    title: "Mittel",
+    description: "Empfohlene Standardwerte.",
+    playerHpMult: 1,
+    objectSpeedMult: 1,
+    edgeSpeedMult: 1,
+    enemyProjectileSpeedMult: 1,
+    bossHpMult: 1,
+    spawnRateMult: 1,
+    edgeSpawnRateMult: 1,
+    bossAggroMult: 1,
+  },
+  hard: {
+    id: "hard",
+    title: "Schwierig",
+    description: "Schnellere Gegner, dichterer Spawn, haertere Bosse.",
+    playerHpMult: 0.85,
+    objectSpeedMult: 1.2,
+    edgeSpeedMult: 1.18,
+    enemyProjectileSpeedMult: 1.18,
+    bossHpMult: 1.24,
+    spawnRateMult: 1.18,
+    edgeSpawnRateMult: 1.14,
+    bossAggroMult: 1.18,
+  },
+};
+
 const state = {
   running: false,
   gameOver: false,
   pauseReason: "menu",
   debugHitboxes: false,
   showShipInfo: false,
+  selectedDifficultyId: "medium",
   selectedShipId: "normal",
   desktopAutoFire: false,
   mouseInCanvas: false,
@@ -155,6 +198,13 @@ const state = {
     rocketHoming: false,
     rocketSplit: false,
     rocketBlastRadius: 110,
+    drillUnlocked: false,
+    drillRechargeDelay: 6,
+    drillCharges: 0,
+    drillMaxCharges: 1,
+    drillCooldownUntil: 0,
+    drillRadius: 13,
+    drillReach: 18,
   },
   shield: {
     unlocked: false,
@@ -187,6 +237,13 @@ const UPGRADE_WEIGHTS = {
   laser_charge: 3,
   laser_range: 3,
   laser_pierce: 2,
+  drill_module: 4,
+  drill_recharge: 3,
+  stat_hull: 7,
+  stat_crit_chance: 6,
+  stat_crit_damage: 5,
+  stat_reload_tuning: 6,
+  stat_thrusters: 5,
 };
 
 const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
@@ -387,6 +444,31 @@ const UPGRADE_DEFS = [
     },
   },
   {
+    id: "drill_module",
+    title: "Bohrer-Modul",
+    description: "Front-Bohrer zerstoert 1 Objekt, dann Aufladung.",
+    maxStacks: 1,
+    canOffer: () => !state.weapon.drillUnlocked,
+    apply: () => {
+      state.weapon.drillUnlocked = true;
+      state.weapon.drillCharges = state.weapon.drillMaxCharges;
+      state.weapon.drillCooldownUntil = state.time;
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "drill_recharge",
+    title: "Bohrer-Kondensator",
+    description: "Bohrer laedt schneller auf und reicht weiter.",
+    maxStacks: 4,
+    canOffer: () => state.weapon.drillUnlocked,
+    apply: () => {
+      state.weapon.drillRechargeDelay = Math.max(2.2, state.weapon.drillRechargeDelay - 0.8);
+      state.weapon.drillReach = Math.min(34, state.weapon.drillReach + 2.5);
+      playSfx("upgrade");
+    },
+  },
+  {
     id: "laser_emitter",
     title: "Laser-Emitter",
     description: "Kurzer Lichtstrahl zusaetzlich zum Geschuetz.",
@@ -429,6 +511,64 @@ const UPGRADE_DEFS = [
     canOffer: () => state.weapon.laserUnlocked,
     apply: () => {
       state.weapon.laserPierce += 1;
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_hull",
+    title: "Hull Reinforcement",
+    description: "+1 Max-HP und sofort +1 Heilung.",
+    maxStacks: 6,
+    canOffer: () => true,
+    apply: () => {
+      state.ship.maxHp += 1;
+      state.ship.hp = Math.min(state.ship.maxHp, state.ship.hp + 1);
+      state.shipStats.maxHp = state.ship.maxHp;
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_crit_chance",
+    title: "Targeting Uplink",
+    description: "+4% Krit-Chance.",
+    maxStacks: 8,
+    canOffer: () => (state.shipStats ? state.shipStats.critChance < 0.55 : true),
+    apply: () => {
+      state.shipStats.critChance = Math.min(0.55, state.shipStats.critChance + 0.04);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_crit_damage",
+    title: "Krit-Amplifier",
+    description: "+15% Krit-Schaden.",
+    maxStacks: 7,
+    canOffer: () => true,
+    apply: () => {
+      state.shipStats.critDamage = Math.min(3.5, state.shipStats.critDamage + 0.15);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_reload_tuning",
+    title: "Reaktor-Tuning",
+    description: "+8% Nachladerate fuer alle Waffen.",
+    maxStacks: 8,
+    canOffer: () => true,
+    apply: () => {
+      state.shipStats.reloadRate = Math.min(2.2, state.shipStats.reloadRate + 0.08);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_thrusters",
+    title: "Triebwerks-Tuning",
+    description: "+8% Schub und Maximalgeschwindigkeit.",
+    maxStacks: 7,
+    canOffer: () => true,
+    apply: () => {
+      state.ship.thrust *= 1.08;
+      state.ship.maxSpeed *= 1.08;
       playSfx("upgrade");
     },
   },
@@ -650,20 +790,52 @@ function selectedShipModel() {
   return SHIP_MODELS[state.selectedShipId] || SHIP_MODELS.normal;
 }
 
+function selectedDifficultyMode() {
+  return DIFFICULTY_MODES[state.selectedDifficultyId] || DIFFICULTY_MODES.medium;
+}
+
 function setPauseIndicatorVisible(visible) {
   if (!pauseIndicatorEl) return;
   pauseIndicatorEl.classList.toggle("hidden", !visible);
   pauseIndicatorEl.classList.toggle("pause", visible);
 }
 
-function showShipSelectionMenu() {
+function showDifficultySelectionMenu() {
   state.running = false;
-  state.pauseReason = "ship-select";
+  state.pauseReason = "difficulty-select";
   setPauseIndicatorVisible(false);
 
   overlay.classList.remove("hidden");
   overlay.innerHTML = `
     <h1>Void Runner</h1>
+    <p>Waehle den Schwierigkeitsgrad</p>
+    <div style="display:grid;gap:10px;width:min(92vw,720px)">
+      <button data-action="select-difficulty" data-difficulty-id="easy" style="width:100%;max-width:720px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
+        <strong>Einfach</strong><br />
+        <span>Langsamere Objekte, weniger Spawn, +50% HP.</span>
+      </button>
+      <button data-action="select-difficulty" data-difficulty-id="medium" style="width:100%;max-width:720px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
+        <strong>Mittel</strong><br />
+        <span>Empfohlene Standardwerte.</span>
+      </button>
+      <button data-action="select-difficulty" data-difficulty-id="hard" style="width:100%;max-width:720px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
+        <strong>Schwierig</strong><br />
+        <span>Schnellere Gegner, mehr Spawn-Druck, haertere Bosse.</span>
+      </button>
+    </div>
+  `;
+}
+
+function showShipSelectionMenu() {
+  state.running = false;
+  state.pauseReason = "ship-select";
+  setPauseIndicatorVisible(false);
+  const diff = selectedDifficultyMode();
+
+  overlay.classList.remove("hidden");
+  overlay.innerHTML = `
+    <h1>Void Runner</h1>
+    <p>Schwierigkeit: <strong>${diff.title}</strong></p>
     <p>Waehle dein Raumschiff</p>
     <div style="display:grid;gap:10px;width:min(92vw,740px)">
       <button data-action="select-ship" data-ship-id="tank" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
@@ -855,9 +1027,10 @@ function weightedPick(options) {
 }
 
 function spawnBoss(level) {
+  const difficulty = selectedDifficultyMode();
   const variant = randomFrom(BOSS_VARIANTS);
   const size = 96 + Math.min(70, level * 1.8);
-  const hp = Math.floor(140 + level * 28 + Math.pow(level, 1.15) * 6);
+  const hp = Math.floor((140 + level * 28 + Math.pow(level, 1.15) * 6) * difficulty.bossHpMult);
   const hasPhases = Math.random() < 0.78;
   const hasMinions = Math.random() < 0.74;
   const hasLoot = Math.random() < 0.68;
@@ -883,9 +1056,9 @@ function spawnBoss(level) {
     introMaxUntil: state.time + 8,
     warningUntil: state.time + 2.8,
     lastWarningBeep: state.time - 1,
-    fireCooldown: Math.max(0.55, 1.35 - level * 0.03),
+    fireCooldown: Math.max(0.55, (1.35 - level * 0.03) / difficulty.bossAggroMult),
     lastFire: state.time,
-    minionCooldown: 3.8 + Math.random() * 1.4,
+    minionCooldown: (3.8 + Math.random() * 1.4) / difficulty.bossAggroMult,
     lastMinionSpawn: state.time,
   };
 
@@ -923,8 +1096,10 @@ function onBossDefeated() {
 function resetGame() {
   initAudio();
   const model = selectedShipModel();
+  const difficulty = selectedDifficultyMode();
+  const maxHp = Math.max(1, Math.round(model.maxHp * difficulty.playerHpMult));
   state.shipStats = {
-    maxHp: model.maxHp,
+    maxHp,
     speed: model.speed,
     critChance: model.critChance,
     critDamage: model.critDamage,
@@ -984,6 +1159,13 @@ function resetGame() {
   state.weapon.rocketHoming = false;
   state.weapon.rocketSplit = false;
   state.weapon.rocketBlastRadius = 110;
+  state.weapon.drillUnlocked = false;
+  state.weapon.drillRechargeDelay = 6;
+  state.weapon.drillCharges = 0;
+  state.weapon.drillMaxCharges = 1;
+  state.weapon.drillCooldownUntil = 0;
+  state.weapon.drillRadius = 13;
+  state.weapon.drillReach = 18;
 
   state.shield.unlocked = false;
   state.shield.charges = 0;
@@ -1011,8 +1193,8 @@ function resetGame() {
     y: WORLD.height * 0.5,
     vx: 0,
     vy: 0,
-    hp: model.maxHp,
-    maxHp: model.maxHp,
+    hp: maxHp,
+    maxHp: maxHp,
     invulnUntil: 0,
     radius: 17,
     thrust: 420 * model.speed,
@@ -1090,7 +1272,7 @@ function showPauseOverlay() {
 }
 
 function togglePause() {
-  if (state.pauseReason === "ship-select" || state.pauseReason === "levelup" || state.pauseReason === "bossreward" || state.pauseReason === "gameover") {
+  if (state.pauseReason === "difficulty-select" || state.pauseReason === "ship-select" || state.pauseReason === "levelup" || state.pauseReason === "bossreward" || state.pauseReason === "gameover") {
     return;
   }
 
@@ -1117,19 +1299,43 @@ function canOfferUpgrade(def) {
   return true;
 }
 
+function isStatUpgrade(def) {
+  return def.id.startsWith("stat_");
+}
+
 function chooseUpgradeOptions() {
   const pool = UPGRADE_DEFS.filter(canOfferUpgrade);
   const picked = [];
+  const statPool = pool.filter((u) => isStatUpgrade(u));
+  const weaponPool = pool.filter((u) => !isStatUpgrade(u));
 
-  while (pool.length > 0 && picked.length < 3) {
-    const choice = weightedPick(pool);
-    if (!choice) break;
-    picked.push(choice);
-    const idx = pool.findIndex((u) => u.id === choice.id);
-    if (idx >= 0) pool.splice(idx, 1);
+  if (weaponPool.length > 0) {
+    const weaponChoice = weightedPick(weaponPool);
+    if (weaponChoice) {
+      picked.push(weaponChoice);
+      const wIdx = weaponPool.findIndex((u) => u.id === weaponChoice.id);
+      if (wIdx >= 0) weaponPool.splice(wIdx, 1);
+    }
   }
 
-  return picked;
+  while (statPool.length > 0 && picked.length < 3) {
+    const statChoice = weightedPick(statPool);
+    if (!statChoice) break;
+    picked.push(statChoice);
+    const sIdx = statPool.findIndex((u) => u.id === statChoice.id);
+    if (sIdx >= 0) statPool.splice(sIdx, 1);
+  }
+
+  const fallbackPool = pool.filter((u) => !picked.some((p) => p.id === u.id));
+  while (fallbackPool.length > 0 && picked.length < 3) {
+    const choice = weightedPick(fallbackPool);
+    if (!choice) break;
+    picked.push(choice);
+    const idx = fallbackPool.findIndex((u) => u.id === choice.id);
+    if (idx >= 0) fallbackPool.splice(idx, 1);
+  }
+
+  return picked.slice(0, 3);
 }
 
 function showLevelUpChoice() {
@@ -1152,7 +1358,7 @@ function showLevelUpChoice() {
     .map(
       (u) => `
         <button data-action="upgrade" data-upgrade-id="${u.id}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
-          <strong>${u.title}</strong><br />
+          <strong>[${isStatUpgrade(u) ? "Stat" : "Waffe"}] ${u.title}</strong><br />
           <span>${u.description}</span>
         </button>
       `,
@@ -1203,6 +1409,7 @@ function nextObjectId() {
 }
 
 function spawnObject() {
+  const difficulty = selectedDifficultyMode();
   const r = Math.random();
   let type = "debris";
   let size = 30;
@@ -1253,8 +1460,8 @@ function spawnObject() {
     }
   }
 
-  const vx = -(WORLD.scrollSpeed + Math.random() * 120);
-  const vy = (Math.random() - 0.5) * 70;
+  const vx = -(WORLD.scrollSpeed + Math.random() * 120) * difficulty.objectSpeedMult;
+  const vy = (Math.random() - 0.5) * 70 * difficulty.objectSpeedMult;
   const rockProfile = corners > 0 ? Array.from({ length: corners }, () => 0.72 + Math.random() * 0.26) : null;
 
   state.objects.push({
@@ -1278,6 +1485,7 @@ function spawnObject() {
 }
 
 function spawnEdgeHazard() {
+  const difficulty = selectedDifficultyMode();
   const side = Math.random() < 0.5 ? "top" : "bottom";
   const r = Math.random();
 
@@ -1291,7 +1499,7 @@ function spawnEdgeHazard() {
       y: cy,
       radius,
       hitRadius: radius * 0.93,
-      vx: -(WORLD.scrollSpeed * (0.84 + Math.random() * 0.22)),
+      vx: -(WORLD.scrollSpeed * (0.84 + Math.random() * 0.22) * difficulty.edgeSpeedMult),
       angle: Math.random() * Math.PI * 2,
       spin: (Math.random() - 0.5) * 0.12,
     });
@@ -1308,7 +1516,7 @@ function spawnEdgeHazard() {
       y,
       radius,
       hitRadius: radius * 0.66,
-      vx: -(WORLD.scrollSpeed * (1 + Math.random() * 0.25)),
+      vx: -(WORLD.scrollSpeed * (1 + Math.random() * 0.25) * difficulty.edgeSpeedMult),
       angle: Math.random() * Math.PI * 2,
       spin: (Math.random() - 0.5) * 0.4,
     });
@@ -1324,7 +1532,7 @@ function spawnEdgeHazard() {
     y,
     radius,
     hitRadius: radius * 0.6,
-    vx: -(WORLD.scrollSpeed * (0.92 + Math.random() * 0.22)),
+    vx: -(WORLD.scrollSpeed * (0.92 + Math.random() * 0.22) * difficulty.edgeSpeedMult),
     angle: Math.random() * Math.PI * 2,
     spin: (Math.random() - 0.5) * 0.8,
   });
@@ -1431,6 +1639,37 @@ function consumeShield() {
     damageNearbyFromShieldPulse(105, false);
   }
 
+  return true;
+}
+
+function getShipAimUnit() {
+  const dx = input.mouseX - state.ship.x;
+  const dy = input.mouseY - state.ship.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return {
+    ux: dx / len,
+    uy: dy / len,
+  };
+}
+
+function tryUseDrillOnObject(obj) {
+  if (!state.weapon.drillUnlocked) return false;
+  if (state.weapon.drillCharges < 1) return false;
+  if (state.time < state.weapon.drillCooldownUntil) return false;
+  if (obj.hp <= 0) return false;
+
+  const { ux, uy } = getShipAimUnit();
+  const tipX = state.ship.x + ux * (state.ship.radius + state.weapon.drillReach);
+  const tipY = state.ship.y + uy * (state.ship.radius + state.weapon.drillReach);
+  const d = Math.hypot(obj.x - tipX, obj.y - tipY);
+
+  if (d > obj.collisionRadius + state.weapon.drillRadius) return false;
+
+  state.weapon.drillCharges = 0;
+  state.weapon.drillCooldownUntil = state.time + state.weapon.drillRechargeDelay / reloadRate();
+  destroyObject(obj, "rocket");
+  createExplosion(tipX, tipY, "#8ef7ff", 16);
+  playSfx("shieldHit");
   return true;
 }
 
@@ -1687,6 +1926,7 @@ function spawnBossMinion(boss) {
 function updateBoss(dt) {
   if (!state.bossActive || !state.boss) return;
 
+  const difficulty = selectedDifficultyMode();
   const boss = state.boss;
   boss.phase += dt;
 
@@ -1744,7 +1984,7 @@ function updateBoss(dt) {
       const dx = state.ship.x - boss.x;
       const dy = state.ship.y - boss.y;
       const a = Math.atan2(dy, dx) + spread;
-      const speed = boss.variant === "warship" ? 300 : 260;
+      const speed = (boss.variant === "warship" ? 300 : 260) * difficulty.enemyProjectileSpeedMult;
 
       state.bossProjectiles.push({
         x: boss.x - boss.size * 0.38,
@@ -1760,6 +2000,8 @@ function updateBoss(dt) {
 
 function update(dt, now) {
   if (!state.running) return;
+
+  const difficulty = selectedDifficultyMode();
 
   state.time += dt;
   state.score += dt * (7 + state.level * 0.45) * passiveScoreMultiplier();
@@ -1816,6 +2058,11 @@ function update(dt, now) {
     playSfx("shieldReady");
   }
 
+  if (state.weapon.drillUnlocked && state.weapon.drillCharges < state.weapon.drillMaxCharges && state.time >= state.weapon.drillCooldownUntil) {
+    state.weapon.drillCharges = state.weapon.drillMaxCharges;
+    playSfx("shieldReady");
+  }
+
   if (state.shield.unlocked && state.shield.nova && state.time >= state.shield.nextNova) {
     state.shield.nextNova = state.time + 30;
     damageNearbyFromShieldPulse(220, true);
@@ -1827,14 +2074,14 @@ function update(dt, now) {
     const intensity = spawnIntensity();
 
     state.lastSpawn += dt;
-    const dynamicSpawn = Math.max(0.19, (state.spawnInterval / intensity) - Math.min(0.45, state.time * 0.012));
+    const dynamicSpawn = Math.max(0.19, (state.spawnInterval / (intensity * difficulty.spawnRateMult)) - Math.min(0.45, state.time * 0.012));
     while (state.lastSpawn >= dynamicSpawn) {
       state.lastSpawn -= dynamicSpawn;
       spawnObject();
     }
 
     state.lastEdgeSpawn += dt;
-    const dynamicEdgeSpawn = Math.max(0.72, (state.edgeSpawnInterval / Math.max(1, intensity * 0.82)) - Math.min(0.9, state.time * 0.01));
+    const dynamicEdgeSpawn = Math.max(0.72, (state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult)) - Math.min(0.9, state.time * 0.01));
     while (state.lastEdgeSpawn >= dynamicEdgeSpawn) {
       state.lastEdgeSpawn -= dynamicEdgeSpawn;
       spawnEdgeHazard();
@@ -1867,6 +2114,9 @@ function update(dt, now) {
 
     const d = Math.hypot(obj.x - ship.x, obj.y - ship.y);
     if (d < obj.collisionRadius + ship.radius - 2) {
+      if (tryUseDrillOnObject(obj)) {
+        continue;
+      }
       if (!hitShip()) {
         setGameOver();
         return;
@@ -2151,6 +2401,24 @@ function drawShip(ship) {
     ctx.beginPath();
     ctx.arc(0, 0, ship.radius + 8, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  if (state.weapon.drillUnlocked) {
+    const ready = state.weapon.drillCharges > 0;
+    const reach = ship.radius + state.weapon.drillReach;
+    ctx.save();
+    ctx.rotate(aimAngle - moveAngle);
+    ctx.strokeStyle = ready ? "rgba(142, 247, 255, 0.95)" : "rgba(122, 144, 166, 0.8)";
+    ctx.fillStyle = ready ? "rgba(142, 247, 255, 0.42)" : "rgba(80, 97, 116, 0.36)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ship.radius - 4, -6);
+    ctx.lineTo(reach, 0);
+    ctx.lineTo(ship.radius - 4, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   if (state.weapon.rocketUnlocked && getRocketCooldownLeft() <= 0.05) {
@@ -2757,7 +3025,16 @@ overlay.addEventListener("click", (event) => {
   if (!(actionNode instanceof HTMLElement)) return;
 
   if (actionNode.dataset.action === "restart") {
-    resetGame();
+    showDifficultySelectionMenu();
+    return;
+  }
+
+  if (actionNode.dataset.action === "select-difficulty") {
+    const difficultyId = actionNode.dataset.difficultyId;
+    if (difficultyId && DIFFICULTY_MODES[difficultyId]) {
+      state.selectedDifficultyId = difficultyId;
+      showShipSelectionMenu();
+    }
     return;
   }
 
@@ -2800,7 +3077,7 @@ overlay.addEventListener("click", (event) => {
   }
 });
 
-showShipSelectionMenu();
+showDifficultySelectionMenu();
 setupTouchControls();
 fitMobileViewport();
 window.addEventListener("resize", scheduleMobileViewportFit);
