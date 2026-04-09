@@ -561,7 +561,8 @@ function fitMobileViewport() {
 
   const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
   const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const hudHeight = hudEl ? hudEl.offsetHeight : 0;
+  const hudVisible = hudEl ? window.getComputedStyle(hudEl).display !== "none" : false;
+  const hudHeight = hudVisible && hudEl ? hudEl.offsetHeight : 0;
 
   const horizontalSpace = Math.max(260, viewportWidth - 8);
   const verticalSpace = Math.max(150, viewportHeight - hudHeight - 18);
@@ -580,6 +581,61 @@ function fitMobileViewport() {
     stageWrapEl.style.width = `${WORLD.width}px`;
     stageWrapEl.style.height = `${WORLD.height}px`;
   }
+}
+
+function drawMobileCanvasHud() {
+  if (!IS_COARSE_POINTER) return;
+
+  const hpText = state.ship ? `HP ${Math.max(0, state.ship.hp)}/${state.ship.maxHp}` : "HP -";
+  const scoreText = `Punkte ${Math.floor(state.score)}`;
+  const levelText = `Lvl ${state.level}`;
+
+  ctx.save();
+  ctx.font = "bold 13px Trebuchet MS";
+  ctx.textBaseline = "middle";
+
+  const drawTag = (x, y, text) => {
+    const tw = Math.ceil(ctx.measureText(text).width);
+    const w = tw + 18;
+    const h = 26;
+    ctx.fillStyle = "rgba(6, 16, 38, 0.8)";
+    ctx.strokeStyle = "rgba(103, 242, 255, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y);
+    ctx.lineTo(x + w - 8, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + 8);
+    ctx.lineTo(x + w, y + h - 8);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - 8, y + h);
+    ctx.lineTo(x + 8, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - 8);
+    ctx.lineTo(x, y + 8);
+    ctx.quadraticCurveTo(x, y, x + 8, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#eef8ff";
+    ctx.fillText(text, x + 9, y + h * 0.52);
+    return w;
+  };
+
+  const topY = 8;
+  const leftX = 8;
+  const gap = 8;
+  const scoreW = drawTag(leftX, topY, scoreText);
+  const levelW = drawTag(leftX + scoreW + gap, topY, levelText);
+
+  const hpW = Math.ceil(ctx.measureText(hpText).width) + 18;
+  drawTag(Math.max(8, WORLD.width - hpW - 8), topY, hpText);
+
+  if (state.pauseReason === "manual-pause") {
+    const pauseText = "PAUSE";
+    const pauseW = Math.ceil(ctx.measureText(pauseText).width) + 18;
+    drawTag(Math.max(8, WORLD.width - hpW - pauseW - 16), topY, pauseText);
+  }
+
+  ctx.restore();
 }
 
 function scheduleMobileViewportFit() {
@@ -2467,6 +2523,8 @@ function draw() {
   }
 
   drawDebugOverlay();
+
+  drawMobileCanvasHud();
 }
 
 let lastTime = performance.now() / 1000;

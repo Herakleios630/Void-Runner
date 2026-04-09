@@ -225,16 +225,6 @@ button:hover {
   }
 
   .hud {
-    gap: 6px;
-    justify-content: space-between;
-  }
-
-  .pill {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  .hud .pill:nth-child(3) {
     display: none;
   }
 
