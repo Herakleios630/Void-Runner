@@ -2582,9 +2582,15 @@ window.addEventListener("blur", () => {
 });
 
 overlay.addEventListener("click", (event) => {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const actionNode = target.closest("[data-action]");
+  const rawTarget = event.target;
+  let actionNode = null;
+
+  if (rawTarget instanceof Element) {
+    actionNode = rawTarget.closest("[data-action]");
+  } else if (rawTarget && rawTarget.parentElement) {
+    actionNode = rawTarget.parentElement.closest("[data-action]");
+  }
+
   if (!(actionNode instanceof HTMLElement)) return;
 
   if (actionNode.dataset.action === "restart") {
