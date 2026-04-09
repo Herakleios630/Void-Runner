@@ -552,17 +552,19 @@ function applyWorldSize(newWidth, newHeight) {
 
 function fitMobileViewport() {
   if (!IS_COARSE_POINTER) {
-    if (stageWrapEl) stageWrapEl.style.removeProperty("width");
+    if (stageWrapEl) {
+      stageWrapEl.style.removeProperty("width");
+      stageWrapEl.style.removeProperty("height");
+    }
     return;
   }
 
   const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
   const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   const hudHeight = hudEl ? hudEl.offsetHeight : 0;
-  const notesHeight = notesEl ? notesEl.offsetHeight : 0;
 
-  const horizontalSpace = Math.max(320, viewportWidth - 12);
-  const verticalSpace = Math.max(190, viewportHeight - hudHeight - notesHeight - 126);
+  const horizontalSpace = Math.max(260, viewportWidth - 8);
+  const verticalSpace = Math.max(150, viewportHeight - hudHeight - 18);
 
   let nextWidth = horizontalSpace;
   let nextHeight = Math.floor(nextWidth / BASE_WORLD.aspect);
@@ -572,10 +574,11 @@ function fitMobileViewport() {
     nextWidth = Math.floor(nextHeight * BASE_WORLD.aspect);
   }
 
-  applyWorldSize(Math.max(320, nextWidth), Math.max(190, nextHeight));
+  applyWorldSize(Math.max(260, Math.floor(nextWidth)), Math.max(150, Math.floor(nextHeight)));
 
   if (stageWrapEl) {
     stageWrapEl.style.width = `${WORLD.width}px`;
+    stageWrapEl.style.height = `${WORLD.height}px`;
   }
 }
 
