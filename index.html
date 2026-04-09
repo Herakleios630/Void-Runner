@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orbital Flappy</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hud">
+      <div class="pill">Zeit: <span id="timeSurvived">0.0</span>s</div>
+      <div class="pill">Punkte: <span id="score">0</span></div>
+      <div class="pill">Kills: <span id="kills">0</span></div>
+      <div class="pill">Level: <span id="level">1</span></div>
+      <div class="pill">HP: <span id="hpStatus">3/3</span></div>
+      <div class="pill">Krit: <span id="critStatus">10%</span></div>
+      <div class="pill">Reload: <span id="reloadStatus">100%</span></div>
+      <div class="pill">XP-Bonus: <span id="xpStatus">0%</span></div>
+      <div class="pill">Schild: <span id="shieldStatus">Aus</span></div>
+      <div class="pill">Rakete: <span id="rocketStatus">Nicht freigeschaltet</span></div>
+    </header>
+
+    <section class="stage-wrap">
+      <canvas id="gameCanvas" width="1100" height="620" aria-label="Orbital Flappy Spielfeld"></canvas>
+      <div class="overlay" id="overlay">
+        <h1>Orbital Flappy</h1>
+        <p>
+          Pfeiltasten = Schub in 4 Richtungen (Traegheit aktiv)<br />
+          Maus = Zielcursor bewegen<br />
+          Leertaste oder linke Maustaste = schiessen
+        </p>
+        <button id="startBtn">Spiel starten</button>
+      </div>
+    </section>
+
+    <footer class="notes">
+      Weiche Schrott und grossen Felsbrocken aus. Kleine Felsen und Mini-Aliens kannst du abschiessen.
+    </footer>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
