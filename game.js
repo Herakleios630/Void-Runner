@@ -13,12 +13,9 @@ const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
-const touchUpBtn = document.getElementById("touchUp");
-const touchDownBtn = document.getElementById("touchDown");
-const touchLeftBtn = document.getElementById("touchLeft");
-const touchRightBtn = document.getElementById("touchRight");
-const touchFireBtn = document.getElementById("touchFire");
-const touchRocketBtn = document.getElementById("touchRocket");
+const joystickAreaEl = document.getElementById("joystickArea");
+const joyBaseEl = document.getElementById("joyBase");
+const joyKnobEl = document.getElementById("joyKnob");
 
 const WORLD = {
   width: canvas.width,
@@ -31,6 +28,8 @@ const input = {
   down: false,
   left: false,
   right: false,
+  axisX: 0,
+  axisY: 0,
   shooting: false,
   rocketQueued: false,
   mouseX: WORLD.width * 0.7,
@@ -90,6 +89,8 @@ const state = {
   debugHitboxes: false,
   showShipInfo: false,
   selectedShipId: "normal",
+  joystickPointerId: null,
+  lastAimTapAt: -999,
   score: 0,
   kills: 0,
   time: 0,
@@ -820,6 +821,12 @@ function resetGame() {
 
   state.upgradesTaken = {};
   state.showShipInfo = false;
+  state.joystickPointerId = null;
+  input.axisX = 0;
+  input.axisY = 0;
+  if (joyKnobEl) {
+    joyKnobEl.style.transform = "translate(0px, 0px)";
+  }
   if (shipInfoPanelEl) {
     shipInfoPanelEl.classList.add("hidden");
   }
@@ -1550,6 +1557,8 @@ function update(dt, now) {
   }
 
   const ship = state.ship;
+  ship.vx += input.axisX * ship.thrust * dt;
+  ship.vy += input.axisY * ship.thrust * dt;
   if (input.up) ship.vy -= ship.thrust * dt;
   if (input.down) ship.vy += ship.thrust * dt;
   if (input.left) ship.vx -= ship.thrust * dt;
@@ -2332,62 +2341,110 @@ function setAimFromClient(clientX, clientY) {
   input.mouseY = (clientY - rect.top) * scaleY;
 }
 
-function bindHoldControl(element, onChange) {
-  if (!element) return;
+function updateJoystickFromClient(clientX, clientY) {
+  if (!joyBaseEl || !joyKnobEl) return;
 
-  const onDown = (event) => {
-    event.preventDefault();
-    element.classList.add("active");
-    onChange(true);
-  };
+  const rect = joyBaseEl.getBoundingClientRect();
+  const cx = rect.left + rect.width * 0.5;
+  const cy = rect.top + rect.height * 0.5;
+  const dx = clientX - cx;
+  const dy = clientY - cy;
+  const maxR = rect.width * 0.35;
+  const mag = Math.hypot(dx, dy) || 1;
+  const clamped = Math.min(maxR, mag);
+  const nx = (dx / mag) * clamped;
+  const ny = (dy / mag) * clamped;
 
-  const onUp = (event) => {
-    event.preventDefault();
-    element.classList.remove("active");
-    onChange(false);
-  };
-
-  element.addEventListener("pointerdown", onDown);
-  element.addEventListener("pointerup", onUp);
-  element.addEventListener("pointercancel", onUp);
-  element.addEventListener("pointerleave", onUp);
+  joyKnobEl.style.transform = `translate(${nx}px, ${ny}px)`;
+  input.axisX = nx / maxR;
+  input.axisY = ny / maxR;
 }
 
-function bindTapControl(element, onTap) {
-  if (!element) return;
-  element.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    element.classList.add("active");
-    onTap();
-  });
-  element.addEventListener("pointerup", (event) => {
-    event.preventDefault();
-    element.classList.remove("active");
-  });
-  element.addEventListener("pointercancel", () => {
-    element.classList.remove("active");
-  });
+function resetJoystickInput() {
+  input.axisX = 0;
+  input.axisY = 0;
+  state.joystickPointerId = null;
+  if (joyKnobEl) {
+    joyKnobEl.style.transform = "translate(0px, 0px)";
+  }
 }
 
-function setupMobileControls() {
-  bindHoldControl(touchUpBtn, (pressed) => {
-    input.up = pressed;
-  });
-  bindHoldControl(touchDownBtn, (pressed) => {
-    input.down = pressed;
-  });
-  bindHoldControl(touchLeftBtn, (pressed) => {
-    input.left = pressed;
-  });
-  bindHoldControl(touchRightBtn, (pressed) => {
-    input.right = pressed;
-  });
-  bindHoldControl(touchFireBtn, (pressed) => {
-    input.shooting = pressed;
-  });
-  bindTapControl(touchRocketBtn, () => {
-    input.rocketQueued = true;
-  });
+function getPrimaryAimTouch(touches) {
+  const rect = canvas.getBoundingClientRect();
+  const splitX = rect.left + rect.width * 0.38;
+  for (const t of touches) {
+    if (t.clientX >= splitX) {
+      return t;
+    }
+  }
+  return null;
+}
+
+function setupTouchControls() {
+  if (joystickAreaEl) {
+    joystickAreaEl.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      initAudio();
+      state.joystickPointerId = event.pointerId;
+      joystickAreaEl.setPointerCapture(event.pointerId);
+      updateJoystickFromClient(event.clientX, event.clientY);
+    });
+
+    joystickAreaEl.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== state.joystickPointerId) return;
+      event.preventDefault();
+      updateJoystickFromClient(event.clientX, event.clientY);
+    });
+
+    const clearJoystick = (event) => {
+      if (event.pointerId !== state.joystickPointerId) return;
+      event.preventDefault();
+      resetJoystickInput();
+    };
+
+    joystickAreaEl.addEventListener("pointerup", clearJoystick);
+    joystickAreaEl.addEventListener("pointercancel", clearJoystick);
+    joystickAreaEl.addEventListener("lostpointercapture", clearJoystick);
+  }
+
+  canvas.addEventListener("touchstart", (event) => {
+    initAudio();
+    const aimTouch = getPrimaryAimTouch(event.touches);
+    if (aimTouch) {
+      setAimFromClient(aimTouch.clientX, aimTouch.clientY);
+      input.shooting = true;
+
+      const now = state.realNow;
+      if (now - state.lastAimTapAt <= 0.28) {
+        input.rocketQueued = true;
+      }
+      state.lastAimTapAt = now;
+    }
+    event.preventDefault();
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", (event) => {
+    const aimTouch = getPrimaryAimTouch(event.touches);
+    if (aimTouch) {
+      setAimFromClient(aimTouch.clientX, aimTouch.clientY);
+      input.shooting = true;
+    } else {
+      input.shooting = false;
+    }
+    event.preventDefault();
+  }, { passive: false });
+
+  const touchEndHandler = (event) => {
+    const aimTouch = getPrimaryAimTouch(event.touches);
+    input.shooting = Boolean(aimTouch);
+    if (aimTouch) {
+      setAimFromClient(aimTouch.clientX, aimTouch.clientY);
+    }
+    event.preventDefault();
+  };
+
+  canvas.addEventListener("touchend", touchEndHandler, { passive: false });
+  canvas.addEventListener("touchcancel", touchEndHandler, { passive: false });
 }
 
 window.addEventListener("keydown", (event) => {
@@ -2417,21 +2474,6 @@ canvas.addEventListener("mousemove", (event) => {
   setAimFromClient(event.clientX, event.clientY);
 });
 
-canvas.addEventListener("touchstart", (event) => {
-  initAudio();
-  if (event.touches.length === 0) return;
-  const t = event.touches[0];
-  setAimFromClient(t.clientX, t.clientY);
-  event.preventDefault();
-}, { passive: false });
-
-canvas.addEventListener("touchmove", (event) => {
-  if (event.touches.length === 0) return;
-  const t = event.touches[0];
-  setAimFromClient(t.clientX, t.clientY);
-  event.preventDefault();
-}, { passive: false });
-
 canvas.addEventListener("mousedown", (event) => {
   initAudio();
   if (event.button === 0) {
@@ -2457,7 +2499,10 @@ window.addEventListener("blur", () => {
   input.down = false;
   input.left = false;
   input.right = false;
+  input.axisX = 0;
+  input.axisY = 0;
   input.shooting = false;
+  resetJoystickInput();
 });
 
 overlay.addEventListener("click", (event) => {
@@ -2501,5 +2546,5 @@ overlay.addEventListener("click", (event) => {
 });
 
 showShipSelectionMenu();
-setupMobileControls();
+setupTouchControls();
 requestAnimationFrame(gameLoop);
