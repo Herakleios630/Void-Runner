@@ -2,6 +2,7 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const overlay = document.getElementById("overlay");
+const shipInfoPanelEl = document.getElementById("shipInfoPanel");
 const scoreEl = document.getElementById("score");
 const killsEl = document.getElementById("kills");
 const timeEl = document.getElementById("timeSurvived");
@@ -87,6 +88,7 @@ const state = {
   gameOver: false,
   pauseReason: "menu",
   debugHitboxes: false,
+  showShipInfo: false,
   selectedShipId: "normal",
   score: 0,
   kills: 0,
@@ -486,7 +488,7 @@ function showShipSelectionMenu() {
 
   overlay.classList.remove("hidden");
   overlay.innerHTML = `
-    <h1>Orbital Flappy</h1>
+    <h1>Void Runner</h1>
     <p>Waehle dein Raumschiff</p>
     <div style="display:grid;gap:10px;width:min(92vw,740px)">
       <button data-action="select-ship" data-ship-id="tank" style="text-align:left;line-height:1.4;">
@@ -817,6 +819,10 @@ function resetGame() {
   state.shield.nextNova = 30;
 
   state.upgradesTaken = {};
+  state.showShipInfo = false;
+  if (shipInfoPanelEl) {
+    shipInfoPanelEl.classList.add("hidden");
+  }
 
   state.ship = {
     x: WORLD.width * 0.2,
@@ -2387,6 +2393,13 @@ function setupMobileControls() {
 window.addEventListener("keydown", (event) => {
   if (event.code === "KeyH" && !event.repeat) {
     state.debugHitboxes = !state.debugHitboxes;
+  }
+
+  if (event.code === "KeyI" && !event.repeat) {
+    state.showShipInfo = !state.showShipInfo;
+    if (shipInfoPanelEl) {
+      shipInfoPanelEl.classList.toggle("hidden", !state.showShipInfo);
+    }
   }
 
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space"].includes(event.code)) {
