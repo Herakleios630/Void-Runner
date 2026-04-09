@@ -34,6 +34,7 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - [utils.js](utils.js): Mathe-/Hilfsfunktionen fuer Gameplay-Hotpaths
 - [audio.js](audio.js): Sound-Engine und SFX-Presets
 - [render.js](render.js): Rendering-Pipeline (Schiff, Gegner, Boss, VFX, HUD)
+- [encounters.js](encounters.js): Spawn-System fuer Gegner/Randgefahren und Boss-Verhalten
 - [progression.js](progression.js): Level-Up, Mastery-Milestones und Boss-Loot-Flow
 - [weapons.js](weapons.js): Waffenlogik, Schussmuster, Cooldowns, Explosionseffekte
 - [assets.js](assets.js): Asset-Manifest + Bild-Preload/Fallback
@@ -99,6 +100,13 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Schnellere Laser / engerer Laserspread
 - Raketenwerfer (rechte Maustaste)
 - Zielsuchende Raketen / Cluster-Raketen / groessere Raketen-Explosion
+
+## Geschuetz-Mastery (Ricochet)
+- Lvl 5: Kugeln prallen 1x ab
+- Danach als Upgrade: weitere Abpraller moeglich (mehrfach)
+- Lvl 10: Bei passenden Abprallern splitten Kugeln in zwei Bahnen
+- Lvl 15: Ricochet-Ramp (Abpraller werden schneller und staerker)
+- Lvl 20: Ricochet-Nova mit Zusatzsplittern bei spaeteren Abprallern
 
 ## Idee fuer spaeter
 - Soundeffekte
