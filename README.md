@@ -23,6 +23,12 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 1. Datei index.html im Browser oeffnen.
 2. Auf Spiel starten klicken.
 
+## Eigene Grafiken (Sprites)
+- Das Spiel laedt optional Bilder ueber [assets.js](assets.js).
+- Lege deine Dateien in den Ordner [assets/README.md](assets/README.md) nach den dort genannten Dateinamen.
+- Fehlende Dateien sind kein Problem: dann nutzt das Spiel automatisch die bisherigen Canvas-Formen (Fallback).
+- PNG/WebP sind fuer Einheiten/Hindernisse empfohlen (Transparenz), JPG eher fuer Hintergruende.
+
 ## Steuerung
 - Pfeiltasten: Schub in 4 Richtungen
 - WASD: alternative Schubsteuerung

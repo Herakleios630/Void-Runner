@@ -58,6 +58,7 @@ const audio = {
 
 const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
 const BURN_VFX_MAX_SPRITES = 80;
+const spriteAssets = window.VoidAssets || null;
 
 let burnVfxSpriteCount = 0;
 
@@ -946,6 +947,11 @@ function circlesOverlap(ax, ay, ar, bx, by, br, pad = 0) {
   const dy = ay - by;
   const r = ar + br + pad;
   return dx * dx + dy * dy < r * r;
+}
+
+function getSprite(key) {
+  if (!spriteAssets || !spriteAssets.ready()) return null;
+  return spriteAssets.get(key);
 }
 
 function scaleEntitiesToWorld(sx, sy) {
@@ -3118,12 +3124,17 @@ function drawShip(ship) {
   const moveAngle = Math.atan2(ship.vy, ship.vx || 0.001);
   const aimAngle = Math.atan2(input.mouseY - ship.y, input.mouseX - ship.x);
   const model = selectedShipModel();
+  const shipSprite = getSprite(`ship.${model.id}`) || getSprite("ship.default");
 
   ctx.save();
   ctx.translate(ship.x, ship.y);
   ctx.rotate(moveAngle);
 
-  if (model.id === "tank") {
+  if (shipSprite) {
+    const w = ship.radius * 2.8;
+    const h = ship.radius * 2.4;
+    ctx.drawImage(shipSprite, -w * 0.5, -h * 0.5, w, h);
+  } else if (model.id === "tank") {
     ctx.fillStyle = model.colorA;
     ctx.beginPath();
     ctx.moveTo(20, 0);
@@ -3264,11 +3275,30 @@ function drawMissile(missile) {
 }
 
 function drawObject(obj) {
+  const spriteKey =
+    obj.type === "miniAlien"
+      ? "enemy.miniAlien"
+      : obj.type === "alienShip"
+        ? "enemy.alienShip"
+        : obj.type === "smallRock"
+          ? "rock.smallRock"
+          : obj.type === "mediumRock"
+            ? "rock.mediumRock"
+            : obj.type === "rockShard"
+              ? "rock.rockShard"
+              : obj.type === "boulder"
+                ? "rock.boulder"
+                : null;
+  const sprite = spriteKey ? getSprite(spriteKey) : null;
+
   ctx.save();
   ctx.translate(obj.x, obj.y);
   ctx.rotate(obj.angle);
 
-  if (obj.type === "miniAlien") {
+  if (sprite) {
+    const d = obj.size * 2;
+    ctx.drawImage(sprite, -d * 0.5, -d * 0.5, d, d);
+  } else if (obj.type === "miniAlien") {
     ctx.fillStyle = "#9eff7f";
     ctx.beginPath();
     ctx.ellipse(0, 0, obj.size * 0.95, obj.size * 0.65, 0, 0, Math.PI * 2);
@@ -3355,11 +3385,22 @@ function drawBurningEffect(x, y, size) {
 }
 
 function drawEdgeHazard(hazard) {
+  const spriteKey =
+    hazard.kind === "planet"
+      ? "hazard.planet"
+      : hazard.kind === "station"
+        ? "hazard.station"
+        : "hazard.blackHole";
+  const sprite = getSprite(spriteKey);
+
   ctx.save();
   ctx.translate(hazard.x, hazard.y);
   ctx.rotate(hazard.angle);
 
-  if (hazard.kind === "planet") {
+  if (sprite) {
+    const d = hazard.radius * 2;
+    ctx.drawImage(sprite, -d * 0.5, -d * 0.5, d, d);
+  } else if (hazard.kind === "planet") {
     const grad = ctx.createRadialGradient(-hazard.radius * 0.28, -hazard.radius * 0.28, hazard.radius * 0.1, 0, 0, hazard.radius);
     grad.addColorStop(0, "#9ec8ff");
     grad.addColorStop(0.45, "#4a74a8");
