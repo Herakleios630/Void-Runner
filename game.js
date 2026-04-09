@@ -363,7 +363,7 @@ const state = {
     plasmaArc: 0.48,
     plasmaDamage: 1,
     plasmaBurnDps: 1.1,
-    plasmaBurnDuration: 2.4,
+    plasmaBurnDuration: 5,
   },
   shield: {
     unlocked: false,
@@ -710,7 +710,7 @@ const UPGRADE_DEFS = [
     canOffer: () => state.weapon.plasmaUnlocked,
     apply: () => {
       state.weapon.plasmaRange = Math.min(255, state.weapon.plasmaRange + 12);
-      state.weapon.plasmaBurnDuration = Math.min(5.2, state.weapon.plasmaBurnDuration + 0.45);
+      state.weapon.plasmaBurnDuration = Math.min(10, state.weapon.plasmaBurnDuration + 0.8);
       state.weapon.plasmaCooldown = Math.max(0.07, state.weapon.plasmaCooldown * 0.92);
       playSfx("upgrade");
     },
@@ -842,6 +842,17 @@ const UPGRADE_DEFS = [
     },
   },
   {
+    id: "stat_heat_damage",
+    title: "Thermo-Linsen",
+    description: "+12% Hitzeschaden (Plasma + Brand-DoT).",
+    maxStacks: 8,
+    canOffer: () => true,
+    apply: () => {
+      state.shipStats.heatDamage = Math.min(3, state.shipStats.heatDamage + 0.12);
+      playSfx("upgrade");
+    },
+  },
+  {
     id: "stat_armor_core",
     title: "Panzerungsplatten",
     description: "+1 maximale Panzerung und +1 sofortige Wiederherstellung.",
@@ -921,7 +932,7 @@ function clamp(value, min, max) {
 }
 
 function scaleEntitiesToWorld(sx, sy) {
-  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.stars]) {
+  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.plasmaBursts, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.stars]) {
     for (const entity of collection) {
       if (typeof entity.x === "number") entity.x *= sx;
       if (typeof entity.y === "number") entity.y *= sy;
@@ -1197,6 +1208,13 @@ function computeDamage(baseDamage, damageType = "physical") {
     damage: Math.max(1, Math.floor(dmg)),
     crit,
   };
+}
+
+function computeBurnTickDamage() {
+  const crit = rollCrit();
+  if (!crit) return 1;
+  const critMult = state.shipStats ? state.shipStats.critDamage : 1.5;
+  return Math.max(1, Math.round(critMult * 0.8));
 }
 
 function hitShip(damageType = "physical", amount = 1) {
@@ -1505,7 +1523,7 @@ function resetGame() {
   state.weapon.plasmaArc = 0.48;
   state.weapon.plasmaDamage = 1;
   state.weapon.plasmaBurnDps = 1.1;
-  state.weapon.plasmaBurnDuration = 2.4;
+  state.weapon.plasmaBurnDuration = 5;
 
   state.shield.unlocked = false;
   state.shield.charges = 0;
@@ -2215,59 +2233,47 @@ function firePlasmaPulse(now) {
   const oy = state.ship.y;
   const dxRaw = input.mouseX - ox;
   const dyRaw = input.mouseY - oy;
-  const len = Math.hypot(dxRaw, dyRaw) || 1;
-  const ux = dxRaw / len;
-  const uy = dyRaw / len;
-  const cosArc = Math.cos(state.weapon.plasmaArc);
-
-  const applyBurn = (target, hitX, hitY) => {
-    const dmg = computeDamage(state.weapon.plasmaDamage, "heat");
-    target.hp -= dmg.damage;
-    target.burnUntil = Math.max(target.burnUntil || 0, state.time + state.weapon.plasmaBurnDuration);
-    target.burnDps = Math.max(target.burnDps || 0, state.weapon.plasmaBurnDps * (state.shipStats ? state.shipStats.heatDamage : 1));
-    target.burnTickCarry = target.burnTickCarry || 0;
-    createExplosion(hitX, hitY, "#ff944d", 5);
-    if (target.hp <= 0) {
-      if (target === state.boss) {
-        onBossDefeated();
-      } else {
-        destroyObject(target, "shot");
-      }
-    }
-  };
-
-  for (const obj of state.objects) {
-    if (obj.hp <= 0) continue;
-    const vx = obj.x - ox;
-    const vy = obj.y - oy;
-    const dist = Math.hypot(vx, vy) || 1;
-    if (dist > state.weapon.plasmaRange + obj.collisionRadius) continue;
-    const dot = (vx / dist) * ux + (vy / dist) * uy;
-    if (dot < cosArc) continue;
-    applyBurn(obj, obj.x, obj.y);
+  const aim = Math.atan2(dyRaw, dxRaw);
+  const pellets = 7;
+  for (let i = 0; i < pellets; i += 1) {
+    const t = pellets <= 1 ? 0 : i / (pellets - 1);
+    const spread = (t - 0.5) * state.weapon.plasmaArc * 2;
+    const a = aim + spread + (Math.random() - 0.5) * 0.08;
+    const speed = 260 + Math.random() * 170;
+    const life = 0.22 + Math.random() * 0.18;
+    state.plasmaBursts.push({
+      x: ox,
+      y: oy,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      life,
+      maxLife: life,
+      radius: 3 + Math.random() * 1.2,
+      growth: 48 + Math.random() * 38,
+      damage: state.weapon.plasmaDamage,
+      rangeLeft: state.weapon.plasmaRange,
+      hitDone: false,
+    });
   }
-
-  if (state.bossActive && state.boss) {
-    const vx = state.boss.x - ox;
-    const vy = state.boss.y - oy;
-    const dist = Math.hypot(vx, vy) || 1;
-    const dot = (vx / dist) * ux + (vy / dist) * uy;
-    if (dist <= state.weapon.plasmaRange + state.boss.collisionRadius && dot >= cosArc) {
-      applyBurn(state.boss, state.boss.x, state.boss.y);
-    }
-  }
-
-  state.plasmaBursts.push({
-    x: ox,
-    y: oy,
-    ux,
-    uy,
-    range: state.weapon.plasmaRange,
-    arc: state.weapon.plasmaArc,
-    life: 0.09,
-  });
 
   playSfx("laser");
+}
+
+function applyHeatHit(target, damage, hitX, hitY) {
+  const dmg = computeDamage(damage, "heat");
+  target.hp -= dmg.damage;
+  target.burnUntil = Math.max(target.burnUntil || 0, state.time + state.weapon.plasmaBurnDuration);
+  target.burnDps = Math.max(target.burnDps || 0, state.weapon.plasmaBurnDps * (state.shipStats ? state.shipStats.heatDamage : 1));
+  target.burnTickCarry = target.burnTickCarry || 0;
+  createExplosion(hitX, hitY, "#ff944d", 4);
+
+  if (target.hp <= 0) {
+    if (target === state.boss) {
+      onBossDefeated();
+    } else {
+      destroyObject(target, "shot");
+    }
+  }
 }
 
 function shootAtCursor(now) {
@@ -2371,7 +2377,7 @@ function explodeRocketAt(x, y) {
 function spawnBossMinion(boss) {
   let type = "miniAlien";
   let size = 16;
-  let hp = 1;
+  let hp = 2;
   let corners = 0;
   let destructible = true;
   let collisionRadius = 12;
@@ -2618,7 +2624,7 @@ function update(dt, now) {
       obj.burnTickCarry = (obj.burnTickCarry || 0) + (obj.burnDps || 0) * dt;
       while (obj.burnTickCarry >= 1 && obj.hp > 0) {
         obj.burnTickCarry -= 1;
-        obj.hp -= 1;
+        obj.hp -= computeBurnTickDamage();
         if (obj.hp <= 0) {
           destroyObject(obj, "shot");
         }
@@ -2661,7 +2667,7 @@ function update(dt, now) {
       state.boss.burnTickCarry = (state.boss.burnTickCarry || 0) + (state.boss.burnDps || 0) * dt;
       while (state.boss.burnTickCarry >= 1 && state.boss.hp > 0) {
         state.boss.burnTickCarry -= 1;
-        state.boss.hp -= 1;
+        state.boss.hp -= computeBurnTickDamage();
         if (state.boss.hp <= 0) {
           onBossDefeated();
           break;
@@ -2873,14 +2879,53 @@ function update(dt, now) {
   }
 
   for (const burst of state.plasmaBursts) {
+    burst.x += burst.vx * dt;
+    burst.y += burst.vy * dt;
     burst.life -= dt;
+    burst.radius += burst.growth * dt;
+    burst.vx *= 0.88;
+    burst.vy *= 0.88;
+    burst.rangeLeft -= Math.hypot(burst.vx, burst.vy) * dt;
+
+    if (burst.hitDone || burst.life <= 0 || burst.rangeLeft <= 0) continue;
+
+    for (const obj of state.objects) {
+      if (obj.hp <= 0 || !obj.destructible) continue;
+      const d = Math.hypot(obj.x - burst.x, obj.y - burst.y);
+      if (d < obj.collisionRadius + burst.radius) {
+        applyHeatHit(obj, burst.damage, burst.x, burst.y);
+        burst.hitDone = true;
+        burst.life = Math.min(burst.life, 0.05);
+        break;
+      }
+    }
+
+    if (!burst.hitDone && state.bossActive && state.boss) {
+      const dBoss = Math.hypot(state.boss.x - burst.x, state.boss.y - burst.y);
+      if (dBoss < state.boss.collisionRadius + burst.radius) {
+        applyHeatHit(state.boss, burst.damage, burst.x, burst.y);
+        burst.hitDone = true;
+        burst.life = Math.min(burst.life, 0.05);
+      }
+    }
+
+    if (!burst.hitDone) {
+      for (const hazard of state.edgeHazards) {
+        const d = Math.hypot(hazard.x - burst.x, hazard.y - burst.y);
+        if (d < hazard.hitRadius + burst.radius) {
+          burst.hitDone = true;
+          burst.life = 0;
+          break;
+        }
+      }
+    }
   }
 
   state.objects = state.objects.filter((o) => o.x > -o.size * 2 && o.hp > 0);
   state.edgeHazards = state.edgeHazards.filter((h) => h.x > -h.radius * 1.3);
   state.bullets = state.bullets.filter((b) => b.life > 0 && b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30);
   state.laserBeams = state.laserBeams.filter((b) => b.life > 0);
-  state.plasmaBursts = state.plasmaBursts.filter((b) => b.life > 0);
+  state.plasmaBursts = state.plasmaBursts.filter((b) => b.life > 0 && b.rangeLeft > 0 && b.x > -80 && b.x < WORLD.width + 80 && b.y > -80 && b.y < WORLD.height + 80);
   state.missiles = state.missiles.filter((m) => m.life > 0 && m.x > -60 && m.x < WORLD.width + 60 && m.y > -60 && m.y < WORLD.height + 60);
   state.pickups = state.pickups.filter((p) => p.life > 0 && p.x > -60 && p.x < WORLD.width + 60 && p.y > -60 && p.y < WORLD.height + 60);
   state.bossProjectiles = state.bossProjectiles.filter((p) => p.life > 0 && p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80);
@@ -2938,18 +2983,20 @@ function drawShip(ship) {
     ctx.fill();
   }
 
-  // Visible cannon turrets that rotate toward mouse cursor.
-  const turretCount = 1 + state.weapon.extraLasers;
-  const offsets = turretCount === 1 ? [0] : turretCount === 2 ? [-6, 6] : [-8, 0, 8];
-  for (const yOff of offsets) {
-    ctx.save();
-    ctx.translate(0, yOff);
-    ctx.rotate(aimAngle - moveAngle);
-    ctx.fillStyle = "#2e3d52";
-    ctx.fillRect(-2, -2, 14, 4);
-    ctx.fillStyle = "#ffd07b";
-    ctx.fillRect(10, -1.2, 5, 2.4);
-    ctx.restore();
+  if (state.weapon.cannonUnlocked) {
+    // Visible cannon turrets that rotate toward mouse cursor.
+    const turretCount = 1 + state.weapon.extraLasers;
+    const offsets = turretCount === 1 ? [0] : turretCount === 2 ? [-6, 6] : [-8, 0, 8];
+    for (const yOff of offsets) {
+      ctx.save();
+      ctx.translate(0, yOff);
+      ctx.rotate(aimAngle - moveAngle);
+      ctx.fillStyle = "#2e3d52";
+      ctx.fillRect(-2, -2, 14, 4);
+      ctx.fillStyle = "#ffd07b";
+      ctx.fillRect(10, -1.2, 5, 2.4);
+      ctx.restore();
+    }
   }
 
   if (state.weapon.laserUnlocked) {
@@ -3075,7 +3122,32 @@ function drawObject(obj) {
     ctx.fill();
   }
 
+  if (obj.burnUntil && obj.burnUntil > state.time) {
+    drawBurningEffect(0, -obj.size * 0.08, obj.size * 0.72);
+  }
+
   ctx.restore();
+}
+
+function drawBurningEffect(x, y, size) {
+  const flicker = 0.82 + Math.sin(state.time * 25 + x * 0.02 + y * 0.02) * 0.18;
+  const count = 3;
+  for (let i = 0; i < count; i += 1) {
+    const a = (state.time * 3 + i * 2.2) % (Math.PI * 2);
+    const r = size * (0.18 + i * 0.14);
+    const px = x + Math.cos(a) * r * 0.55;
+    const py = y + Math.sin(a * 1.2) * r * 0.42 - size * 0.1;
+    const rr = Math.max(2, size * (0.12 + i * 0.06) * flicker);
+
+    const g = ctx.createRadialGradient(px, py, 1, px, py, rr);
+    g.addColorStop(0, "rgba(255, 245, 190, 0.95)");
+    g.addColorStop(0.45, "rgba(255, 152, 72, 0.72)");
+    g.addColorStop(1, "rgba(40, 26, 22, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(px, py, rr, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawEdgeHazard(hazard) {
@@ -3179,6 +3251,10 @@ function drawBoss() {
   ctx.arc(-boss.size * 0.18, -boss.size * 0.08, 8, 0, Math.PI * 2);
   ctx.arc(boss.size * 0.18, -boss.size * 0.08, 8, 0, Math.PI * 2);
   ctx.fill();
+
+  if (boss.burnUntil && boss.burnUntil > state.time) {
+    drawBurningEffect(0, -boss.size * 0.08, boss.size * 0.75);
+  }
 
   ctx.restore();
 
@@ -3376,20 +3452,31 @@ function draw() {
   }
 
   for (const burst of state.plasmaBursts) {
+    const t = 1 - burst.life / (burst.maxLife || 1);
+    const alpha = Math.max(0, Math.min(1, burst.life / (burst.maxLife || 1)));
+
+    let core = "rgba(255, 245, 200, 0.95)";
+    let mid = "rgba(255, 188, 96, 0.65)";
+    if (t > 0.28 && t <= 0.6) {
+      core = "rgba(255, 196, 108, 0.92)";
+      mid = "rgba(255, 124, 62, 0.58)";
+    } else if (t > 0.6 && t <= 0.82) {
+      core = "rgba(242, 96, 46, 0.82)";
+      mid = "rgba(148, 54, 28, 0.54)";
+    } else if (t > 0.82) {
+      core = "rgba(82, 52, 40, 0.7)";
+      mid = "rgba(28, 24, 23, 0.52)";
+    }
+
     ctx.save();
-    ctx.translate(burst.x, burst.y);
-    const a = Math.atan2(burst.uy, burst.ux);
-    ctx.rotate(a);
-    ctx.globalAlpha = Math.max(0, Math.min(1, burst.life * 10));
-    const grad = ctx.createRadialGradient(0, 0, 4, 0, 0, burst.range);
-    grad.addColorStop(0, "rgba(255, 198, 122, 0.9)");
-    grad.addColorStop(0.4, "rgba(255, 128, 72, 0.45)");
-    grad.addColorStop(1, "rgba(255, 84, 44, 0)");
+    ctx.globalAlpha = alpha;
+    const grad = ctx.createRadialGradient(burst.x, burst.y, Math.max(1, burst.radius * 0.25), burst.x, burst.y, burst.radius * 1.45);
+    grad.addColorStop(0, core);
+    grad.addColorStop(0.55, mid);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, burst.range, -burst.arc, burst.arc);
-    ctx.closePath();
+    ctx.arc(burst.x, burst.y, burst.radius * 1.25, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
