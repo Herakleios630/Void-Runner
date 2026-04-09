@@ -41,10 +41,10 @@
     } else if (type === "laser") {
       playTone(980, 0.07, "sawtooth", 0.02, 0.92);
     } else if (type === "plasma") {
-      // Fuller plasma sound: bright ignition + descending hot tail.
-      playTone(520, 0.06, "sawtooth", 0.02, 1.08);
-      setTimeout(() => playTone(430, 0.09, "triangle", 0.021, 0.88), 10);
-      setTimeout(() => playTone(260, 0.11, "sine", 0.016, 0.72), 28);
+      // Smoother plasma burst: soft hiss + warm descending body.
+      playTone(760, 0.03, "triangle", 0.011, 0.9);
+      setTimeout(() => playTone(520, 0.08, "sawtooth", 0.019, 0.78), 6);
+      setTimeout(() => playTone(340, 0.14, "sine", 0.021, 0.62), 18);
     } else if (type === "rocket") {
       playTone(150, 0.18, "sawtooth", 0.035, 0.7);
     } else if (type === "explosion") {
