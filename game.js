@@ -13,8 +13,12 @@ const levelEl = document.getElementById("level");
 const fireModeStatusEl = document.getElementById("fireModeStatus");
 const hpStatusEl = document.getElementById("hpStatus");
 const critStatusEl = document.getElementById("critStatus");
+const physicalStatusEl = document.getElementById("physicalStatus");
+const energyStatusEl = document.getElementById("energyStatus");
+const explosiveStatusEl = document.getElementById("explosiveStatus");
 const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
+const armorStatusEl = document.getElementById("armorStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
 const pauseIndicatorEl = document.getElementById("pauseIndicator");
@@ -164,6 +168,7 @@ const state = {
   bullets: [],
   laserBeams: [],
   missiles: [],
+  pickups: [],
   bossProjectiles: [],
   particles: [],
   stars: [],
@@ -209,6 +214,7 @@ const state = {
   shield: {
     unlocked: false,
     charges: 0,
+    integrity: 0,
     maxCharges: 1,
     rechargeDelay: 10,
     cooldownUntil: 0,
@@ -244,6 +250,10 @@ const UPGRADE_WEIGHTS = {
   stat_crit_damage: 5,
   stat_reload_tuning: 6,
   stat_thrusters: 5,
+  stat_physical_damage: 6,
+  stat_energy_damage: 6,
+  stat_explosive_damage: 5,
+  stat_armor_core: 6,
 };
 
 const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
@@ -268,6 +278,7 @@ const BOSS_LOOT_DEFS = [
       state.shield.unlocked = true;
       state.shield.maxCharges = Math.min(3, state.shield.maxCharges + 1);
       state.shield.charges = state.shield.maxCharges;
+      state.shield.integrity = state.shield.charges;
       state.shield.cooldownUntil = state.time;
       playSfx("upgrade");
     },
@@ -316,6 +327,7 @@ const UPGRADE_DEFS = [
     apply: () => {
       state.shield.unlocked = true;
       state.shield.charges = state.shield.maxCharges;
+      state.shield.integrity = state.shield.charges;
       state.shield.cooldownUntil = state.time;
       playSfx("upgrade");
     },
@@ -572,6 +584,52 @@ const UPGRADE_DEFS = [
       playSfx("upgrade");
     },
   },
+  {
+    id: "stat_physical_damage",
+    title: "Ballistik-Fokus",
+    description: "+12% physischer Schaden (Geschuetz).",
+    maxStacks: 8,
+    canOffer: () => true,
+    apply: () => {
+      state.shipStats.physicalDamage = Math.min(3, state.shipStats.physicalDamage + 0.12);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_energy_damage",
+    title: "Plasma-Kalibrierung",
+    description: "+12% Energieschaden (Laser).",
+    maxStacks: 8,
+    canOffer: () => true,
+    apply: () => {
+      state.shipStats.energyDamage = Math.min(3, state.shipStats.energyDamage + 0.12);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_explosive_damage",
+    title: "Sprengstoff-Mix",
+    description: "+12% Explosivschaden (Raketen).",
+    maxStacks: 8,
+    canOffer: () => true,
+    apply: () => {
+      state.shipStats.explosiveDamage = Math.min(3, state.shipStats.explosiveDamage + 0.12);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_armor_core",
+    title: "Panzerungsplatten",
+    description: "+1 maximale Panzerung und +1 sofortige Wiederherstellung.",
+    maxStacks: 8,
+    canOffer: () => true,
+    apply: () => {
+      state.ship.maxArmor += 1;
+      state.ship.armor = Math.min(state.ship.maxArmor, state.ship.armor + 1);
+      state.shipStats.maxArmor = state.ship.maxArmor;
+      playSfx("upgrade");
+    },
+  },
 ];
 
 function initAudio() {
@@ -639,7 +697,7 @@ function clamp(value, min, max) {
 }
 
 function scaleEntitiesToWorld(sx, sy) {
-  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.missiles, state.bossProjectiles, state.particles, state.stars]) {
+  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.stars]) {
     for (const entity of collection) {
       if (typeof entity.x === "number") entity.x *= sx;
       if (typeof entity.y === "number") entity.y *= sy;
@@ -727,6 +785,7 @@ function drawMobileCanvasHud() {
   if (!IS_COARSE_POINTER) return;
 
   const hpText = state.ship ? `HP ${Math.max(0, state.ship.hp)}/${state.ship.maxHp}` : "HP -";
+  const armorText = state.ship ? `ARM ${Math.max(0, Math.floor(state.ship.armor))}/${state.ship.maxArmor}` : "ARM -";
   const scoreText = `Punkte ${Math.floor(state.score)}`;
   const levelText = `Lvl ${state.level}`;
 
@@ -768,6 +827,8 @@ function drawMobileCanvasHud() {
 
   const hpW = Math.ceil(ctx.measureText(hpText).width) + 18;
   drawTag(Math.max(8, WORLD.width - hpW - 8), topY, hpText);
+  const armorW = Math.ceil(ctx.measureText(armorText).width) + 18;
+  drawTag(Math.max(8, WORLD.width - armorW - 8), topY + 30, armorText);
 
   if (state.pauseReason === "manual-pause") {
     const pauseText = "PAUSE";
@@ -876,26 +937,48 @@ function rollCrit() {
   return Math.random() < chance;
 }
 
-function computeDamage(baseDamage) {
+function computeDamage(baseDamage, damageType = "physical") {
   const crit = rollCrit();
   const critMult = state.shipStats ? state.shipStats.critDamage : 1.5;
-  const dmg = crit ? baseDamage * critMult : baseDamage;
+  const typeMult = state.shipStats
+    ? damageType === "energy"
+      ? state.shipStats.energyDamage
+      : damageType === "explosive"
+        ? state.shipStats.explosiveDamage
+        : state.shipStats.physicalDamage
+    : 1;
+  const scaled = baseDamage * typeMult;
+  const dmg = crit ? scaled * critMult : scaled;
   return {
     damage: Math.max(1, Math.floor(dmg)),
     crit,
   };
 }
 
-function hitShip() {
+function hitShip(damageType = "physical", amount = 1) {
   if (!state.ship) return false;
   if (state.time < state.ship.invulnUntil) return true;
 
-  if (consumeShield()) {
+  if (consumeShield(damageType, amount)) {
     state.ship.invulnUntil = state.time + 0.35;
     return true;
   }
 
-  state.ship.hp -= 1;
+  let remaining = Math.max(0, amount);
+  if (state.ship.armor > 0) {
+    const armorBlock = damageType === "physical" ? 1 : damageType === "explosive" ? 0.75 : 0.25;
+    const maxAbsorb = state.ship.armor * armorBlock;
+    const absorbed = Math.min(remaining, maxAbsorb);
+    if (absorbed > 0) {
+      const armorUsed = Math.max(1, Math.ceil(absorbed / armorBlock));
+      state.ship.armor = Math.max(0, state.ship.armor - armorUsed);
+      remaining -= absorbed;
+    }
+  }
+
+  if (remaining > 0) {
+    state.ship.hp -= Math.max(1, Math.ceil(remaining));
+  }
   state.ship.invulnUntil = state.time + 0.9;
   createExplosion(state.ship.x, state.ship.y, "#ff7f8a", 20);
   if (state.ship.hp <= 0) {
@@ -1100,9 +1183,13 @@ function resetGame() {
   const maxHp = Math.max(1, Math.round(model.maxHp * difficulty.playerHpMult));
   state.shipStats = {
     maxHp,
+    maxArmor: Math.max(1, Math.round(2 * difficulty.playerHpMult)),
     speed: model.speed,
     critChance: model.critChance,
     critDamage: model.critDamage,
+    physicalDamage: 1,
+    energyDamage: 1,
+    explosiveDamage: 1,
     reloadRate: model.reloadRate,
     xpBonus: model.xpBonus,
     colorA: model.colorA,
@@ -1129,6 +1216,7 @@ function resetGame() {
   state.bullets = [];
   state.laserBeams = [];
   state.missiles = [];
+  state.pickups = [];
   state.bossProjectiles = [];
   state.particles = [];
   state.pendingUpgradeOptions = [];
@@ -1169,6 +1257,7 @@ function resetGame() {
 
   state.shield.unlocked = false;
   state.shield.charges = 0;
+  state.shield.integrity = 0;
   state.shield.maxCharges = 1;
   state.shield.rechargeDelay = 10;
   state.shield.cooldownUntil = 0;
@@ -1195,6 +1284,8 @@ function resetGame() {
     vy: 0,
     hp: maxHp,
     maxHp: maxHp,
+    armor: Math.max(0, Math.round((state.shipStats ? state.shipStats.maxArmor : 2) * 0.5)),
+    maxArmor: state.shipStats ? state.shipStats.maxArmor : 2,
     invulnUntil: 0,
     radius: 17,
     thrust: 420 * model.speed,
@@ -1220,8 +1311,20 @@ function refreshHud() {
   levelEl.textContent = state.level;
   if (state.ship) {
     hpStatusEl.textContent = `${Math.max(0, state.ship.hp)}/${state.ship.maxHp}`;
+    if (armorStatusEl) {
+      armorStatusEl.textContent = `${Math.max(0, Math.floor(state.ship.armor))}/${state.ship.maxArmor}`;
+    }
   }
   critStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.critChance : 0.1) * 100)}%`;
+  if (physicalStatusEl) {
+    physicalStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.physicalDamage : 1) * 100)}%`;
+  }
+  if (energyStatusEl) {
+    energyStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.energyDamage : 1) * 100)}%`;
+  }
+  if (explosiveStatusEl) {
+    explosiveStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.explosiveDamage : 1) * 100)}%`;
+  }
   reloadStatusEl.textContent = `${Math.round(reloadRate() * 100)}%`;
   xpStatusEl.textContent = `${Math.round(((state.shipStats ? state.shipStats.xpBonus : 1) - 1) * 100)}%`;
   if (fireModeStatusEl) {
@@ -1481,6 +1584,7 @@ function spawnObject() {
     spin: (Math.random() - 0.5) * 2,
     angle: Math.random() * Math.PI * 2,
     passed: false,
+    nextShotAt: type === "miniAlien" ? state.time + 1.2 + Math.random() * 2.4 : null,
   });
 }
 
@@ -1583,6 +1687,24 @@ function spawnRockFragments(parent) {
   }
 }
 
+function maybeSpawnArmorPickup(obj) {
+  const asteroidTypes = ["smallRock", "mediumRock", "rockShard", "boulder"];
+  if (!asteroidTypes.includes(obj.type)) return;
+
+  const dropChance = obj.type === "mediumRock" ? 0.18 : obj.type === "boulder" ? 0.22 : 0.1;
+  if (Math.random() > dropChance) return;
+
+  state.pickups.push({
+    type: "armor",
+    x: obj.x,
+    y: obj.y,
+    vx: obj.vx * 0.35,
+    vy: obj.vy * 0.35,
+    radius: 10,
+    life: 10,
+  });
+}
+
 function destroyObject(obj, reason) {
   if (obj.destroyed) return;
 
@@ -1608,6 +1730,8 @@ function destroyObject(obj, reason) {
     spawnRockFragments(obj);
   }
 
+  maybeSpawnArmorPickup(obj);
+
   const color = obj.type === "miniAlien" ? "#94ff74" : "#ffb36a";
   createExplosion(obj.x, obj.y, color, obj.type === "mediumRock" ? 24 : 14);
   playSfx("explosion");
@@ -1627,10 +1751,25 @@ function damageNearbyFromShieldPulse(radius, allowHeavyTargets) {
   createExplosion(state.ship.x, state.ship.y, "#84e7ff", 28);
 }
 
-function consumeShield() {
+function consumeShield(damageType = "physical", amount = 1) {
   if (!state.shield.unlocked || state.shield.charges < 1) return false;
 
+  if (state.shield.integrity <= 0) {
+    state.shield.integrity = state.shield.charges;
+  }
+
+  // Energy hits drain only half shield integrity: shield is extra effective vs energy.
+  const shieldCost = damageType === "energy" ? amount * 0.5 : amount;
+  state.shield.integrity -= shieldCost;
+
+  if (state.shield.integrity > 0) {
+    playSfx("shieldHit");
+    createExplosion(state.ship.x, state.ship.y, "#71f4ff", 18);
+    return true;
+  }
+
   state.shield.charges = 0;
+  state.shield.integrity = 0;
   state.shield.cooldownUntil = state.time + state.shield.rechargeDelay / reloadRate();
   playSfx("shieldHit");
   createExplosion(state.ship.x, state.ship.y, "#71f4ff", 24);
@@ -1742,7 +1881,7 @@ function fireLaserPulse(now) {
     beamEnd = Math.min(beamEnd, hit.t);
 
     if (hit.kind === "boss") {
-      const dmg = computeDamage(state.weapon.laserDamage);
+      const dmg = computeDamage(state.weapon.laserDamage, "energy");
       hit.ref.hp -= dmg.damage;
       createExplosion(ox + dx * hit.t, oy + dy * hit.t, hitColor, 7);
       if (hit.ref.hp <= 0) {
@@ -1754,7 +1893,7 @@ function fireLaserPulse(now) {
 
     if (hit.kind === "object") {
       if (hit.ref.destructible) {
-        const dmg = computeDamage(state.weapon.laserDamage);
+        const dmg = computeDamage(state.weapon.laserDamage, "energy");
         hit.ref.hp -= dmg.damage;
         if (hit.ref.hp <= 0) {
           destroyObject(hit.ref, "shot");
@@ -1920,6 +2059,24 @@ function spawnBossMinion(boss) {
     spin: (Math.random() - 0.5) * 2,
     angle: Math.random() * Math.PI * 2,
     passed: true,
+    nextShotAt: type === "miniAlien" ? state.time + 1 + Math.random() * 2 : null,
+  });
+}
+
+function spawnEnemyProjectile(fromX, fromY, toX, toY, speed, damageType) {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const len = Math.hypot(dx, dy) || 1;
+  const radius = damageType === "energy" ? 8 : 7;
+  state.bossProjectiles.push({
+    x: fromX,
+    y: fromY,
+    vx: (dx / len) * speed,
+    vy: (dy / len) * speed,
+    life: 6,
+    radius,
+    damageType,
+    damageAmount: damageType === "explosive" ? 2 : 1,
   });
 }
 
@@ -1979,21 +2136,21 @@ function updateBoss(dt) {
   if (state.time - boss.lastFire >= boss.fireCooldown) {
     boss.lastFire = state.time;
     const shots = boss.variant === "carrier" ? 3 : 2;
+    const damageType = boss.variant === "warship" ? "physical" : "energy";
     for (let i = 0; i < shots; i += 1) {
       const spread = (i - (shots - 1) / 2) * 0.24;
       const dx = state.ship.x - boss.x;
       const dy = state.ship.y - boss.y;
       const a = Math.atan2(dy, dx) + spread;
       const speed = (boss.variant === "warship" ? 300 : 260) * difficulty.enemyProjectileSpeedMult;
-
-      state.bossProjectiles.push({
-        x: boss.x - boss.size * 0.38,
-        y: boss.y,
-        vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed,
-        life: 6,
-        radius: boss.variant === "carrier" ? 10 : 8,
-      });
+      spawnEnemyProjectile(
+        boss.x - boss.size * 0.38,
+        boss.y,
+        boss.x - boss.size * 0.38 + Math.cos(a) * 100,
+        boss.y + Math.sin(a) * 100,
+        speed,
+        damageType,
+      );
     }
   }
 }
@@ -2055,6 +2212,7 @@ function update(dt, now) {
 
   if (state.shield.unlocked && state.shield.charges < state.shield.maxCharges && state.time >= state.shield.cooldownUntil) {
     state.shield.charges = state.shield.maxCharges;
+    state.shield.integrity = state.shield.charges;
     playSfx("shieldReady");
   }
 
@@ -2112,12 +2270,18 @@ function update(dt, now) {
       addPoints(obj.destructible ? 6 : 12);
     }
 
+    if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+      const spread = (Math.random() - 0.5) * 18;
+      spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 230, "energy");
+      obj.nextShotAt = state.time + 1.8 + Math.random() * 1.9;
+    }
+
     const d = Math.hypot(obj.x - ship.x, obj.y - ship.y);
     if (d < obj.collisionRadius + ship.radius - 2) {
       if (tryUseDrillOnObject(obj)) {
         continue;
       }
-      if (!hitShip()) {
+      if (!hitShip("physical", 1)) {
         setGameOver();
         return;
       }
@@ -2130,7 +2294,7 @@ function update(dt, now) {
   if (state.bossActive && state.boss) {
     const dBoss = Math.hypot(state.boss.x - ship.x, state.boss.y - ship.y);
     if (dBoss < state.boss.collisionRadius + ship.radius - 3) {
-      if (!hitShip()) {
+      if (!hitShip("physical", 1)) {
         setGameOver();
         return;
       }
@@ -2143,7 +2307,7 @@ function update(dt, now) {
 
     const dShip = Math.hypot(hazard.x - ship.x, hazard.y - ship.y);
     if (dShip < hazard.hitRadius + ship.radius - 3) {
-      if (!hitShip()) {
+      if (!hitShip("physical", 1)) {
         createExplosion(ship.x, ship.y, "#71f4ff", 28);
         setGameOver();
         return;
@@ -2182,7 +2346,7 @@ function update(dt, now) {
       const dBoss = Math.hypot(state.boss.x - bullet.x, state.boss.y - bullet.y);
       if (dBoss < state.boss.collisionRadius + bullet.radius) {
         bullet.life = 0;
-        const dmg = computeDamage(1);
+        const dmg = computeDamage(1, "physical");
         state.boss.hp -= dmg.damage;
         createExplosion(bullet.x, bullet.y, "#ffe188", 6);
         if (state.boss.hp <= 0) {
@@ -2208,7 +2372,7 @@ function update(dt, now) {
       if (d < obj.collisionRadius + bullet.radius) {
         bullet.life = 0;
         if (obj.destructible) {
-          const dmg = computeDamage(1);
+          const dmg = computeDamage(1, "physical");
           obj.hp -= dmg.damage;
           if (obj.hp <= 0) {
             destroyObject(obj, "shot");
@@ -2241,7 +2405,7 @@ function update(dt, now) {
       const dBoss = Math.hypot(state.boss.x - missile.x, state.boss.y - missile.y);
       if (dBoss < state.boss.collisionRadius + missile.radius) {
         explodeRocketAt(missile.x, missile.y);
-        const dmg = computeDamage(18);
+        const dmg = computeDamage(18, "explosive");
         state.boss.hp -= dmg.damage;
         missile.life = 0;
         if (state.boss.hp <= 0) {
@@ -2283,7 +2447,7 @@ function update(dt, now) {
     const dShip = Math.hypot(proj.x - ship.x, proj.y - ship.y);
     if (dShip < proj.radius + ship.radius) {
       proj.life = 0;
-      if (!hitShip()) {
+      if (!hitShip(proj.damageType || "physical", proj.damageAmount || 1)) {
         setGameOver();
         return;
       }
@@ -2308,6 +2472,24 @@ function update(dt, now) {
     p.life -= dt;
   }
 
+  for (const pickup of state.pickups) {
+    pickup.x += pickup.vx * dt;
+    pickup.y += pickup.vy * dt;
+    pickup.vx *= 0.985;
+    pickup.vy *= 0.985;
+    pickup.life -= dt;
+
+    const dShip = Math.hypot(pickup.x - ship.x, pickup.y - ship.y);
+    if (dShip < pickup.radius + ship.radius) {
+      if (pickup.type === "armor") {
+        ship.armor = Math.min(ship.maxArmor, ship.armor + 1);
+        createExplosion(pickup.x, pickup.y, "#a5d8ff", 9);
+        playSfx("shieldReady");
+      }
+      pickup.life = 0;
+    }
+  }
+
   for (const beam of state.laserBeams) {
     beam.life -= dt;
   }
@@ -2317,6 +2499,7 @@ function update(dt, now) {
   state.bullets = state.bullets.filter((b) => b.life > 0 && b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30);
   state.laserBeams = state.laserBeams.filter((b) => b.life > 0);
   state.missiles = state.missiles.filter((m) => m.life > 0 && m.x > -60 && m.x < WORLD.width + 60 && m.y > -60 && m.y < WORLD.height + 60);
+  state.pickups = state.pickups.filter((p) => p.life > 0 && p.x > -60 && p.x < WORLD.width + 60 && p.y > -60 && p.y < WORLD.height + 60);
   state.bossProjectiles = state.bossProjectiles.filter((p) => p.life > 0 && p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80);
   state.particles = state.particles.filter((p) => p.life > 0);
 
@@ -2735,11 +2918,30 @@ function draw() {
     drawMissile(missile);
   }
 
-  ctx.fillStyle = "#ff5f70";
   for (const proj of state.bossProjectiles) {
+    ctx.fillStyle = proj.damageType === "energy" ? "#74e8ff" : "#ff5f70";
     ctx.beginPath();
     ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  for (const pickup of state.pickups) {
+    if (pickup.type !== "armor") continue;
+    ctx.save();
+    ctx.translate(pickup.x, pickup.y);
+    ctx.fillStyle = "rgba(132, 188, 255, 0.95)";
+    ctx.beginPath();
+    ctx.arc(0, 0, pickup.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(220, 242, 255, 0.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.lineTo(4, 0);
+    ctx.moveTo(0, -4);
+    ctx.lineTo(0, 4);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawBoss();
