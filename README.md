@@ -30,6 +30,8 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Leertaste oder linke Maustaste halten: feuern
 - Rechte Maustaste: Rakete (nach Freischaltung)
 - H: Hitbox-Debug ein/aus
+- M: Desktop-Feuermodus umschalten (manuell/automatisch)
+- P oder ESC: Pause/Fortsetzen
 
 ## Android / Touch
 - Virtueller Joystick links fuer Bewegung

@@ -7,6 +7,7 @@ const scoreEl = document.getElementById("score");
 const killsEl = document.getElementById("kills");
 const timeEl = document.getElementById("timeSurvived");
 const levelEl = document.getElementById("level");
+const fireModeStatusEl = document.getElementById("fireModeStatus");
 const hpStatusEl = document.getElementById("hpStatus");
 const critStatusEl = document.getElementById("critStatus");
 const reloadStatusEl = document.getElementById("reloadStatus");
@@ -39,6 +40,8 @@ const input = {
 const audio = {
   ctx: null,
 };
+
+const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
 
 const SHIP_MODELS = {
   normal: {
@@ -89,6 +92,8 @@ const state = {
   debugHitboxes: false,
   showShipInfo: false,
   selectedShipId: "normal",
+  desktopAutoFire: false,
+  mouseInCanvas: false,
   joystickPointerId: null,
   lastAimTapAt: -999,
   score: 0,
@@ -866,6 +871,9 @@ function refreshHud() {
   critStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.critChance : 0.1) * 100)}%`;
   reloadStatusEl.textContent = `${Math.round(reloadRate() * 100)}%`;
   xpStatusEl.textContent = `${Math.round(((state.shipStats ? state.shipStats.xpBonus : 1) - 1) * 100)}%`;
+  if (fireModeStatusEl) {
+    fireModeStatusEl.textContent = state.desktopAutoFire ? "Automatisch" : "Manuell (LMB)";
+  }
 
   if (!state.shield.unlocked) {
     shieldStatusEl.textContent = "Aus";
@@ -895,6 +903,37 @@ function setGameOver() {
     <button data-action="restart">Neu starten</button>
     <button data-action="open-ship-select">Raumschiff wechseln</button>
   `;
+}
+
+function showPauseOverlay() {
+  overlay.classList.remove("hidden");
+  overlay.innerHTML = `
+    <h1>Pause</h1>
+    <p>Spiel pausiert</p>
+    <button data-action="resume">Fortsetzen</button>
+    <button data-action="restart">Neu starten</button>
+    <button data-action="open-ship-select">Raumschiff wechseln</button>
+  `;
+}
+
+function togglePause() {
+  if (state.pauseReason === "ship-select" || state.pauseReason === "levelup" || state.pauseReason === "bossreward" || state.pauseReason === "gameover") {
+    return;
+  }
+
+  if (state.running) {
+    state.running = false;
+    state.pauseReason = "manual-pause";
+    input.shooting = false;
+    showPauseOverlay();
+    return;
+  }
+
+  if (state.pauseReason === "manual-pause") {
+    state.running = true;
+    state.pauseReason = "running";
+    overlay.classList.add("hidden");
+  }
 }
 
 function canOfferUpgrade(def) {
@@ -1590,7 +1629,8 @@ function update(dt, now) {
     ship.vy *= -0.75;
   }
 
-  if (input.shooting) shootAtCursor(now);
+  const desktopAutoShooting = state.desktopAutoFire && !IS_COARSE_POINTER && state.mouseInCanvas;
+  if (input.shooting || desktopAutoShooting) shootAtCursor(now);
 
   if (input.rocketQueued) {
     fireRocket(now);
@@ -2448,6 +2488,17 @@ function setupTouchControls() {
 }
 
 window.addEventListener("keydown", (event) => {
+  if ((event.code === "Escape" || event.code === "KeyP") && !event.repeat) {
+    event.preventDefault();
+    togglePause();
+    return;
+  }
+
+  if (event.code === "KeyM" && !event.repeat && !IS_COARSE_POINTER) {
+    state.desktopAutoFire = !state.desktopAutoFire;
+    return;
+  }
+
   if (event.code === "KeyH" && !event.repeat) {
     state.debugHitboxes = !state.debugHitboxes;
   }
@@ -2459,7 +2510,7 @@ window.addEventListener("keydown", (event) => {
     }
   }
 
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space"].includes(event.code)) {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM"].includes(event.code)) {
     event.preventDefault();
   }
 
@@ -2472,6 +2523,18 @@ window.addEventListener("keyup", (event) => {
 
 canvas.addEventListener("mousemove", (event) => {
   setAimFromClient(event.clientX, event.clientY);
+  state.mouseInCanvas = true;
+});
+
+canvas.addEventListener("mouseenter", () => {
+  state.mouseInCanvas = true;
+});
+
+canvas.addEventListener("mouseleave", () => {
+  state.mouseInCanvas = false;
+  if (!state.desktopAutoFire) {
+    input.shooting = false;
+  }
 });
 
 canvas.addEventListener("mousedown", (event) => {
@@ -2513,6 +2576,15 @@ overlay.addEventListener("click", (event) => {
 
   if (actionNode.dataset.action === "restart") {
     resetGame();
+    return;
+  }
+
+  if (actionNode.dataset.action === "resume") {
+    if (state.pauseReason === "manual-pause") {
+      state.running = true;
+      state.pauseReason = "running";
+      overlay.classList.add("hidden");
+    }
     return;
   }
 
