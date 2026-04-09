@@ -136,7 +136,7 @@ const state = {
     plasmaCooldown: 0.12,
     lastPlasmaShot: -999,
     plasmaRange: 520,
-    plasmaArc: 0.24,
+    plasmaArc: 0.18,
     plasmaDamage: 0,
     plasmaBurnDps: 1.1,
     plasmaBurnDuration: 5,
@@ -475,7 +475,7 @@ const UPGRADE_DEFS = [
     canOffer: () => state.weapon.plasmaUnlocked,
     apply: () => {
       state.weapon.plasmaBurnDps += 0.25;
-      state.weapon.plasmaArc = Math.max(0.12, state.weapon.plasmaArc - 0.03);
+      state.weapon.plasmaArc = Math.max(0.08, state.weapon.plasmaArc - 0.025);
       playSfx("upgrade");
     },
   },
@@ -1206,7 +1206,7 @@ function resetGame() {
   state.weapon.plasmaCooldown = 0.12;
   state.weapon.lastPlasmaShot = -999;
   state.weapon.plasmaRange = 520;
-  state.weapon.plasmaArc = 0.24;
+  state.weapon.plasmaArc = 0.18;
   state.weapon.plasmaDamage = 0;
   state.weapon.plasmaBurnDps = 1.1;
   state.weapon.plasmaBurnDuration = 5;
@@ -1938,7 +1938,7 @@ function firePlasmaPulse(now) {
   for (let i = 0; i < pellets; i += 1) {
     const t = pellets <= 1 ? 0 : i / (pellets - 1);
     const spread = (t - 0.5) * state.weapon.plasmaArc * 2;
-    const a = aim + spread + (Math.random() - 0.5) * 0.04;
+    const a = aim + spread + (Math.random() - 0.5) * 0.02;
     const speed = 380 + Math.random() * 170;
     const life = 0.72 + Math.random() * 0.3;
     state.plasmaBursts.push({

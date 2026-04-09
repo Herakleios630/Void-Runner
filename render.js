@@ -296,7 +296,7 @@
       }
 
       if (obj.burnUntil && obj.burnUntil > state.time) {
-        drawBurningEffect(0, -obj.size * 0.08, obj.size * 0.72);
+        drawBurningEffect(0, -obj.size * 0.08, obj.size * 1.15);
       }
 
       ctx.restore();
@@ -309,10 +309,10 @@
       for (let i = 0; i < count; i += 1) {
         if (burnVfxSpriteCount >= BURN_VFX_MAX_SPRITES) break;
         const a = (state.time * 3 + i * 2.2) % (Math.PI * 2);
-        const r = size * (0.18 + i * 0.14);
+        const r = size * (0.28 + i * 0.2);
         const px = x + Math.cos(a) * r * 0.55;
         const py = y + Math.sin(a * 1.2) * r * 0.42 - size * 0.1;
-        const rr = Math.max(2, size * (0.12 + i * 0.06) * flicker);
+        const rr = Math.max(3, size * (0.2 + i * 0.09) * flicker);
 
         const g = ctx.createRadialGradient(px, py, 1, px, py, rr);
         g.addColorStop(0, "rgba(255, 245, 190, 0.95)");
@@ -324,7 +324,7 @@
         ctx.fill();
         burnVfxSpriteCount += 1;
 
-        const smokeR = rr * 0.72;
+        const smokeR = rr * 0.95;
         const smoke = ctx.createRadialGradient(px, py - smokeR * 0.2, 1, px, py - smokeR * 0.2, smokeR);
         smoke.addColorStop(0, "rgba(60, 48, 44, 0.25)");
         smoke.addColorStop(1, "rgba(14, 14, 14, 0)");
@@ -449,7 +449,7 @@
       ctx.fill();
 
       if (boss.burnUntil && boss.burnUntil > state.time) {
-        drawBurningEffect(0, -boss.size * 0.08, boss.size * 0.75);
+        drawBurningEffect(0, -boss.size * 0.08, boss.size * 1.2);
       }
 
       ctx.restore();
