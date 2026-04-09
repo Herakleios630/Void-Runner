@@ -52,243 +52,14 @@ const input = {
   mouseY: WORLD.height * 0.5,
 };
 
-const audio = {
-  ctx: null,
-};
-
 const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
 const BURN_VFX_MAX_SPRITES = 80;
 const spriteAssets = window.VoidAssets || null;
+const { SHIP_MODELS, DIFFICULTY_MODES } = window.VoidConfig;
+const { randomFrom, clamp, circlesOverlap } = window.VoidUtils;
+const { initAudio, playSfx } = window.VoidAudio;
 
 let burnVfxSpriteCount = 0;
-
-const SHIP_MODELS = {
-  scout: {
-    id: "scout",
-    name: "Scout",
-    role: "Allrounder",
-    maxHp: 3,
-    maxArmor: 2,
-    speed: 1,
-    critChance: 0.1,
-    critDamage: 1.5,
-    reloadRate: 1,
-    physicalDamage: 1,
-    energyDamage: 1,
-    explosiveDamage: 1,
-    heatDamage: 1,
-    xpBonus: 1,
-    shieldRechargeMult: 1,
-    drillRechargeMult: 1,
-    rocketCooldownMult: 1,
-    startShield: false,
-    startLaser: false,
-    startRocket: false,
-    startDrill: false,
-    startPlasma: false,
-    colorA: "#71f4ff",
-    colorB: "#ff995a",
-  },
-  tank: {
-    id: "tank",
-    name: "Bulwark",
-    role: "Tank",
-    maxHp: 5,
-    maxArmor: 5,
-    speed: 0.82,
-    critChance: 0.06,
-    critDamage: 1.4,
-    reloadRate: 0.9,
-    physicalDamage: 1.08,
-    energyDamage: 0.9,
-    explosiveDamage: 1,
-    heatDamage: 0.9,
-    xpBonus: 0.95,
-    shieldRechargeMult: 1,
-    drillRechargeMult: 0.86,
-    rocketCooldownMult: 1,
-    startShield: false,
-    startLaser: false,
-    startRocket: false,
-    startDrill: true,
-    startPlasma: false,
-    colorA: "#6db5ff",
-    colorB: "#8bd2ff",
-  },
-  glass: {
-    id: "glass",
-    name: "Viper",
-    role: "Glaskanone",
-    maxHp: 2,
-    maxArmor: 1,
-    speed: 1.2,
-    critChance: 0.22,
-    critDamage: 1.8,
-    reloadRate: 1.1,
-    physicalDamage: 0.95,
-    energyDamage: 1.22,
-    explosiveDamage: 1,
-    heatDamage: 1.05,
-    xpBonus: 1.1,
-    shieldRechargeMult: 1,
-    drillRechargeMult: 1,
-    rocketCooldownMult: 1,
-    startShield: false,
-    startLaser: true,
-    startRocket: false,
-    startDrill: false,
-    startPlasma: false,
-    colorA: "#ff8f8f",
-    colorB: "#ffc06f",
-  },
-  aegis: {
-    id: "aegis",
-    name: "Aegis",
-    role: "Schild-Experte",
-    maxHp: 3,
-    maxArmor: 3,
-    speed: 0.95,
-    critChance: 0.1,
-    critDamage: 1.5,
-    reloadRate: 1,
-    physicalDamage: 1,
-    energyDamage: 1.06,
-    explosiveDamage: 0.95,
-    heatDamage: 1,
-    xpBonus: 1,
-    shieldRechargeMult: 0.72,
-    drillRechargeMult: 1,
-    rocketCooldownMult: 1,
-    startShield: true,
-    startLaser: false,
-    startRocket: false,
-    startDrill: false,
-    startPlasma: false,
-    startCannonHalf: true,
-    colorA: "#7ee6d0",
-    colorB: "#b7fff0",
-  },
-  demolisher: {
-    id: "demolisher",
-    name: "Demolisher",
-    role: "Raketenboot",
-    maxHp: 3,
-    maxArmor: 2,
-    speed: 0.92,
-    critChance: 0.09,
-    critDamage: 1.55,
-    reloadRate: 0.95,
-    physicalDamage: 0.95,
-    energyDamage: 0.9,
-    explosiveDamage: 1.22,
-    heatDamage: 0.95,
-    xpBonus: 1,
-    shieldRechargeMult: 1,
-    drillRechargeMult: 1,
-    rocketCooldownMult: 0.78,
-    startShield: false,
-    startLaser: false,
-    startRocket: true,
-    startDrill: false,
-    startPlasma: false,
-    colorA: "#ffad66",
-    colorB: "#ffd7a7",
-  },
-  pioneer: {
-    id: "pioneer",
-    name: "Pioneer",
-    role: "Bohrer-Pilot",
-    maxHp: 4,
-    maxArmor: 3,
-    speed: 1.02,
-    critChance: 0.11,
-    critDamage: 1.55,
-    reloadRate: 1,
-    physicalDamage: 1.06,
-    energyDamage: 1,
-    explosiveDamage: 0.95,
-    heatDamage: 1.05,
-    xpBonus: 1,
-    shieldRechargeMult: 1,
-    drillRechargeMult: 0.78,
-    rocketCooldownMult: 1,
-    startShield: false,
-    startLaser: false,
-    startRocket: false,
-    startDrill: true,
-    startPlasma: false,
-    colorA: "#9cc2ff",
-    colorB: "#e7f0ff",
-  },
-  pyre: {
-    id: "pyre",
-    name: "Pyre",
-    role: "Plasmawerfer",
-    maxHp: 3,
-    maxArmor: 2,
-    speed: 1.04,
-    critChance: 0.1,
-    critDamage: 1.45,
-    reloadRate: 1,
-    physicalDamage: 0.9,
-    energyDamage: 0.95,
-    explosiveDamage: 0.95,
-    heatDamage: 1.26,
-    xpBonus: 1,
-    shieldRechargeMult: 1,
-    drillRechargeMult: 1,
-    rocketCooldownMult: 1,
-    startShield: false,
-    startLaser: false,
-    startRocket: false,
-    startDrill: false,
-    startPlasma: true,
-    colorA: "#ff8c6a",
-    colorB: "#ffd2a6",
-  },
-};
-
-const DIFFICULTY_MODES = {
-  easy: {
-    id: "easy",
-    title: "Einfach",
-    description: "Langsamere Gegner, weniger Spawn-Druck, +50% Schiff-HP.",
-    playerHpMult: 1.5,
-    objectSpeedMult: 0.78,
-    edgeSpeedMult: 0.82,
-    enemyProjectileSpeedMult: 0.86,
-    bossHpMult: 0.86,
-    spawnRateMult: 0.86,
-    edgeSpawnRateMult: 0.9,
-    bossAggroMult: 0.86,
-  },
-  medium: {
-    id: "medium",
-    title: "Mittel",
-    description: "Empfohlene Standardwerte.",
-    playerHpMult: 1,
-    objectSpeedMult: 1,
-    edgeSpeedMult: 1,
-    enemyProjectileSpeedMult: 1,
-    bossHpMult: 1,
-    spawnRateMult: 1,
-    edgeSpawnRateMult: 1,
-    bossAggroMult: 1,
-  },
-  hard: {
-    id: "hard",
-    title: "Schwierig",
-    description: "Schnellere Gegner, dichterer Spawn, haertere Bosse.",
-    playerHpMult: 0.85,
-    objectSpeedMult: 1.2,
-    edgeSpeedMult: 1.18,
-    enemyProjectileSpeedMult: 1.18,
-    bossHpMult: 1.24,
-    spawnRateMult: 1.18,
-    edgeSpawnRateMult: 1.14,
-    bossAggroMult: 1.18,
-  },
-};
 
 const state = {
   running: false,
@@ -366,8 +137,8 @@ const state = {
     plasmaUnlocked: false,
     plasmaCooldown: 0.12,
     lastPlasmaShot: -999,
-    plasmaRange: 260,
-    plasmaArc: 0.48,
+    plasmaRange: 520,
+    plasmaArc: 0.24,
     plasmaDamage: 0,
     plasmaBurnDps: 1.1,
     plasmaBurnDuration: 5,
@@ -689,7 +460,7 @@ const UPGRADE_DEFS = [
   {
     id: "plasma_emitter",
     title: "Plasmawerfer",
-    description: "Kurze kegelfoermige Hitze-Waffe mit Brand-DoT.",
+    description: "Lange fokussierte Hitze-Waffe mit Brand-DoT.",
     maxStacks: 1,
     canOffer: () => !state.weapon.plasmaUnlocked && canUnlockNewWeapon(),
     apply: () => {
@@ -706,7 +477,7 @@ const UPGRADE_DEFS = [
     canOffer: () => state.weapon.plasmaUnlocked,
     apply: () => {
       state.weapon.plasmaBurnDps += 0.25;
-      state.weapon.plasmaArc = Math.max(0.26, state.weapon.plasmaArc - 0.04);
+      state.weapon.plasmaArc = Math.max(0.12, state.weapon.plasmaArc - 0.03);
       playSfx("upgrade");
     },
   },
@@ -717,7 +488,7 @@ const UPGRADE_DEFS = [
     maxStacks: 4,
     canOffer: () => state.weapon.plasmaUnlocked,
     apply: () => {
-      state.weapon.plasmaRange = Math.min(255, state.weapon.plasmaRange + 12);
+      state.weapon.plasmaRange = Math.min(760, state.weapon.plasmaRange + 28);
       state.weapon.plasmaBurnDuration = Math.min(10, state.weapon.plasmaBurnDuration + 0.8);
       state.weapon.plasmaCooldown = Math.max(0.07, state.weapon.plasmaCooldown * 0.92);
       playSfx("upgrade");
@@ -874,80 +645,6 @@ const UPGRADE_DEFS = [
     },
   },
 ];
-
-function initAudio() {
-  if (audio.ctx) return;
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  if (!Ctx) return;
-  audio.ctx = new Ctx();
-}
-
-function playTone(freq, duration, type = "sine", volume = 0.03, slide = 1) {
-  if (!audio.ctx) return;
-  if (audio.ctx.state === "suspended") {
-    audio.ctx.resume();
-  }
-
-  const now = audio.ctx.currentTime;
-  const osc = audio.ctx.createOscillator();
-  const gain = audio.ctx.createGain();
-
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, now);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * slide), now + duration);
-
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-  osc.connect(gain);
-  gain.connect(audio.ctx.destination);
-
-  osc.start(now);
-  osc.stop(now + duration + 0.02);
-}
-
-function playSfx(type) {
-  if (type === "cannon") {
-    playTone(680, 0.06, "square", 0.02, 1.15);
-  } else if (type === "laser") {
-    playTone(980, 0.07, "sawtooth", 0.02, 0.92);
-  } else if (type === "plasma") {
-    playTone(420, 0.07, "sawtooth", 0.024, 1.04);
-    setTimeout(() => playTone(260, 0.08, "triangle", 0.018, 0.78), 16);
-  } else if (type === "rocket") {
-    playTone(150, 0.18, "sawtooth", 0.035, 0.7);
-  } else if (type === "explosion") {
-    playTone(120, 0.2, "triangle", 0.04, 0.45);
-  } else if (type === "shieldHit") {
-    playTone(350, 0.2, "sine", 0.045, 0.6);
-  } else if (type === "shieldReady") {
-    playTone(430, 0.09, "sine", 0.03, 1.35);
-  } else if (type === "upgrade") {
-    playTone(520, 0.09, "triangle", 0.03, 1.2);
-    setTimeout(() => playTone(700, 0.1, "triangle", 0.025, 1.1), 65);
-  } else if (type === "levelup") {
-    playTone(420, 0.12, "triangle", 0.03, 1.25);
-    setTimeout(() => playTone(620, 0.14, "triangle", 0.03, 1.1), 90);
-  } else if (type === "warning") {
-    playTone(260, 0.1, "square", 0.03, 1.2);
-  }
-}
-
-function randomFrom(array) {
-  return array[Math.floor(Math.random() * array.length)];
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function circlesOverlap(ax, ay, ar, bx, by, br, pad = 0) {
-  const dx = ax - bx;
-  const dy = ay - by;
-  const r = ar + br + pad;
-  return dx * dx + dy * dy < r * r;
-}
 
 function getSprite(key) {
   if (!spriteAssets || !spriteAssets.ready()) return null;
@@ -1568,8 +1265,8 @@ function resetGame() {
   state.weapon.plasmaUnlocked = false;
   state.weapon.plasmaCooldown = 0.12;
   state.weapon.lastPlasmaShot = -999;
-  state.weapon.plasmaRange = 260;
-  state.weapon.plasmaArc = 0.48;
+  state.weapon.plasmaRange = 520;
+  state.weapon.plasmaArc = 0.24;
   state.weapon.plasmaDamage = 0;
   state.weapon.plasmaBurnDps = 1.1;
   state.weapon.plasmaBurnDuration = 5;
@@ -2297,13 +1994,13 @@ function firePlasmaPulse(now) {
   const dxRaw = input.mouseX - ox;
   const dyRaw = input.mouseY - oy;
   const aim = Math.atan2(dyRaw, dxRaw);
-  const pellets = 7;
+  const pellets = 6;
   for (let i = 0; i < pellets; i += 1) {
     const t = pellets <= 1 ? 0 : i / (pellets - 1);
     const spread = (t - 0.5) * state.weapon.plasmaArc * 2;
-    const a = aim + spread + (Math.random() - 0.5) * 0.08;
-    const speed = 260 + Math.random() * 170;
-    const life = 0.5 + Math.random() * 0.32;
+    const a = aim + spread + (Math.random() - 0.5) * 0.04;
+    const speed = 380 + Math.random() * 170;
+    const life = 0.72 + Math.random() * 0.3;
     state.plasmaBursts.push({
       x: ox,
       y: oy,
@@ -2311,15 +2008,15 @@ function firePlasmaPulse(now) {
       vy: Math.sin(a) * speed,
       life,
       maxLife: life,
-      radius: 3 + Math.random() * 1.2,
-      growth: 44 + Math.random() * 30,
+      radius: 2.8 + Math.random() * 0.9,
+      growth: 22 + Math.random() * 14,
       damage: state.weapon.plasmaDamage,
       rangeLeft: state.weapon.plasmaRange,
       hitDone: false,
     });
   }
 
-  playSfx("laser");
+  playSfx("plasma");
 }
 
 function applyHeatHit(target, damage, hitX, hitY) {
@@ -3056,8 +2753,8 @@ function update(dt, now) {
     burst.y += burst.vy * dt;
     burst.life -= dt;
     burst.radius += burst.growth * dt;
-    burst.vx *= 0.93;
-    burst.vy *= 0.93;
+    burst.vx *= 0.975;
+    burst.vy *= 0.975;
     burst.rangeLeft -= Math.hypot(burst.vx, burst.vy) * dt;
 
     if (burst.hitDone || burst.life <= 0 || burst.rangeLeft <= 0) continue;
