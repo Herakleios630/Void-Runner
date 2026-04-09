@@ -156,6 +156,30 @@
         ctx.beginPath();
         ctx.arc(0, 0, ship.radius + 8, 0, Math.PI * 2);
         ctx.stroke();
+
+        if (state.shield.thorns) {
+          const spikeCount = 12;
+          const baseR = ship.radius + 10;
+          const pulse = 1 + Math.sin(state.time * 8) * 0.06;
+          ctx.fillStyle = "rgba(158, 242, 255, 0.62)";
+          ctx.strokeStyle = "rgba(219, 250, 255, 0.82)";
+          ctx.lineWidth = 1.1;
+          for (let i = 0; i < spikeCount; i += 1) {
+            const a = (i / spikeCount) * Math.PI * 2 + state.time * 0.45;
+            const innerA = a - 0.09;
+            const outerA = a + 0.09;
+            const tipR = baseR * 1.38 * pulse;
+            const sideR = baseR * 1.1;
+
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(innerA) * sideR, Math.sin(innerA) * sideR);
+            ctx.lineTo(Math.cos(a) * tipR, Math.sin(a) * tipR);
+            ctx.lineTo(Math.cos(outerA) * sideR, Math.sin(outerA) * sideR);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
       }
 
       if (state.weapon.drillUnlocked) {

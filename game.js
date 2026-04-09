@@ -138,7 +138,7 @@ const state = {
     plasmaRange: 520,
     plasmaArc: 0.18,
     plasmaDamage: 0,
-    plasmaBurnDps: 1.1,
+    plasmaBurnDps: 1.65,
     plasmaBurnDuration: 5,
   },
   shield: {
@@ -151,6 +151,42 @@ const state = {
     thorns: false,
     nova: false,
     nextNova: 30,
+    lastThornPulseAt: -999,
+  },
+  weaponLevels: {
+    cannon: 0,
+    laser: 0,
+    rocket: 0,
+    drill: 0,
+    plasma: 0,
+    shield: 0,
+  },
+  weaponMilestones: {
+    cannon: 0,
+    laser: 0,
+    rocket: 0,
+    drill: 0,
+    plasma: 0,
+    shield: 0,
+  },
+  weaponCounters: {
+    cannonShots: 0,
+    rocketShots: 0,
+    plasmaShots: 0,
+  },
+  weaponSpecials: {
+    cannonExtraChannel: 0,
+    cannonDoubleTap: false,
+    cannonStorm: false,
+    laserRear: false,
+    laserTri: false,
+    rocketOmega: false,
+    drillPulse: false,
+    plasmaBack: false,
+    plasmaTriad: false,
+    plasmaCross: false,
+    plasmaNova: false,
+    shieldThornPulse: false,
   },
   upgradesTaken: {},
   pendingUpgradeOptions: [],
@@ -195,6 +231,31 @@ const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
 
 const MAX_WEAPON_SLOTS = 3;
 const WEAPON_UNLOCK_IDS = new Set(["cannon_mount", "shield_core", "laser_emitter", "rocket_launcher", "drill_module", "plasma_emitter"]);
+const WEAPON_LEVEL_MILESTONES = [5, 10, 15, 20];
+const WEAPON_UPGRADE_TRACK = {
+  cannon_mount: "cannon",
+  laser_extra: "cannon",
+  laser_rapid: "cannon",
+  laser_spread: "cannon",
+  laser_emitter: "laser",
+  laser_charge: "laser",
+  laser_range: "laser",
+  laser_pierce: "laser",
+  rocket_launcher: "rocket",
+  rocket_cooldown: "rocket",
+  rocket_homing: "rocket",
+  rocket_split: "rocket",
+  rocket_blast: "rocket",
+  drill_module: "drill",
+  drill_recharge: "drill",
+  plasma_emitter: "plasma",
+  plasma_focus: "plasma",
+  plasma_fuel: "plasma",
+  shield_core: "shield",
+  shield_recharge: "shield",
+  shield_thorns: "shield",
+  shield_nova: "shield",
+};
 
 function activeWeaponSlotsCount() {
   return Number(state.weapon.cannonUnlocked)
@@ -1107,6 +1168,14 @@ function onBossDefeated() {
   state.boss = null;
   state.bossProjectiles = [];
   state.bossLevelsCleared += 1;
+
+  // Boss clear grants mastery progress to currently equipped systems.
+  for (const track of ["cannon", "laser", "rocket", "drill", "plasma", "shield"]) {
+    if ((state.weaponLevels[track] || 0) > 0) {
+      gainWeaponLevel(track, 1);
+    }
+  }
+
   playSfx("explosion");
 
   if (guaranteedLoot) {
@@ -1208,7 +1277,7 @@ function resetGame() {
   state.weapon.plasmaRange = 520;
   state.weapon.plasmaArc = 0.18;
   state.weapon.plasmaDamage = 0;
-  state.weapon.plasmaBurnDps = 1.1;
+  state.weapon.plasmaBurnDps = 1.65;
   state.weapon.plasmaBurnDuration = 5;
 
   state.shield.unlocked = false;
@@ -1220,6 +1289,7 @@ function resetGame() {
   state.shield.thorns = false;
   state.shield.nova = false;
   state.shield.nextNova = 30;
+  state.shield.lastThornPulseAt = -999;
 
   state.upgradesTaken = {};
   state.showShipInfo = false;
@@ -1271,6 +1341,8 @@ function resetGame() {
     state.shield.integrity = state.shield.charges;
     state.shield.cooldownUntil = state.time;
   }
+
+  initializeWeaponLevelsFromLoadout();
 
   overlay.classList.add("hidden");
   setPauseIndicatorVisible(false);
@@ -1482,6 +1554,138 @@ function finishLevelUp() {
   refreshHud();
 }
 
+function applyWeaponMilestone(track, milestone) {
+  if (track === "plasma") {
+    if (milestone === 5) {
+      state.weaponSpecials.plasmaBack = true;
+    } else if (milestone === 10) {
+      state.weaponSpecials.plasmaTriad = true;
+      state.weaponSpecials.plasmaBack = false;
+    } else if (milestone === 15) {
+      state.weaponSpecials.plasmaCross = true;
+      state.weaponSpecials.plasmaTriad = false;
+      state.weaponSpecials.plasmaBack = false;
+    } else if (milestone === 20) {
+      state.weaponSpecials.plasmaNova = true;
+      state.weapon.plasmaBurnDps += 0.8;
+      state.weapon.plasmaRange = Math.min(900, state.weapon.plasmaRange + 120);
+    }
+    return;
+  }
+
+  if (track === "cannon") {
+    if (milestone === 5) {
+      state.shotCooldown = Math.max(0.045, state.shotCooldown * 0.93);
+    } else if (milestone === 10) {
+      state.weaponSpecials.cannonExtraChannel = 1;
+    } else if (milestone === 15) {
+      state.weaponSpecials.cannonDoubleTap = true;
+    } else if (milestone === 20) {
+      state.weaponSpecials.cannonStorm = true;
+    }
+    return;
+  }
+
+  if (track === "laser") {
+    if (milestone === 5) {
+      state.weapon.laserRange += 40;
+    } else if (milestone === 10) {
+      state.weaponSpecials.laserRear = true;
+    } else if (milestone === 15) {
+      state.weapon.laserPierce += 1;
+    } else if (milestone === 20) {
+      state.weaponSpecials.laserTri = true;
+    }
+    return;
+  }
+
+  if (track === "rocket") {
+    if (milestone === 5) {
+      state.weapon.rocketCooldown = Math.max(2.8, state.weapon.rocketCooldown * 0.9);
+    } else if (milestone === 10) {
+      state.weapon.rocketSplit = true;
+    } else if (milestone === 15) {
+      state.weapon.rocketBlastRadius += 25;
+    } else if (milestone === 20) {
+      state.weaponSpecials.rocketOmega = true;
+    }
+    return;
+  }
+
+  if (track === "drill") {
+    if (milestone === 5) {
+      state.weapon.drillReach = Math.min(42, state.weapon.drillReach + 4);
+      state.weapon.drillRadius = Math.min(20, state.weapon.drillRadius + 2);
+    } else if (milestone === 10) {
+      state.weapon.drillRechargeDelay = Math.max(1.6, state.weapon.drillRechargeDelay * 0.85);
+    } else if (milestone === 15) {
+      state.weaponSpecials.drillPulse = true;
+    } else if (milestone === 20) {
+      state.weapon.drillMaxCharges = 2;
+      state.weapon.drillCharges = Math.max(state.weapon.drillCharges, 1);
+    }
+    return;
+  }
+
+  if (track === "shield") {
+    if (milestone === 5) {
+      state.shield.maxCharges = Math.min(3, state.shield.maxCharges + 1);
+      state.shield.charges = state.shield.maxCharges;
+      state.shield.integrity = state.shield.charges;
+    } else if (milestone === 10) {
+      state.shield.thorns = true;
+    } else if (milestone === 15) {
+      state.weaponSpecials.shieldThornPulse = true;
+    } else if (milestone === 20) {
+      state.shield.rechargeDelay = Math.max(3.2, state.shield.rechargeDelay * 0.8);
+      state.shield.nova = true;
+      state.shield.nextNova = Math.min(state.shield.nextNova, state.time + 18);
+    }
+  }
+}
+
+function gainWeaponLevel(track, amount = 1) {
+  if (!track) return;
+  const current = state.weaponLevels[track] || 0;
+  const next = Math.min(20, current + amount);
+  state.weaponLevels[track] = next;
+
+  for (const milestone of WEAPON_LEVEL_MILESTONES) {
+    if (current < milestone && next >= milestone && (state.weaponMilestones[track] || 0) < milestone) {
+      state.weaponMilestones[track] = milestone;
+      applyWeaponMilestone(track, milestone);
+      playSfx("upgrade");
+    }
+  }
+}
+
+function initializeWeaponLevelsFromLoadout() {
+  state.weaponLevels = { cannon: 0, laser: 0, rocket: 0, drill: 0, plasma: 0, shield: 0 };
+  state.weaponMilestones = { cannon: 0, laser: 0, rocket: 0, drill: 0, plasma: 0, shield: 0 };
+  state.weaponCounters = { cannonShots: 0, rocketShots: 0, plasmaShots: 0 };
+  state.weaponSpecials = {
+    cannonExtraChannel: 0,
+    cannonDoubleTap: false,
+    cannonStorm: false,
+    laserRear: false,
+    laserTri: false,
+    rocketOmega: false,
+    drillPulse: false,
+    plasmaBack: false,
+    plasmaTriad: false,
+    plasmaCross: false,
+    plasmaNova: false,
+    shieldThornPulse: false,
+  };
+
+  if (state.weapon.cannonUnlocked) state.weaponLevels.cannon = 1;
+  if (state.weapon.laserUnlocked) state.weaponLevels.laser = 1;
+  if (state.weapon.rocketUnlocked) state.weaponLevels.rocket = 1;
+  if (state.weapon.drillUnlocked) state.weaponLevels.drill = 1;
+  if (state.weapon.plasmaUnlocked) state.weaponLevels.plasma = 1;
+  if (state.shield.unlocked) state.weaponLevels.shield = 1;
+}
+
 function applyUpgrade(id) {
   const upgrade = UPGRADE_DEFS.find((u) => u.id === id);
   if (!upgrade) return;
@@ -1489,6 +1693,7 @@ function applyUpgrade(id) {
 
   state.upgradesTaken[id] = (state.upgradesTaken[id] || 0) + 1;
   upgrade.apply();
+  gainWeaponLevel(WEAPON_UPGRADE_TRACK[id], 1);
   finishLevelUp();
 }
 
@@ -1762,6 +1967,10 @@ function consumeShield(damageType = "physical", amount = 1) {
   state.shield.integrity -= shieldCost;
 
   if (state.shield.integrity > 0) {
+    if (state.weaponSpecials.shieldThornPulse && state.time - (state.shield.lastThornPulseAt || -999) >= 1.6) {
+      state.shield.lastThornPulseAt = state.time;
+      damageNearbyFromShieldPulse(78, false);
+    }
     playSfx("shieldHit");
     createExplosion(state.ship.x, state.ship.y, "#71f4ff", 18);
     return true;
@@ -1807,6 +2016,20 @@ function tryUseDrillOnObject(obj) {
   state.weapon.drillCharges = 0;
   state.weapon.drillCooldownUntil = state.time + state.weapon.drillRechargeDelay / reloadRate();
   destroyObject(obj, "rocket");
+
+  if (state.weaponSpecials.drillPulse) {
+    let cleared = 0;
+    for (const other of state.objects) {
+      if (other === obj || other.hp <= 0 || !other.destructible) continue;
+      const d2 = Math.hypot(other.x - obj.x, other.y - obj.y);
+      if (d2 <= 86 + other.collisionRadius) {
+        destroyObject(other, "shot");
+        cleared += 1;
+        if (cleared >= 4) break;
+      }
+    }
+  }
+
   createExplosion(tipX, tipY, "#8ef7ff", 16);
   playSfx("shieldHit");
   return true;
@@ -1833,21 +2056,7 @@ function rayCircleHitDistance(ox, oy, dx, dy, cx, cy, r, maxRange) {
   return null;
 }
 
-function fireLaserPulse(now) {
-  if (!state.weapon.laserUnlocked) return;
-  if (now - state.weapon.lastLaserShot < effectiveLaserCooldown()) return;
-
-  state.weapon.lastLaserShot = now;
-
-  const ox = state.ship.x;
-  const oy = state.ship.y;
-  const dxRaw = input.mouseX - ox;
-  const dyRaw = input.mouseY - oy;
-  const len = Math.hypot(dxRaw, dyRaw) || 1;
-  const dx = dxRaw / len;
-  const dy = dyRaw / len;
-  const maxRange = state.weapon.laserRange;
-
+function fireSingleLaserRay(ox, oy, dx, dy, maxRange) {
   const candidates = [];
 
   for (const obj of state.objects) {
@@ -1906,7 +2115,6 @@ function fireLaserPulse(now) {
       continue;
     }
 
-    // Hazards absorb the beam and stop it.
     beamEnd = hit.t;
     remainingPierce = 0;
   }
@@ -1919,8 +2127,34 @@ function fireLaserPulse(now) {
     life: 0.09,
     width: 2.3 + state.weapon.laserDamage * 0.35,
   });
+}
 
-  playSfx("plasma");
+function fireLaserPulse(now) {
+  if (!state.weapon.laserUnlocked) return;
+  if (now - state.weapon.lastLaserShot < effectiveLaserCooldown()) return;
+
+  state.weapon.lastLaserShot = now;
+
+  const ox = state.ship.x;
+  const oy = state.ship.y;
+  const dxRaw = input.mouseX - ox;
+  const dyRaw = input.mouseY - oy;
+  const len = Math.hypot(dxRaw, dyRaw) || 1;
+  const dx = dxRaw / len;
+  const dy = dyRaw / len;
+  const maxRange = state.weapon.laserRange;
+
+  const offsets = state.weaponSpecials.laserTri ? [-0.18, 0, 0.18] : [0];
+  for (const off of offsets) {
+    const a = Math.atan2(dy, dx) + off;
+    fireSingleLaserRay(ox, oy, Math.cos(a), Math.sin(a), maxRange);
+  }
+
+  if (state.weaponSpecials.laserRear) {
+    fireSingleLaserRay(ox, oy, -dx, -dy, maxRange * 0.9);
+  }
+
+  playSfx("laser");
 }
 
 function firePlasmaPulse(now) {
@@ -1934,26 +2168,52 @@ function firePlasmaPulse(now) {
   const dxRaw = input.mouseX - ox;
   const dyRaw = input.mouseY - oy;
   const aim = Math.atan2(dyRaw, dxRaw);
-  const pellets = 6;
-  for (let i = 0; i < pellets; i += 1) {
-    const t = pellets <= 1 ? 0 : i / (pellets - 1);
-    const spread = (t - 0.5) * state.weapon.plasmaArc * 2;
-    const a = aim + spread + (Math.random() - 0.5) * 0.02;
-    const speed = 380 + Math.random() * 170;
-    const life = 0.72 + Math.random() * 0.3;
-    state.plasmaBursts.push({
-      x: ox,
-      y: oy,
-      vx: Math.cos(a) * speed,
-      vy: Math.sin(a) * speed,
-      life,
-      maxLife: life,
-      radius: 2.8 + Math.random() * 0.9,
-      growth: 22 + Math.random() * 14,
-      damage: state.weapon.plasmaDamage,
-      rangeLeft: state.weapon.plasmaRange,
-      hitDone: false,
-    });
+  const beamOffsets = state.weaponSpecials.plasmaCross
+    ? [0, Math.PI * 0.5, Math.PI, -Math.PI * 0.5]
+    : state.weaponSpecials.plasmaTriad
+      ? [0, (Math.PI * 2) / 3, -(Math.PI * 2) / 3]
+      : state.weaponSpecials.plasmaBack
+        ? [0, Math.PI]
+        : [0];
+
+  const pellets = beamOffsets.length >= 4 ? 4 : 6;
+  for (const beamOff of beamOffsets) {
+    const beamAim = aim + beamOff;
+    for (let i = 0; i < pellets; i += 1) {
+      const t = pellets <= 1 ? 0 : i / (pellets - 1);
+      const spread = (t - 0.5) * state.weapon.plasmaArc * 2;
+      const a = beamAim + spread + (Math.random() - 0.5) * 0.02;
+      const speed = 380 + Math.random() * 170;
+      const life = 0.72 + Math.random() * 0.3;
+      state.plasmaBursts.push({
+        x: ox,
+        y: oy,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed,
+        life,
+        maxLife: life,
+        radius: 2.8 + Math.random() * 0.9,
+        growth: 22 + Math.random() * 14,
+        damage: state.weapon.plasmaDamage,
+        rangeLeft: state.weapon.plasmaRange,
+        hitDone: false,
+      });
+    }
+  }
+
+  state.weaponCounters.plasmaShots += 1;
+  if (state.weaponSpecials.plasmaNova && state.weaponCounters.plasmaShots % 3 === 0) {
+    const novaR = 126;
+    for (const obj of state.objects) {
+      if (obj.hp <= 0 || !obj.destructible) continue;
+      if (Math.hypot(obj.x - ox, obj.y - oy) <= novaR + obj.collisionRadius) {
+        applyHeatHit(obj, 0, obj.x, obj.y);
+      }
+    }
+    if (state.bossActive && state.boss && Math.hypot(state.boss.x - ox, state.boss.y - oy) <= novaR + state.boss.collisionRadius) {
+      applyHeatHit(state.boss, 0, state.boss.x, state.boss.y);
+    }
+    createExplosion(ox, oy, "#ff944d", 30);
   }
 
   playSfx("plasma");
@@ -1995,30 +2255,51 @@ function shootAtCursor(now) {
   if (state.weapon.cannonUnlocked && now - state.lastShot >= effectiveCannonCooldown()) {
     state.lastShot = now;
 
-    const channels = 1 + state.weapon.extraLasers;
     const baseDx = input.mouseX - state.ship.x;
     const baseDy = input.mouseY - state.ship.y;
     const baseLen = Math.hypot(baseDx, baseDy) || 1;
-    const ux = baseDx / baseLen;
-    const uy = baseDy / baseLen;
+    const spawnCannonWave = (speedMult = 1, spreadMult = 1) => {
+      const channels = 1 + state.weapon.extraLasers + state.weaponSpecials.cannonExtraChannel;
+      const ux = baseDx / baseLen;
+      const uy = baseDy / baseLen;
+      const perpX = -uy;
+      const perpY = ux;
 
-    const perpX = -uy;
-    const perpY = ux;
+      for (let i = 0; i < channels; i += 1) {
+        const indexOffset = i - (channels - 1) / 2;
+        const offset = indexOffset * state.weapon.laserSpread * spreadMult;
+        const sx = state.ship.x + perpX * offset;
+        const sy = state.ship.y + perpY * offset;
 
-    for (let i = 0; i < channels; i += 1) {
-      const indexOffset = i - (channels - 1) / 2;
-      const offset = indexOffset * state.weapon.laserSpread;
-      const sx = state.ship.x + perpX * offset;
-      const sy = state.ship.y + perpY * offset;
+        state.bullets.push({
+          x: sx,
+          y: sy,
+          vx: ux * 820 * speedMult,
+          vy: uy * 820 * speedMult,
+          life: 1.25,
+          radius: 3.5,
+        });
+      }
+    };
 
-      state.bullets.push({
-        x: sx,
-        y: sy,
-        vx: ux * 820,
-        vy: uy * 820,
-        life: 1.25,
-        radius: 3.5,
-      });
+    spawnCannonWave(1, 1);
+    if (state.weaponSpecials.cannonDoubleTap && Math.random() < 0.33) {
+      spawnCannonWave(0.92, 0.94);
+    }
+
+    state.weaponCounters.cannonShots += 1;
+    if (state.weaponSpecials.cannonStorm && state.weaponCounters.cannonShots % 6 === 0) {
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * Math.PI * 2;
+        state.bullets.push({
+          x: state.ship.x,
+          y: state.ship.y,
+          vx: Math.cos(a) * 680,
+          vy: Math.sin(a) * 680,
+          life: 0.85,
+          radius: 3.1,
+        });
+      }
     }
 
     playSfx("cannon");
@@ -2040,6 +2321,8 @@ function fireRocket(now) {
   const dy = input.mouseY - state.ship.y;
   const baseAngle = Math.atan2(dy, dx);
   const offsets = state.weapon.rocketSplit ? [-0.18, 0, 0.18] : [0];
+  state.weaponCounters.rocketShots += 1;
+  const omega = state.weaponSpecials.rocketOmega && state.weaponCounters.rocketShots % 3 === 0;
 
   for (const off of offsets) {
     const a = baseAngle + off;
@@ -2052,6 +2335,8 @@ function fireRocket(now) {
       life: 4,
       radius: 6,
       turnRate: 2.6,
+      damageBase: omega ? 28 : 18,
+      blastScale: omega ? 1.35 : 1,
       targetRef: null,
       acquireIn: 0,
     });
@@ -2076,8 +2361,8 @@ function findNearestObject(x, y) {
   return best;
 }
 
-function explodeRocketAt(x, y) {
-  const radius = state.weapon.rocketBlastRadius;
+function explodeRocketAt(x, y, radiusScale = 1) {
+  const radius = state.weapon.rocketBlastRadius * radiusScale;
 
   for (const obj of state.objects) {
     if (obj.hp <= 0) continue;
@@ -2572,8 +2857,9 @@ function update(dt, now) {
 
     if (state.bossActive && state.boss) {
       if (circlesOverlap(state.boss.x, state.boss.y, state.boss.collisionRadius, missile.x, missile.y, missile.radius)) {
-        explodeRocketAt(missile.x, missile.y);
-        const dmg = computeDamage(18, "explosive");
+        const blastScale = missile.blastScale || 1;
+        explodeRocketAt(missile.x, missile.y, blastScale);
+        const dmg = computeDamage(missile.damageBase || 18, "explosive");
         state.boss.hp -= dmg.damage;
         addDamageText(missile.x, missile.y - 8, dmg.damage, dmg.crit);
         missile.life = 0;
@@ -2588,7 +2874,7 @@ function update(dt, now) {
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
       if (circlesOverlap(obj.x, obj.y, obj.collisionRadius, missile.x, missile.y, missile.radius)) {
-        explodeRocketAt(missile.x, missile.y);
+        explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
         missile.life = 0;
         exploded = true;
         break;
@@ -2599,7 +2885,7 @@ function update(dt, now) {
 
     for (const hazard of state.edgeHazards) {
       if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius, missile.x, missile.y, missile.radius)) {
-        explodeRocketAt(missile.x, missile.y);
+        explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
         missile.life = 0;
         break;
       }
