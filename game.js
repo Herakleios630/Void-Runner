@@ -16,6 +16,7 @@ const critStatusEl = document.getElementById("critStatus");
 const physicalStatusEl = document.getElementById("physicalStatus");
 const energyStatusEl = document.getElementById("energyStatus");
 const explosiveStatusEl = document.getElementById("explosiveStatus");
+const heatStatusEl = document.getElementById("heatStatus");
 const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
 const armorStatusEl = document.getElementById("armorStatus");
@@ -71,6 +72,7 @@ const SHIP_MODELS = {
     physicalDamage: 1,
     energyDamage: 1,
     explosiveDamage: 1,
+    heatDamage: 1,
     xpBonus: 1,
     shieldRechargeMult: 1,
     drillRechargeMult: 1,
@@ -79,6 +81,7 @@ const SHIP_MODELS = {
     startLaser: false,
     startRocket: false,
     startDrill: false,
+    startPlasma: false,
     colorA: "#71f4ff",
     colorB: "#ff995a",
   },
@@ -95,6 +98,7 @@ const SHIP_MODELS = {
     physicalDamage: 1.08,
     energyDamage: 0.9,
     explosiveDamage: 1,
+    heatDamage: 0.9,
     xpBonus: 0.95,
     shieldRechargeMult: 1,
     drillRechargeMult: 0.86,
@@ -103,6 +107,7 @@ const SHIP_MODELS = {
     startLaser: false,
     startRocket: false,
     startDrill: true,
+    startPlasma: false,
     colorA: "#6db5ff",
     colorB: "#8bd2ff",
   },
@@ -119,6 +124,7 @@ const SHIP_MODELS = {
     physicalDamage: 0.95,
     energyDamage: 1.22,
     explosiveDamage: 1,
+    heatDamage: 1.05,
     xpBonus: 1.1,
     shieldRechargeMult: 1,
     drillRechargeMult: 1,
@@ -127,6 +133,7 @@ const SHIP_MODELS = {
     startLaser: true,
     startRocket: false,
     startDrill: false,
+    startPlasma: false,
     colorA: "#ff8f8f",
     colorB: "#ffc06f",
   },
@@ -143,6 +150,7 @@ const SHIP_MODELS = {
     physicalDamage: 1,
     energyDamage: 1.06,
     explosiveDamage: 0.95,
+    heatDamage: 1,
     xpBonus: 1,
     shieldRechargeMult: 0.72,
     drillRechargeMult: 1,
@@ -151,6 +159,7 @@ const SHIP_MODELS = {
     startLaser: false,
     startRocket: false,
     startDrill: false,
+    startPlasma: false,
     colorA: "#7ee6d0",
     colorB: "#b7fff0",
   },
@@ -167,6 +176,7 @@ const SHIP_MODELS = {
     physicalDamage: 0.95,
     energyDamage: 0.9,
     explosiveDamage: 1.22,
+    heatDamage: 0.95,
     xpBonus: 1,
     shieldRechargeMult: 1,
     drillRechargeMult: 1,
@@ -175,6 +185,7 @@ const SHIP_MODELS = {
     startLaser: false,
     startRocket: true,
     startDrill: false,
+    startPlasma: false,
     colorA: "#ffad66",
     colorB: "#ffd7a7",
   },
@@ -191,6 +202,7 @@ const SHIP_MODELS = {
     physicalDamage: 1.06,
     energyDamage: 1,
     explosiveDamage: 0.95,
+    heatDamage: 1.05,
     xpBonus: 1,
     shieldRechargeMult: 1,
     drillRechargeMult: 0.78,
@@ -199,8 +211,35 @@ const SHIP_MODELS = {
     startLaser: false,
     startRocket: false,
     startDrill: true,
+    startPlasma: false,
     colorA: "#9cc2ff",
     colorB: "#e7f0ff",
+  },
+  pyre: {
+    id: "pyre",
+    name: "Pyre",
+    role: "Plasmawerfer",
+    maxHp: 3,
+    maxArmor: 2,
+    speed: 1.04,
+    critChance: 0.1,
+    critDamage: 1.45,
+    reloadRate: 1,
+    physicalDamage: 0.9,
+    energyDamage: 0.95,
+    explosiveDamage: 0.95,
+    heatDamage: 1.26,
+    xpBonus: 1,
+    shieldRechargeMult: 1,
+    drillRechargeMult: 1,
+    rocketCooldownMult: 1,
+    startShield: false,
+    startLaser: false,
+    startRocket: false,
+    startDrill: false,
+    startPlasma: true,
+    colorA: "#ff8c6a",
+    colorB: "#ffd2a6",
   },
 };
 
@@ -272,6 +311,7 @@ const state = {
   edgeHazards: [],
   bullets: [],
   laserBeams: [],
+  plasmaBursts: [],
   missiles: [],
   pickups: [],
   bossProjectiles: [],
@@ -293,6 +333,7 @@ const state = {
   pendingBossRewards: [],
   bossLootTaken: {},
   weapon: {
+    cannonUnlocked: true,
     extraLasers: 0,
     laserSpread: 11,
     laserUnlocked: false,
@@ -315,6 +356,14 @@ const state = {
     drillCooldownUntil: 0,
     drillRadius: 13,
     drillReach: 18,
+    plasmaUnlocked: false,
+    plasmaCooldown: 0.12,
+    lastPlasmaShot: -999,
+    plasmaRange: 190,
+    plasmaArc: 0.48,
+    plasmaDamage: 1,
+    plasmaBurnDps: 1.1,
+    plasmaBurnDuration: 2.4,
   },
   shield: {
     unlocked: false,
@@ -333,6 +382,7 @@ const state = {
 
 const UPGRADE_WEIGHTS = {
   shield_core: 7,
+  cannon_mount: 5,
   shield_recharge: 5,
   shield_thorns: 3,
   shield_nova: 2,
@@ -348,6 +398,9 @@ const UPGRADE_WEIGHTS = {
   laser_charge: 3,
   laser_range: 3,
   laser_pierce: 2,
+  plasma_emitter: 5,
+  plasma_focus: 4,
+  plasma_fuel: 4,
   drill_module: 4,
   drill_recharge: 3,
   stat_hull: 7,
@@ -358,10 +411,27 @@ const UPGRADE_WEIGHTS = {
   stat_physical_damage: 6,
   stat_energy_damage: 6,
   stat_explosive_damage: 5,
+  stat_heat_damage: 5,
   stat_armor_core: 6,
 };
 
 const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
+
+const MAX_WEAPON_SLOTS = 3;
+const WEAPON_UNLOCK_IDS = new Set(["cannon_mount", "shield_core", "laser_emitter", "rocket_launcher", "drill_module", "plasma_emitter"]);
+
+function activeWeaponSlotsCount() {
+  return Number(state.weapon.cannonUnlocked)
+    + Number(state.shield.unlocked)
+    + Number(state.weapon.laserUnlocked)
+    + Number(state.weapon.rocketUnlocked)
+    + Number(state.weapon.drillUnlocked)
+    + Number(state.weapon.plasmaUnlocked);
+}
+
+function canUnlockNewWeapon() {
+  return activeWeaponSlotsCount() < MAX_WEAPON_SLOTS;
+}
 
 const BOSS_LOOT_DEFS = [
   {
@@ -425,10 +495,21 @@ const BOSS_LOOT_DEFS = [
 
 const UPGRADE_DEFS = [
   {
+    id: "cannon_mount",
+    title: "Geschuetz-Montage",
+    description: "Aktiviert das Basis-Geschuetz.",
+    maxStacks: 1,
+    canOffer: () => !state.weapon.cannonUnlocked && canUnlockNewWeapon(),
+    apply: () => {
+      state.weapon.cannonUnlocked = true;
+      playSfx("upgrade");
+    },
+  },
+  {
     id: "shield_core",
     title: "Schild",
     description: "Absorbiert 1 Treffer und laedt sich nach 10s wieder auf.",
-    canOffer: () => !state.shield.unlocked,
+    canOffer: () => !state.shield.unlocked && canUnlockNewWeapon(),
     apply: () => {
       state.shield.unlocked = true;
       state.shield.charges = state.shield.maxCharges;
@@ -476,7 +557,7 @@ const UPGRADE_DEFS = [
     title: "Zusaetzliches Geschuetz",
     description: "+1 Kugelkanal (maximal 3 insgesamt).",
     maxStacks: 2,
-    canOffer: () => state.weapon.extraLasers < 2,
+    canOffer: () => state.weapon.cannonUnlocked && state.weapon.extraLasers < 2,
     apply: () => {
       state.weapon.extraLasers += 1;
       playSfx("upgrade");
@@ -487,7 +568,7 @@ const UPGRADE_DEFS = [
     title: "Geschuetz Overclock",
     description: "Hohe Feuerrate fuer Kugelgeschuetz (mehrfach stapelbar).",
     maxStacks: 5,
-    canOffer: () => true,
+    canOffer: () => state.weapon.cannonUnlocked,
     apply: () => {
       state.shotCooldown = Math.max(0.05, state.shotCooldown * 0.88);
       playSfx("upgrade");
@@ -498,7 +579,7 @@ const UPGRADE_DEFS = [
     title: "Geschuetz-Fokus",
     description: "Seitliche Kugelkanonen werden praeziser.",
     maxStacks: 3,
-    canOffer: () => state.weapon.extraLasers > 0,
+    canOffer: () => state.weapon.cannonUnlocked && state.weapon.extraLasers > 0,
     apply: () => {
       state.weapon.laserSpread = Math.max(6, state.weapon.laserSpread - 2);
       playSfx("upgrade");
@@ -509,7 +590,7 @@ const UPGRADE_DEFS = [
     title: "Raketenwerfer",
     description: "Rechte Maustaste feuert Raketen (10s Cooldown).",
     maxStacks: 1,
-    canOffer: () => !state.weapon.rocketUnlocked,
+    canOffer: () => !state.weapon.rocketUnlocked && canUnlockNewWeapon(),
     apply: () => {
       state.weapon.rocketUnlocked = true;
       state.weapon.lastRocketShot = -999;
@@ -565,7 +646,7 @@ const UPGRADE_DEFS = [
     title: "Bohrer-Modul",
     description: "Front-Bohrer zerstoert 1 Objekt, dann 5s Aufladung.",
     maxStacks: 1,
-    canOffer: () => !state.weapon.drillUnlocked,
+    canOffer: () => !state.weapon.drillUnlocked && canUnlockNewWeapon(),
     apply: () => {
       state.weapon.drillUnlocked = true;
       state.weapon.drillCharges = state.weapon.drillMaxCharges;
@@ -590,10 +671,47 @@ const UPGRADE_DEFS = [
     title: "Laser-Emitter",
     description: "Kurzer Lichtstrahl zusaetzlich zum Geschuetz.",
     maxStacks: 1,
-    canOffer: () => !state.weapon.laserUnlocked,
+    canOffer: () => !state.weapon.laserUnlocked && canUnlockNewWeapon(),
     apply: () => {
       state.weapon.laserUnlocked = true;
       state.weapon.lastLaserShot = -999;
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "plasma_emitter",
+    title: "Plasmawerfer",
+    description: "Kurze kegelfoermige Hitze-Waffe mit Brand-DoT.",
+    maxStacks: 1,
+    canOffer: () => !state.weapon.plasmaUnlocked && canUnlockNewWeapon(),
+    apply: () => {
+      state.weapon.plasmaUnlocked = true;
+      state.weapon.lastPlasmaShot = -999;
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "plasma_focus",
+    title: "Plasma-Fokus",
+    description: "Mehr Hitzeschaden und engerer Kegel.",
+    maxStacks: 4,
+    canOffer: () => state.weapon.plasmaUnlocked,
+    apply: () => {
+      state.weapon.plasmaDamage += 0.5;
+      state.weapon.plasmaArc = Math.max(0.26, state.weapon.plasmaArc - 0.04);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "plasma_fuel",
+    title: "Plasma-Tank",
+    description: "Mehr Reichweite, laengere Branddauer, schnelleres Feuern.",
+    maxStacks: 4,
+    canOffer: () => state.weapon.plasmaUnlocked,
+    apply: () => {
+      state.weapon.plasmaRange = Math.min(255, state.weapon.plasmaRange + 12);
+      state.weapon.plasmaBurnDuration = Math.min(5.2, state.weapon.plasmaBurnDuration + 0.45);
+      state.weapon.plasmaCooldown = Math.max(0.07, state.weapon.plasmaCooldown * 0.92);
       playSfx("upgrade");
     },
   },
@@ -959,8 +1077,12 @@ function selectedShipModel() {
 
 function shipStartKitText(model) {
   const kit = [];
+  if (!(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma)) {
+    kit.push("Geschuetz");
+  }
   if (model.startDrill) kit.push("Bohrer");
   if (model.startLaser) kit.push("Laser");
+  if (model.startPlasma) kit.push("Plasmawerfer");
   if (model.startShield) kit.push("Schild");
   if (model.startRocket) kit.push("Raketenwerfer");
   return kit.length > 0 ? kit.join(", ") : "Kein Startmodul";
@@ -1048,6 +1170,10 @@ function effectiveLaserCooldown() {
   return state.weapon.laserCooldown / reloadRate();
 }
 
+function effectivePlasmaCooldown() {
+  return state.weapon.plasmaCooldown / reloadRate();
+}
+
 function rollCrit() {
   const chance = state.shipStats ? state.shipStats.critChance : 0.1;
   return Math.random() < chance;
@@ -1061,6 +1187,8 @@ function computeDamage(baseDamage, damageType = "physical") {
       ? state.shipStats.energyDamage
       : damageType === "explosive"
         ? state.shipStats.explosiveDamage
+        : damageType === "heat"
+          ? state.shipStats.heatDamage
         : state.shipStats.physicalDamage
     : 1;
   const scaled = baseDamage * typeMult;
@@ -1303,6 +1431,7 @@ function resetGame() {
     physicalDamage: model.physicalDamage,
     energyDamage: model.energyDamage,
     explosiveDamage: model.explosiveDamage,
+    heatDamage: model.heatDamage,
     reloadRate: model.reloadRate,
     xpBonus: model.xpBonus,
     colorA: model.colorA,
@@ -1328,6 +1457,7 @@ function resetGame() {
   state.edgeHazards = [];
   state.bullets = [];
   state.laserBeams = [];
+  state.plasmaBursts = [];
   state.missiles = [];
   state.pickups = [];
   state.bossProjectiles = [];
@@ -1346,6 +1476,7 @@ function resetGame() {
   state.bossLootTaken = {};
 
   state.weapon.extraLasers = 0;
+  state.weapon.cannonUnlocked = !(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma);
   state.weapon.laserSpread = 11;
   state.weapon.laserUnlocked = false;
   state.weapon.laserCooldown = 0.22;
@@ -1367,6 +1498,14 @@ function resetGame() {
   state.weapon.drillCooldownUntil = 0;
   state.weapon.drillRadius = 13;
   state.weapon.drillReach = 18;
+  state.weapon.plasmaUnlocked = false;
+  state.weapon.plasmaCooldown = 0.12;
+  state.weapon.lastPlasmaShot = -999;
+  state.weapon.plasmaRange = 190;
+  state.weapon.plasmaArc = 0.48;
+  state.weapon.plasmaDamage = 1;
+  state.weapon.plasmaBurnDps = 1.1;
+  state.weapon.plasmaBurnDuration = 2.4;
 
   state.shield.unlocked = false;
   state.shield.charges = 0;
@@ -1416,6 +1555,7 @@ function resetGame() {
   state.weapon.laserUnlocked = model.startLaser;
   state.weapon.rocketUnlocked = model.startRocket;
   state.weapon.drillUnlocked = model.startDrill;
+  state.weapon.plasmaUnlocked = model.startPlasma;
   if (state.weapon.drillUnlocked) {
     state.weapon.drillCharges = state.weapon.drillMaxCharges;
     state.weapon.drillCooldownUntil = state.time;
@@ -1453,6 +1593,9 @@ function refreshHud() {
   }
   if (explosiveStatusEl) {
     explosiveStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.explosiveDamage : 1) * 100)}%`;
+  }
+  if (heatStatusEl) {
+    heatStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.heatDamage : 1) * 100)}%`;
   }
   reloadStatusEl.textContent = `${Math.round(reloadRate() * 100)}%`;
   xpStatusEl.textContent = `${Math.round(((state.shipStats ? state.shipStats.xpBonus : 1) - 1) * 100)}%`;
@@ -1535,14 +1678,33 @@ function isStatUpgrade(def) {
   return def.id.startsWith("stat_");
 }
 
+function isWeaponUpgrade(def) {
+  return !isStatUpgrade(def);
+}
+
+function isWeaponUnlockUpgrade(def) {
+  return WEAPON_UNLOCK_IDS.has(def.id);
+}
+
 function chooseUpgradeOptions() {
   const pool = UPGRADE_DEFS.filter(canOfferUpgrade);
   const picked = [];
   const statPool = pool.filter((u) => isStatUpgrade(u));
-  const weaponPool = pool.filter((u) => !isStatUpgrade(u));
+  const weaponPool = pool.filter((u) => isWeaponUpgrade(u));
 
-  if (weaponPool.length > 0) {
-    const weaponChoice = weightedPick(weaponPool);
+  // One weapon card: either a new weapon unlock or an upgrade for already owned weapon systems.
+  const preferredWeaponPool = weaponPool.filter((u) => {
+    if (isWeaponUnlockUpgrade(u)) return true;
+    if (u.id.startsWith("laser_") || u.id === "cannon_mount") return state.weapon.cannonUnlocked;
+    if (u.id.startsWith("rocket_")) return state.weapon.rocketUnlocked;
+    if (u.id.startsWith("drill_")) return state.weapon.drillUnlocked;
+    if (u.id.startsWith("plasma_")) return state.weapon.plasmaUnlocked;
+    if (u.id.startsWith("shield_")) return state.shield.unlocked;
+    return true;
+  });
+
+  if (preferredWeaponPool.length > 0) {
+    const weaponChoice = weightedPick(preferredWeaponPool);
     if (weaponChoice) {
       picked.push(weaponChoice);
       const wIdx = weaponPool.findIndex((u) => u.id === weaponChoice.id);
@@ -1550,7 +1712,7 @@ function chooseUpgradeOptions() {
     }
   }
 
-  while (statPool.length > 0 && picked.length < 3) {
+  while (statPool.length > 0 && picked.filter((u) => isStatUpgrade(u)).length < 2 && picked.length < 3) {
     const statChoice = weightedPick(statPool);
     if (!statChoice) break;
     picked.push(statChoice);
