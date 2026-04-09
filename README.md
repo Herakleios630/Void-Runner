@@ -34,6 +34,7 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - [utils.js](utils.js): Mathe-/Hilfsfunktionen fuer Gameplay-Hotpaths
 - [audio.js](audio.js): Sound-Engine und SFX-Presets
 - [render.js](render.js): Rendering-Pipeline (Schiff, Gegner, Boss, VFX, HUD)
+- [progression.js](progression.js): Level-Up, Mastery-Milestones und Boss-Loot-Flow
 - [weapons.js](weapons.js): Waffenlogik, Schussmuster, Cooldowns, Explosionseffekte
 - [assets.js](assets.js): Asset-Manifest + Bild-Preload/Fallback
 - [game.js](game.js): Spielzustand, Game-Loop, Kampf, Input, UI-Flow
@@ -45,6 +46,7 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Leertaste oder linke Maustaste halten: feuern
 - Rechte Maustaste: Rakete (nach Freischaltung)
 - H: Hitbox-Debug ein/aus
+- O: Debug-Boost (+5 Waffenlevel fuer alle aktuell ausgeruesteten Systeme)
 - M: Desktop-Feuermodus umschalten (manuell/automatisch)
 - P oder ESC: Pause/Fortsetzen
 

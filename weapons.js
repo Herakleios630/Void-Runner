@@ -213,6 +213,32 @@
       playSfx("plasma");
     }
 
+    function spawnCannonBullet(params) {
+      const {
+        x,
+        y,
+        vx,
+        vy,
+        life = 1.25,
+        radius = 3.5,
+        damageBase = state.weapon.cannonEffectiveness,
+        ricochetLeft = state.weaponSpecials.cannonRicochetMaxBounces || 0,
+        ricochetCount = 0,
+      } = params;
+
+      state.bullets.push({
+        x,
+        y,
+        vx,
+        vy,
+        life,
+        radius,
+        damageBase,
+        ricochetLeft,
+        ricochetCount,
+      });
+    }
+
     function shootAtCursor(now) {
       if (state.weapon.cannonUnlocked && now - state.lastShot >= effectiveCannonCooldown()) {
         state.lastShot = now;
@@ -233,7 +259,7 @@
             const sx = state.ship.x + perpX * offset;
             const sy = state.ship.y + perpY * offset;
 
-            state.bullets.push({
+            spawnCannonBullet({
               x: sx,
               y: sy,
               vx: ux * 820 * speedMult,
@@ -253,7 +279,7 @@
         if (state.weaponSpecials.cannonStorm && state.weaponCounters.cannonShots % 6 === 0) {
           for (let i = 0; i < 6; i += 1) {
             const a = (i / 6) * Math.PI * 2;
-            state.bullets.push({
+            spawnCannonBullet({
               x: state.ship.x,
               y: state.ship.y,
               vx: Math.cos(a) * 680,
@@ -349,6 +375,7 @@
       fireRocket,
       findNearestObject,
       explodeRocketAt,
+      spawnCannonBullet,
     };
   }
 
