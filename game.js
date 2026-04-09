@@ -59,6 +59,7 @@ const { SHIP_MODELS, DIFFICULTY_MODES } = window.VoidConfig;
 const { randomFrom, clamp, circlesOverlap } = window.VoidUtils;
 const { initAudio, playSfx } = window.VoidAudio;
 const { createRenderer } = window.VoidRender;
+const { createProgressionSystem } = window.VoidProgression;
 const { createWeaponsSystem } = window.VoidWeapons;
 
 const state = {
@@ -180,6 +181,10 @@ const state = {
     cannonExtraChannel: 0,
     cannonDoubleTap: false,
     cannonStorm: false,
+    cannonRicochetMaxBounces: 0,
+    cannonRicochetSplit: false,
+    cannonRicochetRamp: false,
+    cannonRicochetNova: false,
     laserRear: false,
     laserTri: false,
     rocketOmega: false,
@@ -203,6 +208,7 @@ const UPGRADE_WEIGHTS = {
   laser_extra: 6,
   laser_rapid: 8,
   laser_spread: 4,
+  cannon_ricochet: 4,
   rocket_launcher: 5,
   rocket_cooldown: 4,
   rocket_homing: 2,
@@ -232,13 +238,13 @@ const UPGRADE_WEIGHTS = {
 const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
 
 const MAX_WEAPON_SLOTS = 3;
-const WEAPON_UNLOCK_IDS = new Set(["cannon_mount", "shield_core", "laser_emitter", "rocket_launcher", "drill_module", "plasma_emitter"]);
 const WEAPON_LEVEL_MILESTONES = [5, 10, 15, 20];
 const WEAPON_UPGRADE_TRACK = {
   cannon_mount: "cannon",
   laser_extra: "cannon",
   laser_rapid: "cannon",
   laser_spread: "cannon",
+  cannon_ricochet: "cannon",
   laser_emitter: "laser",
   laser_charge: "laser",
   laser_range: "laser",
@@ -422,6 +428,17 @@ const UPGRADE_DEFS = [
     canOffer: () => state.weapon.cannonUnlocked && state.weapon.extraLasers > 0,
     apply: () => {
       state.weapon.laserSpread = Math.max(6, state.weapon.laserSpread - 2);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "cannon_ricochet",
+    title: "Ricochet-Ladung",
+    description: "+1 moeglicher Abpraller fuer Geschuetzkugeln.",
+    maxStacks: 4,
+    canOffer: () => state.weapon.cannonUnlocked && (state.weaponSpecials.cannonRicochetMaxBounces || 0) >= 1 && (state.weaponSpecials.cannonRicochetMaxBounces || 0) < 5,
+    apply: () => {
+      state.weaponSpecials.cannonRicochetMaxBounces = Math.min(5, (state.weaponSpecials.cannonRicochetMaxBounces || 0) + 1);
       playSfx("upgrade");
     },
   },
@@ -1036,91 +1053,6 @@ function computeNextLevelCost() {
   return Math.max(minBound, Math.min(maxBound, blended));
 }
 
-function chooseBossRewards() {
-  const pool = BOSS_LOOT_DEFS.filter((loot) => {
-    const stacks = state.bossLootTaken[loot.id] || 0;
-    return !loot.maxStacks || stacks < loot.maxStacks;
-  });
-
-  for (let i = pool.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
-
-  return pool.slice(0, Math.min(3, pool.length));
-}
-
-function showBossRewardChoice() {
-  state.running = false;
-  state.pauseReason = "bossreward";
-  state.bossRewardPending = true;
-  state.pendingBossRewards = chooseBossRewards();
-  setPauseIndicatorVisible(false);
-
-  if (state.pendingBossRewards.length === 0) {
-    state.bossRewardPending = false;
-    state.pauseReason = "running";
-    state.running = true;
-    overlay.classList.add("hidden");
-    return;
-  }
-
-  const cards = state.pendingBossRewards
-    .map(
-      (u) => `
-        <button data-action="boss-reward" data-reward-id="${u.id}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
-          <strong>${u.title}</strong><br />
-          <span>${u.description}</span>
-        </button>
-      `,
-    )
-    .join("<div style='height:8px'></div>");
-
-  overlay.classList.remove("hidden");
-  overlay.innerHTML = `
-    <h1>Boss-Loot</h1>
-    <p>Waehle 1 Belohnung</p>
-    <div style="width:min(92vw,620px)">${cards}</div>
-  `;
-}
-
-function applyBossReward(id) {
-  const reward = BOSS_LOOT_DEFS.find((r) => r.id === id);
-  if (!reward) return;
-
-  const stacks = state.bossLootTaken[id] || 0;
-  if (reward.maxStacks && stacks >= reward.maxStacks) return;
-
-  state.bossLootTaken[id] = stacks + 1;
-  reward.apply();
-
-  state.bossRewardPending = false;
-  state.pendingBossRewards = [];
-  state.pauseReason = "running";
-  state.running = true;
-  overlay.classList.add("hidden");
-}
-
-function weightedPick(options) {
-  const total = options.reduce((sum, opt) => {
-    const base = UPGRADE_WEIGHTS[opt.id] || 1;
-    const rareBoost = state.level >= 12 ? 1 + Math.min(0.9, (state.level - 11) * 0.06) : 1;
-    return sum + (base < 3 ? base * rareBoost : base);
-  }, 0);
-
-  if (total <= 0) return null;
-
-  let roll = Math.random() * total;
-  for (const opt of options) {
-    const base = UPGRADE_WEIGHTS[opt.id] || 1;
-    const rareBoost = state.level >= 12 ? 1 + Math.min(0.9, (state.level - 11) * 0.06) : 1;
-    const w = base < 3 ? base * rareBoost : base;
-    roll -= w;
-    if (roll <= 0) return opt;
-  }
-  return options[options.length - 1] || null;
-}
-
 function spawnBoss(level) {
   const difficulty = selectedDifficultyMode();
   const variant = randomFrom(BOSS_VARIANTS);
@@ -1167,6 +1099,21 @@ function spawnBoss(level) {
   playSfx("levelup");
 }
 
+const progression = createProgressionSystem({
+  state,
+  overlay,
+  playSfx,
+  refreshHud,
+  spawnBoss,
+  computeNextLevelCost,
+  setPauseIndicatorVisible,
+  upgradeDefs: UPGRADE_DEFS,
+  upgradeWeights: UPGRADE_WEIGHTS,
+  bossLootDefs: BOSS_LOOT_DEFS,
+  weaponUpgradeTrack: WEAPON_UPGRADE_TRACK,
+  weaponLevelMilestones: WEAPON_LEVEL_MILESTONES,
+});
+
 function onBossDefeated() {
   if (!state.bossActive || !state.boss) return;
   const guaranteedLoot = state.boss.hasLoot;
@@ -1180,19 +1127,19 @@ function onBossDefeated() {
   // Boss clear grants mastery progress to currently equipped systems.
   for (const track of ["cannon", "laser", "rocket", "drill", "plasma", "shield"]) {
     if ((state.weaponLevels[track] || 0) > 0) {
-      gainWeaponLevel(track, 1);
+      progression.gainWeaponLevel(track, 1);
     }
   }
 
   playSfx("explosion");
 
   if (guaranteedLoot) {
-    showBossRewardChoice();
+    progression.showBossRewardChoice();
     return;
   }
 
   if (Math.random() < 0.42) {
-    showBossRewardChoice();
+    progression.showBossRewardChoice();
   }
 }
 
@@ -1350,7 +1297,7 @@ function resetGame() {
     state.shield.cooldownUntil = state.time;
   }
 
-  initializeWeaponLevelsFromLoadout();
+  progression.initializeWeaponLevelsFromLoadout();
 
   overlay.classList.add("hidden");
   setPauseIndicatorVisible(false);
@@ -1465,260 +1412,6 @@ function togglePause() {
     setPauseIndicatorVisible(false);
     overlay.classList.add("hidden");
   }
-}
-
-function canOfferUpgrade(def) {
-  if (!def.canOffer()) return false;
-  const stacks = state.upgradesTaken[def.id] || 0;
-  if (def.maxStacks && stacks >= def.maxStacks) return false;
-  return true;
-}
-
-function isStatUpgrade(def) {
-  return def.id.startsWith("stat_");
-}
-
-function isWeaponUpgrade(def) {
-  return !isStatUpgrade(def);
-}
-
-function isWeaponUnlockUpgrade(def) {
-  return WEAPON_UNLOCK_IDS.has(def.id);
-}
-
-function chooseUpgradeOptions() {
-  const pool = UPGRADE_DEFS.filter(canOfferUpgrade);
-  const picked = [];
-  const statPool = pool.filter((u) => isStatUpgrade(u));
-  const weaponPool = pool.filter((u) => isWeaponUpgrade(u));
-
-  // One weapon card: either a new weapon unlock or an upgrade for already owned weapon systems.
-  const preferredWeaponPool = weaponPool;
-
-  if (preferredWeaponPool.length > 0) {
-    const weaponChoice = weightedPick(preferredWeaponPool);
-    if (weaponChoice) {
-      picked.push(weaponChoice);
-      const wIdx = weaponPool.findIndex((u) => u.id === weaponChoice.id);
-      if (wIdx >= 0) weaponPool.splice(wIdx, 1);
-    }
-  }
-
-  while (statPool.length > 0 && picked.filter((u) => isStatUpgrade(u)).length < 2 && picked.length < 3) {
-    const statChoice = weightedPick(statPool);
-    if (!statChoice) break;
-    picked.push(statChoice);
-    const sIdx = statPool.findIndex((u) => u.id === statChoice.id);
-    if (sIdx >= 0) statPool.splice(sIdx, 1);
-  }
-
-  const fallbackPool = pool.filter((u) => !picked.some((p) => p.id === u.id));
-  while (fallbackPool.length > 0 && picked.length < 3) {
-    const choice = weightedPick(fallbackPool);
-    if (!choice) break;
-    picked.push(choice);
-    const idx = fallbackPool.findIndex((u) => u.id === choice.id);
-    if (idx >= 0) fallbackPool.splice(idx, 1);
-  }
-
-  return picked.slice(0, 3);
-}
-
-function showLevelUpChoice() {
-  state.running = false;
-  state.levelUpPending = true;
-  state.pauseReason = "levelup";
-
-  state.pendingUpgradeOptions = chooseUpgradeOptions();
-
-  if (state.pendingUpgradeOptions.length === 0) {
-    // Safety fallback if all upgrades are exhausted.
-    state.shotCooldown = Math.max(0.05, state.shotCooldown * 0.93);
-    finishLevelUp();
-    return;
-  }
-
-  overlay.classList.remove("hidden");
-
-  const cards = state.pendingUpgradeOptions
-    .map(
-      (u) => `
-        <button data-action="upgrade" data-upgrade-id="${u.id}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
-          <strong>[${isStatUpgrade(u) ? "Stat" : "Waffe"}] ${u.title}</strong><br />
-          <span>${u.description}</span>
-        </button>
-      `,
-    )
-    .join("<div style='height:8px'></div>");
-
-  overlay.innerHTML = `
-    <h1>Level ${state.level + 1}</h1>
-    <p>Waehle 1 Upgrade</p>
-    <div style="width:min(92vw,620px)">${cards}</div>
-  `;
-
-  playSfx("levelup");
-}
-
-function finishLevelUp() {
-  state.level += 1;
-  state.levelCost = computeNextLevelCost();
-  state.nextLevelScore += state.levelCost;
-  state.lastLevelScore = state.score;
-  state.lastLevelTime = state.time;
-  state.levelUpPending = false;
-  state.pauseReason = "running";
-  state.running = true;
-  overlay.classList.add("hidden");
-
-  if (state.level % 10 === 0) {
-    spawnBoss(state.level);
-  }
-
-  refreshHud();
-}
-
-function applyWeaponMilestone(track, milestone) {
-  if (track === "plasma") {
-    if (milestone === 5) {
-      state.weaponSpecials.plasmaBack = true;
-    } else if (milestone === 10) {
-      state.weaponSpecials.plasmaTriad = true;
-      state.weaponSpecials.plasmaBack = false;
-    } else if (milestone === 15) {
-      state.weaponSpecials.plasmaCross = true;
-      state.weaponSpecials.plasmaTriad = false;
-      state.weaponSpecials.plasmaBack = false;
-    } else if (milestone === 20) {
-      state.weaponSpecials.plasmaNova = true;
-      state.weapon.plasmaBurnDps += 0.8;
-      state.weapon.plasmaRange = Math.min(900, state.weapon.plasmaRange + 120);
-    }
-    return;
-  }
-
-  if (track === "cannon") {
-    if (milestone === 5) {
-      state.shotCooldown = Math.max(0.045, state.shotCooldown * 0.93);
-    } else if (milestone === 10) {
-      state.weaponSpecials.cannonExtraChannel = 1;
-    } else if (milestone === 15) {
-      state.weaponSpecials.cannonDoubleTap = true;
-    } else if (milestone === 20) {
-      state.weaponSpecials.cannonStorm = true;
-    }
-    return;
-  }
-
-  if (track === "laser") {
-    if (milestone === 5) {
-      state.weapon.laserRange += 40;
-    } else if (milestone === 10) {
-      state.weaponSpecials.laserRear = true;
-    } else if (milestone === 15) {
-      state.weapon.laserPierce += 1;
-    } else if (milestone === 20) {
-      state.weaponSpecials.laserTri = true;
-    }
-    return;
-  }
-
-  if (track === "rocket") {
-    if (milestone === 5) {
-      state.weapon.rocketCooldown = Math.max(2.8, state.weapon.rocketCooldown * 0.9);
-    } else if (milestone === 10) {
-      state.weapon.rocketSplit = true;
-    } else if (milestone === 15) {
-      state.weapon.rocketBlastRadius += 25;
-    } else if (milestone === 20) {
-      state.weaponSpecials.rocketOmega = true;
-    }
-    return;
-  }
-
-  if (track === "drill") {
-    if (milestone === 5) {
-      state.weapon.drillReach = Math.min(42, state.weapon.drillReach + 4);
-      state.weapon.drillRadius = Math.min(20, state.weapon.drillRadius + 2);
-    } else if (milestone === 10) {
-      state.weapon.drillRechargeDelay = Math.max(1.6, state.weapon.drillRechargeDelay * 0.85);
-    } else if (milestone === 15) {
-      state.weaponSpecials.drillPulse = true;
-    } else if (milestone === 20) {
-      state.weapon.drillMaxCharges = 2;
-      state.weapon.drillCharges = Math.max(state.weapon.drillCharges, 1);
-    }
-    return;
-  }
-
-  if (track === "shield") {
-    if (milestone === 5) {
-      state.shield.maxCharges = Math.min(3, state.shield.maxCharges + 1);
-      state.shield.charges = state.shield.maxCharges;
-      state.shield.integrity = state.shield.charges;
-    } else if (milestone === 10) {
-      state.shield.thorns = true;
-    } else if (milestone === 15) {
-      state.weaponSpecials.shieldThornPulse = true;
-    } else if (milestone === 20) {
-      state.shield.rechargeDelay = Math.max(3.2, state.shield.rechargeDelay * 0.8);
-      state.shield.nova = true;
-      state.shield.nextNova = Math.min(state.shield.nextNova, state.time + 18);
-    }
-  }
-}
-
-function gainWeaponLevel(track, amount = 1) {
-  if (!track) return;
-  const current = state.weaponLevels[track] || 0;
-  const next = Math.min(20, current + amount);
-  state.weaponLevels[track] = next;
-
-  for (const milestone of WEAPON_LEVEL_MILESTONES) {
-    if (current < milestone && next >= milestone && (state.weaponMilestones[track] || 0) < milestone) {
-      state.weaponMilestones[track] = milestone;
-      applyWeaponMilestone(track, milestone);
-      playSfx("upgrade");
-    }
-  }
-}
-
-function initializeWeaponLevelsFromLoadout() {
-  state.weaponLevels = { cannon: 0, laser: 0, rocket: 0, drill: 0, plasma: 0, shield: 0 };
-  state.weaponMilestones = { cannon: 0, laser: 0, rocket: 0, drill: 0, plasma: 0, shield: 0 };
-  state.weaponCounters = { cannonShots: 0, rocketShots: 0, plasmaShots: 0 };
-  state.weaponSpecials = {
-    cannonExtraChannel: 0,
-    cannonDoubleTap: false,
-    cannonStorm: false,
-    laserRear: false,
-    laserTri: false,
-    rocketOmega: false,
-    drillPulse: false,
-    plasmaBack: false,
-    plasmaTriad: false,
-    plasmaCross: false,
-    plasmaNova: false,
-    shieldThornPulse: false,
-  };
-
-  if (state.weapon.cannonUnlocked) state.weaponLevels.cannon = 1;
-  if (state.weapon.laserUnlocked) state.weaponLevels.laser = 1;
-  if (state.weapon.rocketUnlocked) state.weaponLevels.rocket = 1;
-  if (state.weapon.drillUnlocked) state.weaponLevels.drill = 1;
-  if (state.weapon.plasmaUnlocked) state.weaponLevels.plasma = 1;
-  if (state.shield.unlocked) state.weaponLevels.shield = 1;
-}
-
-function applyUpgrade(id) {
-  const upgrade = UPGRADE_DEFS.find((u) => u.id === id);
-  if (!upgrade) return;
-  if (!canOfferUpgrade(upgrade)) return;
-
-  state.upgradesTaken[id] = (state.upgradesTaken[id] || 0) + 1;
-  upgrade.apply();
-  gainWeaponLevel(WEAPON_UPGRADE_TRACK[id], 1);
-  finishLevelUp();
 }
 
 function nextObjectId() {
@@ -2095,6 +1788,89 @@ function applyHeatHit(target, damage, hitX, hitY) {
   }
 }
 
+function reflectVector(vx, vy, nx, ny) {
+  const dot = vx * nx + vy * ny;
+  return {
+    vx: vx - 2 * dot * nx,
+    vy: vy - 2 * dot * ny,
+  };
+}
+
+function tryRicochetBullet(bullet, normalX, normalY, hitX, hitY) {
+  const ricochetLeft = bullet.ricochetLeft || 0;
+  if (ricochetLeft <= 0) {
+    bullet.life = 0;
+    return false;
+  }
+
+  let nx = normalX;
+  let ny = normalY;
+  const nLen = Math.hypot(nx, ny) || 1;
+  nx /= nLen;
+  ny /= nLen;
+
+  const reflected = reflectVector(bullet.vx, bullet.vy, nx, ny);
+  let speed = Math.hypot(reflected.vx, reflected.vy);
+  if (speed < 1) speed = 1;
+
+  if (state.weaponSpecials.cannonRicochetRamp) {
+    speed *= 1.08;
+    bullet.damageBase = Math.min(6, (bullet.damageBase || state.weapon.cannonEffectiveness) * 1.22);
+  }
+
+  const reflectedLen = Math.hypot(reflected.vx, reflected.vy) || 1;
+  bullet.vx = (reflected.vx / reflectedLen) * speed;
+  bullet.vy = (reflected.vy / reflectedLen) * speed;
+  bullet.ricochetLeft = ricochetLeft - 1;
+  bullet.ricochetCount = (bullet.ricochetCount || 0) + 1;
+  bullet.life = Math.max(0.1, bullet.life - 0.08);
+  bullet.x = hitX + nx * (bullet.radius + 1.5);
+  bullet.y = hitY + ny * (bullet.radius + 1.5);
+
+  if (state.weaponSpecials.cannonRicochetSplit) {
+    const baseAngle = Math.atan2(bullet.vy, bullet.vx);
+    const speedNow = Math.hypot(bullet.vx, bullet.vy) || 1;
+    const splitOff = 0.18;
+
+    bullet.vx = Math.cos(baseAngle + splitOff) * speedNow;
+    bullet.vy = Math.sin(baseAngle + splitOff) * speedNow;
+
+    weapons.spawnCannonBullet({
+      x: bullet.x,
+      y: bullet.y,
+      vx: Math.cos(baseAngle - splitOff) * speedNow,
+      vy: Math.sin(baseAngle - splitOff) * speedNow,
+      life: Math.max(0.18, bullet.life * 0.9),
+      radius: Math.max(2.7, bullet.radius * 0.92),
+      damageBase: Math.max(0.55, (bullet.damageBase || state.weapon.cannonEffectiveness) * 0.9),
+      ricochetLeft: bullet.ricochetLeft,
+      ricochetCount: bullet.ricochetCount,
+    });
+  }
+
+  if (state.weaponSpecials.cannonRicochetNova) {
+    const baseAngle = Math.atan2(bullet.vy, bullet.vx);
+    const shardSpeed = Math.max(420, Math.hypot(bullet.vx, bullet.vy) * 0.88);
+    for (const off of [-0.95, 0.95]) {
+      const a = baseAngle + off;
+      weapons.spawnCannonBullet({
+        x: hitX,
+        y: hitY,
+        vx: Math.cos(a) * shardSpeed,
+        vy: Math.sin(a) * shardSpeed,
+        life: 0.32,
+        radius: 2.2,
+        damageBase: Math.max(0.45, (bullet.damageBase || state.weapon.cannonEffectiveness) * 0.55),
+        ricochetLeft: 0,
+        ricochetCount: bullet.ricochetCount,
+      });
+    }
+  }
+
+  createExplosion(hitX, hitY, "#ffe188", 4);
+  return true;
+}
+
 const weapons = createWeaponsSystem({
   state,
   input,
@@ -2283,7 +2059,7 @@ function update(dt, now) {
   state.score += dt * (7 + state.level * 0.45) * passiveScoreMultiplier();
 
   if (state.score >= state.nextLevelScore && !state.levelUpPending && !state.bossActive) {
-    showLevelUpChoice();
+    progression.showLevelUpChoice();
     return;
   }
 
@@ -2518,17 +2294,33 @@ function update(dt, now) {
     bullet.x += bullet.vx * dt;
     bullet.y += bullet.vy * dt;
     bullet.life -= dt;
+
+    if (bullet.life <= 0) continue;
+
+    if (bullet.x <= bullet.radius) {
+      tryRicochetBullet(bullet, 1, 0, bullet.radius, bullet.y);
+    } else if (bullet.x >= WORLD.width - bullet.radius) {
+      tryRicochetBullet(bullet, -1, 0, WORLD.width - bullet.radius, bullet.y);
+    }
+
+    if (bullet.life <= 0) continue;
+
+    if (bullet.y <= bullet.radius) {
+      tryRicochetBullet(bullet, 0, 1, bullet.x, bullet.radius);
+    } else if (bullet.y >= WORLD.height - bullet.radius) {
+      tryRicochetBullet(bullet, 0, -1, bullet.x, WORLD.height - bullet.radius);
+    }
   }
 
   for (const bullet of state.bullets) {
     if (bullet.life <= 0) continue;
 
     if (state.bossActive && state.boss && circlesOverlap(state.boss.x, state.boss.y, state.boss.collisionRadius, bullet.x, bullet.y, bullet.radius)) {
-      bullet.life = 0;
-      const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
+      const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
       state.boss.hp -= dmg.damage;
       addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
       createExplosion(bullet.x, bullet.y, "#ffe188", 6);
+      tryRicochetBullet(bullet, bullet.x - state.boss.x, bullet.y - state.boss.y, bullet.x, bullet.y);
       if (state.boss.hp <= 0) {
         onBossDefeated();
       }
@@ -2538,7 +2330,7 @@ function update(dt, now) {
     let blockedByHazard = false;
     for (const hazard of state.edgeHazards) {
       if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius, bullet.x, bullet.y, bullet.radius)) {
-        bullet.life = 0;
+        tryRicochetBullet(bullet, bullet.x - hazard.x, bullet.y - hazard.y, bullet.x, bullet.y);
         blockedByHazard = true;
         break;
       }
@@ -2548,15 +2340,15 @@ function update(dt, now) {
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
       if (!circlesOverlap(obj.x, obj.y, obj.collisionRadius, bullet.x, bullet.y, bullet.radius)) continue;
-      bullet.life = 0;
       if (obj.destructible) {
-        const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
+        const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
         obj.hp -= dmg.damage;
         addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
         if (obj.hp <= 0) {
           destroyObject(obj, "shot");
         }
       }
+      tryRicochetBullet(bullet, bullet.x - obj.x, bullet.y - obj.y, bullet.x, bullet.y);
       break;
     }
   }
@@ -2939,6 +2731,10 @@ window.addEventListener("keydown", (event) => {
     }
   }
 
+  if (event.code === "KeyO" && !event.repeat) {
+    progression.debugBoostCurrentWeapons(5);
+  }
+
   if (event.code === "KeyI" && !event.repeat) {
     state.showShipInfo = !state.showShipInfo;
     if (shipInfoPanelEl) {
@@ -2946,7 +2742,7 @@ window.addEventListener("keydown", (event) => {
     }
   }
 
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM"].includes(event.code)) {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyO"].includes(event.code)) {
     event.preventDefault();
   }
 
@@ -3057,14 +2853,14 @@ overlay.addEventListener("click", (event) => {
   if (actionNode.dataset.action === "upgrade") {
     const id = actionNode.dataset.upgradeId;
     if (id) {
-      applyUpgrade(id);
+      progression.applyUpgrade(id);
     }
   }
 
   if (actionNode.dataset.action === "boss-reward") {
     const rewardId = actionNode.dataset.rewardId;
     if (rewardId) {
-      applyBossReward(rewardId);
+      progression.applyBossReward(rewardId);
     }
   }
 });
