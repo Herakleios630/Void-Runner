@@ -19,6 +19,7 @@ const explosiveStatusEl = document.getElementById("explosiveStatus");
 const heatStatusEl = document.getElementById("heatStatus");
 const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
+const weaponLevelsStatusEl = document.getElementById("weaponLevelsStatus");
 const armorStatusEl = document.getElementById("armorStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
@@ -1381,6 +1382,16 @@ function refreshHud() {
   }
   reloadStatusEl.textContent = `${Math.round(reloadRate() * 100)}%`;
   xpStatusEl.textContent = `${Math.round(((state.shipStats ? state.shipStats.xpBonus : 1) - 1) * 100)}%`;
+  if (weaponLevelsStatusEl) {
+    const entries = [];
+    if ((state.weaponLevels.cannon || 0) > 0) entries.push(`Geschuetz L${state.weaponLevels.cannon}`);
+    if ((state.weaponLevels.laser || 0) > 0) entries.push(`Laser L${state.weaponLevels.laser}`);
+    if ((state.weaponLevels.rocket || 0) > 0) entries.push(`Rakete L${state.weaponLevels.rocket}`);
+    if ((state.weaponLevels.drill || 0) > 0) entries.push(`Bohrer L${state.weaponLevels.drill}`);
+    if ((state.weaponLevels.plasma || 0) > 0) entries.push(`Plasma L${state.weaponLevels.plasma}`);
+    if ((state.weaponLevels.shield || 0) > 0) entries.push(`Schild L${state.weaponLevels.shield}`);
+    weaponLevelsStatusEl.textContent = entries.length > 0 ? entries.join(" | ") : "-";
+  }
   if (fireModeStatusEl) {
     fireModeStatusEl.textContent = state.desktopAutoFire ? "Automatisch" : "Manuell (LMB)";
   }
