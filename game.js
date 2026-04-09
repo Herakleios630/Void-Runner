@@ -364,7 +364,7 @@ const state = {
     plasmaUnlocked: false,
     plasmaCooldown: 0.12,
     lastPlasmaShot: -999,
-    plasmaRange: 190,
+    plasmaRange: 130,
     plasmaArc: 0.48,
     plasmaDamage: 1,
     plasmaBurnDps: 1.1,
@@ -1834,12 +1834,19 @@ function spawnObject() {
   let collisionScale = 0.8;
   let corners = 8;
 
-  if (r < 0.2) {
+  if (r < 0.13) {
     type = "miniAlien";
     size = 14 + Math.random() * 10;
     hp = 2;
     destructible = true;
     collisionScale = 0.7;
+    corners = 0;
+  } else if (r < 0.25) {
+    type = "alienShip";
+    size = 20 + Math.random() * 10;
+    hp = 4;
+    destructible = true;
+    collisionScale = 0.74;
     corners = 0;
   } else if (r < 0.42) {
     type = "smallRock";
@@ -1897,7 +1904,7 @@ function spawnObject() {
     spin: (Math.random() - 0.5) * 2,
     angle: Math.random() * Math.PI * 2,
     passed: false,
-    nextShotAt: type === "miniAlien" ? state.time + 1.2 + Math.random() * 2.4 : null,
+    nextShotAt: type === "miniAlien" ? state.time + 1.2 + Math.random() * 2.4 : type === "alienShip" ? state.time + 1.4 + Math.random() * 2.2 : null,
   });
 }
 
@@ -2252,7 +2259,7 @@ function firePlasmaPulse(now) {
     const spread = (t - 0.5) * state.weapon.plasmaArc * 2;
     const a = aim + spread + (Math.random() - 0.5) * 0.08;
     const speed = 260 + Math.random() * 170;
-    const life = 0.22 + Math.random() * 0.18;
+    const life = 0.5 + Math.random() * 0.32;
     state.plasmaBursts.push({
       x: ox,
       y: oy,
@@ -2261,7 +2268,7 @@ function firePlasmaPulse(now) {
       life,
       maxLife: life,
       radius: 3 + Math.random() * 1.2,
-      growth: 48 + Math.random() * 38,
+      growth: 44 + Math.random() * 30,
       damage: state.weapon.plasmaDamage,
       rangeLeft: state.weapon.plasmaRange,
       hitDone: false,
@@ -2436,7 +2443,7 @@ function spawnEnemyProjectile(fromX, fromY, toX, toY, speed, damageType, damageA
   const dx = toX - fromX;
   const dy = toY - fromY;
   const len = Math.hypot(dx, dy) || 1;
-  const radius = damageType === "energy" ? 8 : 7;
+  const radius = damageType === "energy" ? 8 : damageType === "explosive" ? 9 : damageType === "acid" ? 7.5 : 7;
   state.bossProjectiles.push({
     x: fromX,
     y: fromY,
@@ -2447,6 +2454,32 @@ function spawnEnemyProjectile(fromX, fromY, toX, toY, speed, damageType, damageA
     damageType,
     damageAmount,
   });
+}
+
+function spawnEnemyFlameBurst(fromX, fromY, toX, toY) {
+  const aim = Math.atan2(toY - fromY, toX - fromX);
+  const pellets = 5;
+  for (let i = 0; i < pellets; i += 1) {
+    const t = pellets <= 1 ? 0 : i / (pellets - 1);
+    const spread = (t - 0.5) * 0.55;
+    const a = aim + spread + (Math.random() - 0.5) * 0.06;
+    const speed = 230 + Math.random() * 130;
+    const life = 0.42 + Math.random() * 0.32;
+    state.plasmaBursts.push({
+      x: fromX,
+      y: fromY,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      life,
+      maxLife: life,
+      radius: 2.8 + Math.random() * 1,
+      growth: 34 + Math.random() * 24,
+      damage: 1,
+      rangeLeft: 115,
+      hitDone: false,
+      enemyOwned: true,
+    });
+  }
 }
 
 function updateBoss(dt) {
@@ -2654,8 +2687,22 @@ function update(dt, now) {
 
     if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
       const spread = (Math.random() - 0.5) * 18;
-      spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 230, "energy", 1);
-      obj.nextShotAt = state.time + 1.8 + Math.random() * 1.9;
+      if (Math.random() < 0.62) {
+        spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 235, "acid", 1);
+      } else {
+        spawnEnemyFlameBurst(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4);
+      }
+      obj.nextShotAt = state.time + 1.7 + Math.random() * 1.8;
+    }
+
+    if (obj.type === "alienShip" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+      const spread = (Math.random() - 0.5) * 22;
+      if (Math.random() < 0.66) {
+        spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.5, 280, "energy", 1);
+      } else {
+        spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.5, 220, "explosive", 2);
+      }
+      obj.nextShotAt = state.time + 1.35 + Math.random() * 1.45;
     }
 
     const d = Math.hypot(obj.x - ship.x, obj.y - ship.y);
@@ -2895,39 +2942,51 @@ function update(dt, now) {
     burst.y += burst.vy * dt;
     burst.life -= dt;
     burst.radius += burst.growth * dt;
-    burst.vx *= 0.88;
-    burst.vy *= 0.88;
+    burst.vx *= 0.93;
+    burst.vy *= 0.93;
     burst.rangeLeft -= Math.hypot(burst.vx, burst.vy) * dt;
 
     if (burst.hitDone || burst.life <= 0 || burst.rangeLeft <= 0) continue;
 
-    for (const obj of state.objects) {
-      if (obj.hp <= 0 || !obj.destructible) continue;
-      const d = Math.hypot(obj.x - burst.x, obj.y - burst.y);
-      if (d < obj.collisionRadius + burst.radius) {
-        applyHeatHit(obj, burst.damage, burst.x, burst.y);
+    if (burst.enemyOwned) {
+      const dShip = Math.hypot(ship.x - burst.x, ship.y - burst.y);
+      if (dShip < ship.radius + burst.radius) {
+        if (!hitShip("heat", 1)) {
+          setGameOver();
+          return;
+        }
         burst.hitDone = true;
-        burst.life = Math.min(burst.life, 0.05);
-        break;
+        burst.life = Math.min(burst.life, 0.04);
       }
-    }
-
-    if (!burst.hitDone && state.bossActive && state.boss) {
-      const dBoss = Math.hypot(state.boss.x - burst.x, state.boss.y - burst.y);
-      if (dBoss < state.boss.collisionRadius + burst.radius) {
-        applyHeatHit(state.boss, burst.damage, burst.x, burst.y);
-        burst.hitDone = true;
-        burst.life = Math.min(burst.life, 0.05);
-      }
-    }
-
-    if (!burst.hitDone) {
-      for (const hazard of state.edgeHazards) {
-        const d = Math.hypot(hazard.x - burst.x, hazard.y - burst.y);
-        if (d < hazard.hitRadius + burst.radius) {
+    } else {
+      for (const obj of state.objects) {
+        if (obj.hp <= 0 || !obj.destructible) continue;
+        const d = Math.hypot(obj.x - burst.x, obj.y - burst.y);
+        if (d < obj.collisionRadius + burst.radius) {
+          applyHeatHit(obj, burst.damage, burst.x, burst.y);
           burst.hitDone = true;
-          burst.life = 0;
+          burst.life = Math.min(burst.life, 0.05);
           break;
+        }
+      }
+
+      if (!burst.hitDone && state.bossActive && state.boss) {
+        const dBoss = Math.hypot(state.boss.x - burst.x, state.boss.y - burst.y);
+        if (dBoss < state.boss.collisionRadius + burst.radius) {
+          applyHeatHit(state.boss, burst.damage, burst.x, burst.y);
+          burst.hitDone = true;
+          burst.life = Math.min(burst.life, 0.05);
+        }
+      }
+
+      if (!burst.hitDone) {
+        for (const hazard of state.edgeHazards) {
+          const d = Math.hypot(hazard.x - burst.x, hazard.y - burst.y);
+          if (d < hazard.hitRadius + burst.radius) {
+            burst.hitDone = true;
+            burst.life = 0;
+            break;
+          }
         }
       }
     }
@@ -3111,6 +3170,18 @@ function drawObject(obj) {
     ctx.arc(-obj.size * 0.28, -2, 2.2, 0, Math.PI * 2);
     ctx.arc(obj.size * 0.28, -2, 2.2, 0, Math.PI * 2);
     ctx.fill();
+  } else if (obj.type === "alienShip") {
+    ctx.fillStyle = "#8cf3a0";
+    ctx.beginPath();
+    ctx.moveTo(obj.size * 0.95, 0);
+    ctx.lineTo(-obj.size * 0.7, obj.size * 0.45);
+    ctx.lineTo(-obj.size * 0.2, 0);
+    ctx.lineTo(-obj.size * 0.7, -obj.size * 0.45);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#1b3b24";
+    ctx.fillRect(-obj.size * 0.2, -obj.size * 0.15, obj.size * 0.38, obj.size * 0.3);
   } else {
     ctx.beginPath();
     const corners = obj.corners || (obj.type === "boulder" ? 11 : obj.type === "mediumRock" ? 9 : 8);
@@ -3394,7 +3465,10 @@ function draw() {
   }
 
   for (const proj of state.bossProjectiles) {
-    ctx.fillStyle = proj.damageType === "energy" ? "#74e8ff" : "#ff5f70";
+    if (proj.damageType === "energy") ctx.fillStyle = "#74e8ff";
+    else if (proj.damageType === "acid") ctx.fillStyle = "#79ff6f";
+    else if (proj.damageType === "heat") ctx.fillStyle = "#ffb16a";
+    else ctx.fillStyle = "#ff5f70";
     ctx.beginPath();
     ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
     ctx.fill();
