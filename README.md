@@ -108,6 +108,18 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Lvl 15: Ricochet-Ramp (Abpraller werden schneller und staerker)
 - Lvl 20: Ricochet-Nova mit Zusatzsplittern bei spaeteren Abprallern
 
+## Waffenlevel-Farben (WoW-Style)
+- Weiss: Level 1-4
+- Gruen: Level 5-9
+- Blau: Level 10-14
+- Lila: Level 15-19
+- Orange: Level 20
+
+## Upgrade-Auswahl
+- Waffen-Upgrades zeigen eine Level-Vorschau (z.B. L4 -> L5)
+- Wenn ein Upgrade einen Milestone erreicht, wird der Milestone-Effekt direkt im Auswahlfeld eingeblendet
+- Waffenkarten im Level-Up-Fenster sind farblich nach der Zielstufe markiert
+
 ## Idee fuer spaeter
 - Soundeffekte
 - Power-ups

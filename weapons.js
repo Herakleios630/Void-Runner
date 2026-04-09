@@ -322,7 +322,7 @@
           life: 4,
           radius: 6,
           turnRate: 2.6,
-          damageBase: omega ? 28 : 18,
+          damageBase: omega ? state.weapon.rocketDamage * 1.55 : state.weapon.rocketDamage,
           blastScale: omega ? 1.35 : 1,
           targetRef: null,
           acquireIn: 0,
