@@ -49,6 +49,27 @@ body {
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
 }
 
+.mobile-controls {
+  display: none;
+}
+
+.touch-btn {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  color: #e8f8ff;
+  background: rgba(8, 24, 52, 0.68);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.touch-btn:active,
+.touch-btn.active {
+  background: rgba(103, 242, 255, 0.28);
+  transform: scale(0.96);
+}
+
 canvas {
   width: 100%;
   height: auto;
@@ -111,5 +132,75 @@ button:hover {
 
   .notes {
     font-size: 13px;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .stage-wrap {
+    padding-bottom: 164px;
+  }
+
+  .mobile-controls {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    z-index: 5;
+    pointer-events: auto;
+  }
+
+  .dpad {
+    width: 146px;
+    height: 146px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .actions {
+    width: 158px;
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .touch-btn {
+    border-radius: 16px;
+    font-size: 18px;
+    padding: 0;
+    min-height: 44px;
+    color: #d9f6ff;
+  }
+
+  .touch-btn.up {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .touch-btn.left {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .touch-btn.right {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .touch-btn.down {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .touch-btn.fire,
+  .touch-btn.rocket {
+    border-radius: 999px;
+    font-size: 16px;
+    font-weight: 700;
   }
 }

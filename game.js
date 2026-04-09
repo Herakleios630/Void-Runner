@@ -12,6 +12,12 @@ const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
+const touchUpBtn = document.getElementById("touchUp");
+const touchDownBtn = document.getElementById("touchDown");
+const touchLeftBtn = document.getElementById("touchLeft");
+const touchRightBtn = document.getElementById("touchRight");
+const touchFireBtn = document.getElementById("touchFire");
+const touchRocketBtn = document.getElementById("touchRocket");
 
 const WORLD = {
   width: canvas.width,
@@ -2312,6 +2318,72 @@ function setKeyState(code, pressed) {
   if (code === "Space") input.shooting = pressed;
 }
 
+function setAimFromClient(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = WORLD.width / rect.width;
+  const scaleY = WORLD.height / rect.height;
+  input.mouseX = (clientX - rect.left) * scaleX;
+  input.mouseY = (clientY - rect.top) * scaleY;
+}
+
+function bindHoldControl(element, onChange) {
+  if (!element) return;
+
+  const onDown = (event) => {
+    event.preventDefault();
+    element.classList.add("active");
+    onChange(true);
+  };
+
+  const onUp = (event) => {
+    event.preventDefault();
+    element.classList.remove("active");
+    onChange(false);
+  };
+
+  element.addEventListener("pointerdown", onDown);
+  element.addEventListener("pointerup", onUp);
+  element.addEventListener("pointercancel", onUp);
+  element.addEventListener("pointerleave", onUp);
+}
+
+function bindTapControl(element, onTap) {
+  if (!element) return;
+  element.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    element.classList.add("active");
+    onTap();
+  });
+  element.addEventListener("pointerup", (event) => {
+    event.preventDefault();
+    element.classList.remove("active");
+  });
+  element.addEventListener("pointercancel", () => {
+    element.classList.remove("active");
+  });
+}
+
+function setupMobileControls() {
+  bindHoldControl(touchUpBtn, (pressed) => {
+    input.up = pressed;
+  });
+  bindHoldControl(touchDownBtn, (pressed) => {
+    input.down = pressed;
+  });
+  bindHoldControl(touchLeftBtn, (pressed) => {
+    input.left = pressed;
+  });
+  bindHoldControl(touchRightBtn, (pressed) => {
+    input.right = pressed;
+  });
+  bindHoldControl(touchFireBtn, (pressed) => {
+    input.shooting = pressed;
+  });
+  bindTapControl(touchRocketBtn, () => {
+    input.rocketQueued = true;
+  });
+}
+
 window.addEventListener("keydown", (event) => {
   if (event.code === "KeyH" && !event.repeat) {
     state.debugHitboxes = !state.debugHitboxes;
@@ -2329,12 +2401,23 @@ window.addEventListener("keyup", (event) => {
 });
 
 canvas.addEventListener("mousemove", (event) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = WORLD.width / rect.width;
-  const scaleY = WORLD.height / rect.height;
-  input.mouseX = (event.clientX - rect.left) * scaleX;
-  input.mouseY = (event.clientY - rect.top) * scaleY;
+  setAimFromClient(event.clientX, event.clientY);
 });
+
+canvas.addEventListener("touchstart", (event) => {
+  initAudio();
+  if (event.touches.length === 0) return;
+  const t = event.touches[0];
+  setAimFromClient(t.clientX, t.clientY);
+  event.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener("touchmove", (event) => {
+  if (event.touches.length === 0) return;
+  const t = event.touches[0];
+  setAimFromClient(t.clientX, t.clientY);
+  event.preventDefault();
+}, { passive: false });
 
 canvas.addEventListener("mousedown", (event) => {
   initAudio();
@@ -2354,6 +2437,14 @@ window.addEventListener("mouseup", (event) => {
   if (event.button === 0) {
     input.shooting = false;
   }
+});
+
+window.addEventListener("blur", () => {
+  input.up = false;
+  input.down = false;
+  input.left = false;
+  input.right = false;
+  input.shooting = false;
 });
 
 overlay.addEventListener("click", (event) => {
@@ -2397,4 +2488,5 @@ overlay.addEventListener("click", (event) => {
 });
 
 showShipSelectionMenu();
+setupMobileControls();
 requestAnimationFrame(gameLoop);
