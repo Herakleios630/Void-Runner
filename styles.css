@@ -114,23 +114,53 @@ canvas {
   align-content: center;
   gap: 12px;
   text-align: center;
+.rotate-hint {
+  display: none;
+}
   padding: 28px;
   background: rgba(2, 8, 20, 0.72);
 }
 
-.overlay.hidden {
-  display: none;
+.joystick {
+  width: 156px;
+  height: 156px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  pointer-events: auto;
 }
 
-h1 {
-  margin: 0;
-  letter-spacing: 1.5px;
+.joy-base {
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(8, 24, 52, 0.42);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
 }
 
-p {
-  margin: 0;
-  line-height: 1.4;
-  color: #c9d9ea;
+.joy-knob {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid rgba(182, 240, 255, 0.5);
+  background: rgba(103, 242, 255, 0.2);
+  transform: translate(0, 0);
+}
+
+.touch-aim-hint {
+  pointer-events: none;
+  text-align: right;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(7, 20, 42, 0.54);
+  color: #dff5ff;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 button {
@@ -165,7 +195,7 @@ button:hover {
 
 @media (hover: none), (pointer: coarse) {
   .stage-wrap {
-    padding-bottom: 164px;
+    padding-bottom: 122px;
   }
 
   .mobile-controls {
@@ -177,58 +207,24 @@ button:hover {
     right: 10px;
     bottom: 10px;
     z-index: 5;
-    pointer-events: auto;
+    pointer-events: none;
   }
 
-  .dpad {
-    width: 146px;
-    height: 146px;
+  .touch-aim-hint {
+    align-self: end;
+  }
+}
+
+@media (hover: none), (pointer: coarse) and (orientation: portrait) {
+  .rotate-hint {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 8px;
-  }
-
-  .actions {
-    width: 158px;
-    display: grid;
-    grid-template-rows: 1fr 1fr;
-    gap: 10px;
-    align-items: end;
-  }
-
-  .touch-btn {
-    border-radius: 16px;
-    font-size: 18px;
-    padding: 0;
-    min-height: 44px;
-    color: #d9f6ff;
-  }
-
-  .touch-btn.up {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .touch-btn.left {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .touch-btn.right {
-    grid-column: 3;
-    grid-row: 2;
-  }
-
-  .touch-btn.down {
-    grid-column: 2;
-    grid-row: 3;
-  }
-
-  .touch-btn.fire,
-  .touch-btn.rocket {
-    border-radius: 999px;
-    font-size: 16px;
+    place-items: center;
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    text-align: center;
     font-weight: 700;
+    background: rgba(3, 8, 20, 0.76);
+    color: #dcf5ff;
   }
 }

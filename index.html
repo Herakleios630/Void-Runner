@@ -28,16 +28,15 @@
         <p>Rakete: <span id="rocketStatus">Nicht freigeschaltet</span></p>
       </aside>
       <div class="mobile-controls" id="mobileControls" aria-label="Touch Steuerung">
-        <div class="dpad">
-          <button class="touch-btn up" id="touchUp" aria-label="Nach oben">▲</button>
-          <button class="touch-btn left" id="touchLeft" aria-label="Nach links">◀</button>
-          <button class="touch-btn right" id="touchRight" aria-label="Nach rechts">▶</button>
-          <button class="touch-btn down" id="touchDown" aria-label="Nach unten">▼</button>
+        <div class="joystick" id="joystickArea" aria-label="Joystick fuer Bewegung">
+          <div class="joy-base" id="joyBase">
+            <div class="joy-knob" id="joyKnob"></div>
+          </div>
         </div>
-        <div class="actions">
-          <button class="touch-btn fire" id="touchFire" aria-label="Feuer">FIRE</button>
-          <button class="touch-btn rocket" id="touchRocket" aria-label="Rakete">RKT</button>
-        </div>
+        <div class="touch-aim-hint">Rechts halten: Zielen + Dauerfeuer<br />Doppelt tippen: Rakete</div>
+      </div>
+      <div class="rotate-hint" id="rotateHint">
+        Bitte Handy ins Querformat drehen
       </div>
       <div class="overlay" id="overlay">
         <h1>Void Runner</h1>

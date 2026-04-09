@@ -32,10 +32,10 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - H: Hitbox-Debug ein/aus
 
 ## Android / Touch
-- Touch-DPad links fuer Bewegung
-- FIRE-Button rechts zum Schiessen
-- RKT-Button rechts fuer Rakete
-- Auf dem Canvas ziehen, um das Ziel zu setzen
+- Virtueller Joystick links fuer Bewegung
+- Rechts auf dem Spielfeld halten: zielen + automatisches Dauerfeuer
+- Doppelt tippen (rechts auf dem Spielfeld): Rakete
+- Hochformat zeigt einen Dreh-Hinweis, Querformat ist fuer Gameplay optimiert
 
 ## Deployment (GitHub Pages)
 - Workflow ist enthalten in [.github/workflows/pages.yml](.github/workflows/pages.yml)
