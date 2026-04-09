@@ -57,6 +57,9 @@ const audio = {
 };
 
 const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
+const BURN_VFX_MAX_SPRITES = 80;
+
+let burnVfxSpriteCount = 0;
 
 const SHIP_MODELS = {
   scout: {
@@ -160,6 +163,7 @@ const SHIP_MODELS = {
     startRocket: false,
     startDrill: false,
     startPlasma: false,
+    startCannonHalf: true,
     colorA: "#7ee6d0",
     colorB: "#b7fff0",
   },
@@ -334,6 +338,7 @@ const state = {
   bossLootTaken: {},
   weapon: {
     cannonUnlocked: true,
+    cannonEffectiveness: 1,
     extraLasers: 0,
     laserSpread: 11,
     laserUnlocked: false,
@@ -497,11 +502,12 @@ const UPGRADE_DEFS = [
   {
     id: "cannon_mount",
     title: "Geschuetz-Montage",
-    description: "Aktiviert das Basis-Geschuetz.",
+    description: "Aktiviert oder kalibriert das Basis-Geschuetz auf volle Leistung.",
     maxStacks: 1,
-    canOffer: () => !state.weapon.cannonUnlocked && canUnlockNewWeapon(),
+    canOffer: () => (!state.weapon.cannonUnlocked && canUnlockNewWeapon()) || state.weapon.cannonEffectiveness < 1,
     apply: () => {
       state.weapon.cannonUnlocked = true;
+      state.weapon.cannonEffectiveness = 1;
       playSfx("upgrade");
     },
   },
@@ -904,6 +910,9 @@ function playSfx(type) {
     playTone(680, 0.06, "square", 0.02, 1.15);
   } else if (type === "laser") {
     playTone(980, 0.07, "sawtooth", 0.02, 0.92);
+  } else if (type === "plasma") {
+    playTone(420, 0.07, "sawtooth", 0.024, 1.04);
+    setTimeout(() => playTone(260, 0.08, "triangle", 0.018, 0.78), 16);
   } else if (type === "rocket") {
     playTone(150, 0.18, "sawtooth", 0.035, 0.7);
   } else if (type === "explosion") {
@@ -1088,7 +1097,9 @@ function selectedShipModel() {
 
 function shipStartKitText(model) {
   const kit = [];
-  if (!(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma)) {
+  if (model.startCannonHalf) {
+    kit.push("Geschuetz (50%)");
+  } else if (!(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma)) {
     kit.push("Geschuetz");
   }
   if (model.startDrill) kit.push("Bohrer");
@@ -1494,7 +1505,8 @@ function resetGame() {
   state.bossLootTaken = {};
 
   state.weapon.extraLasers = 0;
-  state.weapon.cannonUnlocked = !(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma);
+  state.weapon.cannonUnlocked = Boolean(model.startCannonHalf || !(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma));
+  state.weapon.cannonEffectiveness = model.startCannonHalf ? 0.5 : 1;
   state.weapon.laserSpread = 11;
   state.weapon.laserUnlocked = false;
   state.weapon.laserCooldown = 0.22;
@@ -2220,7 +2232,7 @@ function fireLaserPulse(now) {
     width: 2.3 + state.weapon.laserDamage * 0.35,
   });
 
-  playSfx("laser");
+  playSfx("plasma");
 }
 
 function firePlasmaPulse(now) {
@@ -2730,7 +2742,7 @@ function update(dt, now) {
       const dBoss = Math.hypot(state.boss.x - bullet.x, state.boss.y - bullet.y);
       if (dBoss < state.boss.collisionRadius + bullet.radius) {
         bullet.life = 0;
-        const dmg = computeDamage(1, "physical");
+        const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
         state.boss.hp -= dmg.damage;
         createExplosion(bullet.x, bullet.y, "#ffe188", 6);
         if (state.boss.hp <= 0) {
@@ -2756,7 +2768,7 @@ function update(dt, now) {
       if (d < obj.collisionRadius + bullet.radius) {
         bullet.life = 0;
         if (obj.destructible) {
-          const dmg = computeDamage(1, "physical");
+          const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
           obj.hp -= dmg.damage;
           if (obj.hp <= 0) {
             destroyObject(obj, "shot");
@@ -3130,9 +3142,11 @@ function drawObject(obj) {
 }
 
 function drawBurningEffect(x, y, size) {
+  if (burnVfxSpriteCount >= BURN_VFX_MAX_SPRITES) return;
   const flicker = 0.82 + Math.sin(state.time * 25 + x * 0.02 + y * 0.02) * 0.18;
   const count = 3;
   for (let i = 0; i < count; i += 1) {
+    if (burnVfxSpriteCount >= BURN_VFX_MAX_SPRITES) break;
     const a = (state.time * 3 + i * 2.2) % (Math.PI * 2);
     const r = size * (0.18 + i * 0.14);
     const px = x + Math.cos(a) * r * 0.55;
@@ -3147,6 +3161,7 @@ function drawBurningEffect(x, y, size) {
     ctx.beginPath();
     ctx.arc(px, py, rr, 0, Math.PI * 2);
     ctx.fill();
+    burnVfxSpriteCount += 1;
   }
 }
 
@@ -3356,6 +3371,7 @@ function drawDebugOverlay() {
 }
 
 function draw() {
+  burnVfxSpriteCount = 0;
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
 
   for (const star of state.stars) {
