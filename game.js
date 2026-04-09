@@ -14,6 +14,7 @@ const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
+const pauseIndicatorEl = document.getElementById("pauseIndicator");
 const joystickAreaEl = document.getElementById("joystickArea");
 const joyBaseEl = document.getElementById("joyBase");
 const joyKnobEl = document.getElementById("joyKnob");
@@ -488,9 +489,16 @@ function selectedShipModel() {
   return SHIP_MODELS[state.selectedShipId] || SHIP_MODELS.normal;
 }
 
+function setPauseIndicatorVisible(visible) {
+  if (!pauseIndicatorEl) return;
+  pauseIndicatorEl.classList.toggle("hidden", !visible);
+  pauseIndicatorEl.classList.toggle("pause", visible);
+}
+
 function showShipSelectionMenu() {
   state.running = false;
   state.pauseReason = "ship-select";
+  setPauseIndicatorVisible(false);
 
   overlay.classList.remove("hidden");
   overlay.innerHTML = `
@@ -619,6 +627,7 @@ function showBossRewardChoice() {
   state.pauseReason = "bossreward";
   state.bossRewardPending = true;
   state.pendingBossRewards = chooseBossRewards();
+  setPauseIndicatorVisible(false);
 
   if (state.pendingBossRewards.length === 0) {
     state.bossRewardPending = false;
@@ -857,6 +866,7 @@ function resetGame() {
   }));
 
   overlay.classList.add("hidden");
+  setPauseIndicatorVisible(false);
   refreshHud();
 }
 
@@ -896,6 +906,7 @@ function setGameOver() {
   state.running = false;
   state.gameOver = true;
   state.pauseReason = "gameover";
+  setPauseIndicatorVisible(false);
   overlay.classList.remove("hidden");
   overlay.innerHTML = `
     <h1>Game Over</h1>
@@ -906,6 +917,7 @@ function setGameOver() {
 }
 
 function showPauseOverlay() {
+  setPauseIndicatorVisible(true);
   overlay.classList.remove("hidden");
   overlay.innerHTML = `
     <h1>Pause</h1>
@@ -932,6 +944,7 @@ function togglePause() {
   if (state.pauseReason === "manual-pause") {
     state.running = true;
     state.pauseReason = "running";
+    setPauseIndicatorVisible(false);
     overlay.classList.add("hidden");
   }
 }
@@ -2583,6 +2596,7 @@ overlay.addEventListener("click", (event) => {
     if (state.pauseReason === "manual-pause") {
       state.running = true;
       state.pauseReason = "running";
+      setPauseIndicatorVisible(false);
       overlay.classList.add("hidden");
     }
     return;
