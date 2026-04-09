@@ -15,6 +15,116 @@
       weaponLevelMilestones,
     } = deps;
 
+    function tierClassByLevel(level) {
+      if (level >= 20) return "weapon-level-tier-orange";
+      if (level >= 15) return "weapon-level-tier-purple";
+      if (level >= 10) return "weapon-level-tier-blue";
+      if (level >= 5) return "weapon-level-tier-green";
+      return "weapon-level-tier-white";
+    }
+
+    function tierCardClassByLevel(level) {
+      if (level >= 20) return "upgrade-card-tier-orange";
+      if (level >= 15) return "upgrade-card-tier-purple";
+      if (level >= 10) return "upgrade-card-tier-blue";
+      if (level >= 5) return "upgrade-card-tier-green";
+      return "upgrade-card-tier-white";
+    }
+
+    function weaponTrackLabel(track) {
+      if (track === "cannon") return "Geschuetz";
+      if (track === "laser") return "Laser";
+      if (track === "rocket") return "Rakete";
+      if (track === "drill") return "Bohrer";
+      if (track === "plasma") return "Plasma";
+      if (track === "shield") return "Schild";
+      return "Waffe";
+    }
+
+    function milestoneEffectText(track, milestone) {
+      if (track === "cannon") {
+        if (milestone === 5) return "+1 Abpraller fuer Kugeln.";
+        if (milestone === 10) return "Kugeln splitten bei geeigneten Abprallern.";
+        if (milestone === 15) return "Ricochet-Ramp: Abpraller werden staerker/schneller.";
+        if (milestone === 20) return "Ricochet-Nova: Zusatzsplitter bei spaeteren Abprallern.";
+      }
+      if (track === "laser") {
+        if (milestone === 5) return "+40 Laser-Reichweite.";
+        if (milestone === 10) return "Rueckwaertiger Laser aktiviert.";
+        if (milestone === 15) return "+1 Laser-Pierce.";
+        if (milestone === 20) return "Tri-Laser aktiviert.";
+      }
+      if (track === "rocket") {
+        if (milestone === 5) return "Raketen-Cooldown -10%.";
+        if (milestone === 10) return "Cluster-Raketen aktiviert.";
+        if (milestone === 15) return "+25 Explosionsradius.";
+        if (milestone === 20) return "Omega: jede 3. Rakete massiv verstaerkt.";
+      }
+      if (track === "drill") {
+        if (milestone === 5) return "Bohrer-Reichweite und Radius erhoeht.";
+        if (milestone === 10) return "Bohrer-Aufladung stark beschleunigt.";
+        if (milestone === 15) return "Bohrer-Puls aktiviert.";
+        if (milestone === 20) return "Bohrer erhaelt 2 Ladungen.";
+      }
+      if (track === "plasma") {
+        if (milestone === 5) return "Plasma-Rueckschuss aktiviert.";
+        if (milestone === 10) return "Plasma-Triad aktiviert.";
+        if (milestone === 15) return "Plasma-Kreuzfeuer aktiviert.";
+        if (milestone === 20) return "Plasma-Nova + starker DoT/Reichweiten-Boost.";
+      }
+      if (track === "shield") {
+        if (milestone === 5) return "+1 Schildladung (bis max 3).";
+        if (milestone === 10) return "Schild-Stacheln aktiviert.";
+        if (milestone === 15) return "Schild-Thorn-Pulse aktiviert.";
+        if (milestone === 20) return "Schnelleres Laden + Shield-Nova.";
+      }
+      return "Milestone freigeschaltet.";
+    }
+
+    function applyWeaponLevelBonus(track, levelReached) {
+      if (track === "cannon") {
+        state.weapon.cannonEffectiveness = Math.min(3.2, state.weapon.cannonEffectiveness + 0.06);
+        if (levelReached % 4 === 0) {
+          state.shotCooldown = Math.max(0.042, state.shotCooldown * 0.992);
+        }
+        return;
+      }
+
+      if (track === "laser") {
+        state.weapon.laserDamage = Math.min(8, state.weapon.laserDamage + 0.3);
+        state.weapon.laserRange = Math.min(900, state.weapon.laserRange + 8);
+        state.weapon.laserCooldown = Math.max(0.07, state.weapon.laserCooldown * 0.996);
+        return;
+      }
+
+      if (track === "rocket") {
+        state.weapon.rocketDamage = Math.min(80, state.weapon.rocketDamage + 0.9);
+        state.weapon.rocketBlastRadius = Math.min(280, state.weapon.rocketBlastRadius + 4);
+        state.weapon.rocketCooldown = Math.max(2.2, state.weapon.rocketCooldown * 0.995);
+        return;
+      }
+
+      if (track === "drill") {
+        state.weapon.drillReach = Math.min(56, state.weapon.drillReach + 0.7);
+        state.weapon.drillRadius = Math.min(24, state.weapon.drillRadius + 0.22);
+        state.weapon.drillRechargeDelay = Math.max(1.3, state.weapon.drillRechargeDelay * 0.993);
+        return;
+      }
+
+      if (track === "plasma") {
+        state.weapon.plasmaBurnDps = Math.min(7, state.weapon.plasmaBurnDps + 0.1);
+        state.weapon.plasmaRange = Math.min(900, state.weapon.plasmaRange + 8);
+        state.weapon.plasmaCooldown = Math.max(0.06, state.weapon.plasmaCooldown * 0.996);
+        return;
+      }
+
+      if (track === "shield") {
+        state.shield.rechargeDelay = Math.max(2.8, state.shield.rechargeDelay * 0.992);
+        state.shield.thornPulseRadius = Math.min(140, (state.shield.thornPulseRadius || 78) + 1);
+        state.shield.thornBreakRadius = Math.min(180, (state.shield.thornBreakRadius || 105) + 1.4);
+      }
+    }
+
     function canOfferUpgrade(def) {
       if (!def.canOffer()) return false;
       const stacks = state.upgradesTaken[def.id] || 0;
@@ -119,14 +229,28 @@
       overlay.classList.remove("hidden");
 
       const cards = state.pendingUpgradeOptions
-        .map(
-          (u) => `
-        <button data-action="upgrade" data-upgrade-id="${u.id}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
+        .map((u) => {
+          const track = weaponUpgradeTrack[u.id] || null;
+          const current = track ? (state.weaponLevels[track] || 0) : 0;
+          const projected = track ? Math.min(20, current + 1) : 0;
+          const milestone = track ? weaponLevelMilestones.find((m) => current < m && projected >= m) : null;
+
+          const cardTierClass = track ? tierCardClassByLevel(projected) : "upgrade-card-tier-white";
+          const textTierClass = track ? tierClassByLevel(projected) : "weapon-level-tier-white";
+          const levelPreview = track
+            ? `<br /><span class="upgrade-level-preview ${textTierClass}">${weaponTrackLabel(track)} L${current} -> L${projected}</span>`
+            : "";
+          const milestonePreview = milestone
+            ? `<br /><span class="upgrade-milestone-note ${textTierClass}">Milestone L${milestone}: ${milestoneEffectText(track, milestone)}</span>`
+            : "";
+
+          return `
+        <button data-action="upgrade" data-upgrade-id="${u.id}" class="upgrade-card ${cardTierClass}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
           <strong>[${isStatUpgrade(u) ? "Stat" : "Waffe"}] ${u.title}</strong><br />
-          <span>${u.description}</span>
+          <span>${u.description}</span>${levelPreview}${milestonePreview}
         </button>
-      `,
-        )
+      `;
+        })
         .join("<div style='height:8px'></div>");
 
       overlay.innerHTML = `
@@ -233,13 +357,18 @@
       if (!track) return;
       const current = state.weaponLevels[track] || 0;
       const next = Math.min(20, current + amount);
-      state.weaponLevels[track] = next;
+      if (next <= current) return;
 
-      for (const milestone of weaponLevelMilestones) {
-        if (current < milestone && next >= milestone && (state.weaponMilestones[track] || 0) < milestone) {
-          state.weaponMilestones[track] = milestone;
-          applyWeaponMilestone(track, milestone);
-          playSfx("upgrade");
+      for (let lvl = current + 1; lvl <= next; lvl += 1) {
+        state.weaponLevels[track] = lvl;
+        applyWeaponLevelBonus(track, lvl);
+
+        for (const milestone of weaponLevelMilestones) {
+          if (lvl >= milestone && (state.weaponMilestones[track] || 0) < milestone) {
+            state.weaponMilestones[track] = milestone;
+            applyWeaponMilestone(track, milestone);
+            playSfx("upgrade");
+          }
         }
       }
     }

@@ -128,6 +128,7 @@ const state = {
     lastRocketRealShot: -999,
     rocketHoming: false,
     rocketSplit: false,
+    rocketDamage: 18,
     rocketBlastRadius: 110,
     drillUnlocked: false,
     drillRechargeDelay: 5,
@@ -151,6 +152,8 @@ const state = {
     integrity: 0,
     maxCharges: 1,
     rechargeDelay: 10,
+    thornPulseRadius: 78,
+    thornBreakRadius: 105,
     cooldownUntil: 0,
     thorns: false,
     nova: false,
@@ -1184,6 +1187,7 @@ function resetGame() {
   state.weapon.lastRocketRealShot = -999;
   state.weapon.rocketHoming = false;
   state.weapon.rocketSplit = false;
+  state.weapon.rocketDamage = 18;
   state.weapon.rocketBlastRadius = 110;
   state.weapon.drillUnlocked = false;
   state.weapon.drillRechargeDelay = 5 * model.drillRechargeMult;
@@ -1206,6 +1210,8 @@ function resetGame() {
   state.shield.integrity = 0;
   state.shield.maxCharges = 1;
   state.shield.rechargeDelay = 10 * model.shieldRechargeMult;
+  state.shield.thornPulseRadius = 78;
+  state.shield.thornBreakRadius = 105;
   state.shield.cooldownUntil = 0;
   state.shield.thorns = false;
   state.shield.nova = false;
@@ -1298,6 +1304,7 @@ function refreshHud() {
   xpStatusEl.textContent = `${Math.round(((state.shipStats ? state.shipStats.xpBonus : 1) - 1) * 100)}%`;
   if (weaponLevelsStatusEl) {
     const tierClass = (lvl) => {
+      if (lvl >= 20) return "weapon-level-tier-orange";
       if (lvl >= 15) return "weapon-level-tier-purple";
       if (lvl >= 10) return "weapon-level-tier-blue";
       if (lvl >= 5) return "weapon-level-tier-green";
@@ -1510,7 +1517,7 @@ function consumeShield(damageType = "physical", amount = 1) {
   if (state.shield.integrity > 0) {
     if (state.weaponSpecials.shieldThornPulse && state.time - (state.shield.lastThornPulseAt || -999) >= 1.6) {
       state.shield.lastThornPulseAt = state.time;
-      damageNearbyFromShieldPulse(78, false);
+      damageNearbyFromShieldPulse(state.shield.thornPulseRadius || 78, false);
     }
     playSfx("shieldHit");
     createExplosion(state.ship.x, state.ship.y, "#71f4ff", 18);
@@ -1524,7 +1531,7 @@ function consumeShield(damageType = "physical", amount = 1) {
   createExplosion(state.ship.x, state.ship.y, "#71f4ff", 24);
 
   if (state.shield.thorns) {
-    damageNearbyFromShieldPulse(105, false);
+    damageNearbyFromShieldPulse(state.shield.thornBreakRadius || 105, false);
   }
 
   // This hit is still fully consumed by the shield break.
