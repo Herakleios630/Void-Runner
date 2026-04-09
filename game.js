@@ -941,6 +941,13 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function circlesOverlap(ax, ay, ar, bx, by, br, pad = 0) {
+  const dx = ax - bx;
+  const dy = ay - by;
+  const r = ar + br + pad;
+  return dx * dx + dy * dy < r * r;
+}
+
 function scaleEntitiesToWorld(sx, sy) {
   for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.plasmaBursts, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.damageTexts, state.stars]) {
     for (const entity of collection) {
@@ -2402,6 +2409,8 @@ function fireRocket(now) {
       life: 4,
       radius: 6,
       turnRate: 2.6,
+      targetRef: null,
+      acquireIn: 0,
     });
   }
 
@@ -2410,12 +2419,14 @@ function fireRocket(now) {
 
 function findNearestObject(x, y) {
   let best = null;
-  let bestDist = Infinity;
+  let bestDistSq = Infinity;
   for (const obj of state.objects) {
     if (obj.hp <= 0) continue;
-    const d = Math.hypot(obj.x - x, obj.y - y);
-    if (d < bestDist) {
-      bestDist = d;
+    const dx = obj.x - x;
+    const dy = obj.y - y;
+    const dSq = dx * dx + dy * dy;
+    if (dSq < bestDistSq) {
+      bestDistSq = dSq;
       best = obj;
     }
   }
@@ -2838,8 +2849,7 @@ function update(dt, now) {
 
   for (const obj of state.objects) {
     for (const hazard of state.edgeHazards) {
-      const d = Math.hypot(hazard.x - obj.x, hazard.y - obj.y);
-      if (d < hazard.hitRadius + obj.collisionRadius - 2) {
+      if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius - 2, obj.x, obj.y, obj.collisionRadius)) {
         destroyObject(obj, "rocket");
         break;
       }
@@ -2853,52 +2863,55 @@ function update(dt, now) {
   }
 
   for (const bullet of state.bullets) {
-    if (state.bossActive && state.boss) {
-      const dBoss = Math.hypot(state.boss.x - bullet.x, state.boss.y - bullet.y);
-      if (dBoss < state.boss.collisionRadius + bullet.radius) {
-        bullet.life = 0;
-        const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
-        state.boss.hp -= dmg.damage;
-        addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
-        createExplosion(bullet.x, bullet.y, "#ffe188", 6);
-        if (state.boss.hp <= 0) {
-          onBossDefeated();
-        }
-        continue;
+    if (bullet.life <= 0) continue;
+
+    if (state.bossActive && state.boss && circlesOverlap(state.boss.x, state.boss.y, state.boss.collisionRadius, bullet.x, bullet.y, bullet.radius)) {
+      bullet.life = 0;
+      const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
+      state.boss.hp -= dmg.damage;
+      addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
+      createExplosion(bullet.x, bullet.y, "#ffe188", 6);
+      if (state.boss.hp <= 0) {
+        onBossDefeated();
       }
+      continue;
     }
 
+    let blockedByHazard = false;
     for (const hazard of state.edgeHazards) {
-      const d = Math.hypot(hazard.x - bullet.x, hazard.y - bullet.y);
-      if (d < hazard.hitRadius + bullet.radius) {
+      if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius, bullet.x, bullet.y, bullet.radius)) {
         bullet.life = 0;
+        blockedByHazard = true;
         break;
       }
     }
-  }
+    if (blockedByHazard) continue;
 
-  for (const bullet of state.bullets) {
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
-      const d = Math.hypot(obj.x - bullet.x, obj.y - bullet.y);
-      if (d < obj.collisionRadius + bullet.radius) {
-        bullet.life = 0;
-        if (obj.destructible) {
-          const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
-          obj.hp -= dmg.damage;
-          addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
-          if (obj.hp <= 0) {
-            destroyObject(obj, "shot");
-          }
+      if (!circlesOverlap(obj.x, obj.y, obj.collisionRadius, bullet.x, bullet.y, bullet.radius)) continue;
+      bullet.life = 0;
+      if (obj.destructible) {
+        const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
+        obj.hp -= dmg.damage;
+        addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
+        if (obj.hp <= 0) {
+          destroyObject(obj, "shot");
         }
-        break;
       }
+      break;
     }
   }
 
   for (const missile of state.missiles) {
     if (state.weapon.rocketHoming) {
-      const target = findNearestObject(missile.x, missile.y);
+      missile.acquireIn = (missile.acquireIn || 0) - dt;
+      let target = missile.targetRef;
+      if (!target || target.hp <= 0 || missile.acquireIn <= 0) {
+        target = findNearestObject(missile.x, missile.y);
+        missile.targetRef = target || null;
+        missile.acquireIn = 0.12 + Math.random() * 0.08;
+      }
       if (target) {
         const dx = target.x - missile.x;
         const dy = target.y - missile.y;
@@ -2915,8 +2928,7 @@ function update(dt, now) {
     missile.life -= dt;
 
     if (state.bossActive && state.boss) {
-      const dBoss = Math.hypot(state.boss.x - missile.x, state.boss.y - missile.y);
-      if (dBoss < state.boss.collisionRadius + missile.radius) {
+      if (circlesOverlap(state.boss.x, state.boss.y, state.boss.collisionRadius, missile.x, missile.y, missile.radius)) {
         explodeRocketAt(missile.x, missile.y);
         const dmg = computeDamage(18, "explosive");
         state.boss.hp -= dmg.damage;
@@ -2932,8 +2944,7 @@ function update(dt, now) {
     let exploded = false;
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
-      const d = Math.hypot(obj.x - missile.x, obj.y - missile.y);
-      if (d < obj.collisionRadius + missile.radius) {
+      if (circlesOverlap(obj.x, obj.y, obj.collisionRadius, missile.x, missile.y, missile.radius)) {
         explodeRocketAt(missile.x, missile.y);
         missile.life = 0;
         exploded = true;
@@ -2944,8 +2955,7 @@ function update(dt, now) {
     if (exploded) continue;
 
     for (const hazard of state.edgeHazards) {
-      const d = Math.hypot(hazard.x - missile.x, hazard.y - missile.y);
-      if (d < hazard.hitRadius + missile.radius) {
+      if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius, missile.x, missile.y, missile.radius)) {
         explodeRocketAt(missile.x, missile.y);
         missile.life = 0;
         break;
@@ -3004,11 +3014,13 @@ function update(dt, now) {
     p.life -= dt;
   }
 
-  for (const text of state.damageTexts) {
-    text.x += (text.vx || 0) * dt;
-    text.y += (text.vy || -28) * dt;
-    text.vy *= 0.94;
-    text.life -= dt;
+  if (state.damageTexts.length > 0) {
+    for (const text of state.damageTexts) {
+      text.x += (text.vx || 0) * dt;
+      text.y += (text.vy || -28) * dt;
+      text.vy *= 0.94;
+      text.life -= dt;
+    }
   }
 
   for (const pickup of state.pickups) {
