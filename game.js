@@ -320,6 +320,7 @@ const state = {
   pickups: [],
   bossProjectiles: [],
   particles: [],
+  damageTexts: [],
   stars: [],
   ship: null,
   shipStats: null,
@@ -366,7 +367,7 @@ const state = {
     lastPlasmaShot: -999,
     plasmaRange: 260,
     plasmaArc: 0.48,
-    plasmaDamage: 0.55,
+    plasmaDamage: 0,
     plasmaBurnDps: 1.1,
     plasmaBurnDuration: 5,
   },
@@ -699,11 +700,11 @@ const UPGRADE_DEFS = [
   {
     id: "plasma_focus",
     title: "Plasma-Fokus",
-    description: "Mehr Hitzeschaden und engerer Kegel.",
+    description: "Mehr Brandschaden und engerer Kegel.",
     maxStacks: 4,
     canOffer: () => state.weapon.plasmaUnlocked,
     apply: () => {
-      state.weapon.plasmaDamage += 0.5;
+      state.weapon.plasmaBurnDps += 0.25;
       state.weapon.plasmaArc = Math.max(0.26, state.weapon.plasmaArc - 0.04);
       playSfx("upgrade");
     },
@@ -941,7 +942,7 @@ function clamp(value, min, max) {
 }
 
 function scaleEntitiesToWorld(sx, sy) {
-  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.plasmaBursts, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.stars]) {
+  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.plasmaBursts, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.damageTexts, state.stars]) {
     for (const entity of collection) {
       if (typeof entity.x === "number") entity.x *= sx;
       if (typeof entity.y === "number") entity.y *= sy;
@@ -1228,6 +1229,21 @@ function computeBurnTickDamage() {
   return Math.max(1, Math.round(critMult * 0.8));
 }
 
+function addDamageText(x, y, amount, crit = false) {
+  if (!state.debugHitboxes) return;
+  const life = crit ? 0.82 : 0.62;
+  state.damageTexts.push({
+    x,
+    y,
+    vx: (Math.random() - 0.5) * 10,
+    vy: crit ? -40 : -30,
+    life,
+    maxLife: life,
+    text: `${Math.max(0, Math.floor(amount))}`,
+    crit,
+  });
+}
+
 function applyAcidToShip(duration = 3.8, dps = 0.8) {
   if (!state.ship) return;
   state.ship.acidUntil = Math.max(state.ship.acidUntil || 0, state.time + duration);
@@ -1498,6 +1514,7 @@ function resetGame() {
   state.pickups = [];
   state.bossProjectiles = [];
   state.particles = [];
+  state.damageTexts = [];
   state.pendingUpgradeOptions = [];
   state.objectIdCounter = 1;
   state.lastSpawn = 0;
@@ -1540,7 +1557,7 @@ function resetGame() {
   state.weapon.lastPlasmaShot = -999;
   state.weapon.plasmaRange = 260;
   state.weapon.plasmaArc = 0.48;
-  state.weapon.plasmaDamage = 0.55;
+  state.weapon.plasmaDamage = 0;
   state.weapon.plasmaBurnDps = 1.1;
   state.weapon.plasmaBurnDuration = 5;
 
@@ -2216,6 +2233,7 @@ function fireLaserPulse(now) {
     if (hit.kind === "boss") {
       const dmg = computeDamage(state.weapon.laserDamage, "energy");
       hit.ref.hp -= dmg.damage;
+      addDamageText(ox + dx * hit.t, oy + dy * hit.t - 6, dmg.damage, dmg.crit);
       createExplosion(ox + dx * hit.t, oy + dy * hit.t, hitColor, 7);
       if (hit.ref.hp <= 0) {
         onBossDefeated();
@@ -2228,6 +2246,7 @@ function fireLaserPulse(now) {
       if (hit.ref.destructible) {
         const dmg = computeDamage(state.weapon.laserDamage, "energy");
         hit.ref.hp -= dmg.damage;
+        addDamageText(ox + dx * hit.t, oy + dy * hit.t - 6, dmg.damage, dmg.crit);
         if (hit.ref.hp <= 0) {
           destroyObject(hit.ref, "shot");
         }
@@ -2294,8 +2313,20 @@ function applyHeatHit(target, damage, hitX, hitY) {
   if (target.heatHitUntil && target.heatHitUntil > state.time) return;
   target.heatHitUntil = state.time + 0.18;
 
-  const dmg = computeDamage(damage, "heat");
-  target.hp -= dmg.damage;
+  const stackCap = 5;
+  if (!target.burnStacks) target.burnStacks = 0;
+  if (!target.nextBurnStackAt || state.time >= target.nextBurnStackAt) {
+    target.burnStacks = Math.min(stackCap, target.burnStacks + 1);
+    target.nextBurnStackAt = state.time + 1;
+  }
+
+  // Plasma direct hit is intentionally near-zero; damage comes from burning ticks.
+  if (damage > 0) {
+    const dmg = computeDamage(damage, "heat");
+    target.hp -= dmg.damage;
+    addDamageText(hitX, hitY - 6, dmg.damage, dmg.crit);
+  }
+
   target.burnUntil = Math.max(target.burnUntil || 0, state.time + state.weapon.plasmaBurnDuration);
   target.burnDps = Math.max(target.burnDps || 0, state.weapon.plasmaBurnDps * (state.shipStats ? state.shipStats.heatDamage : 1));
   target.burnTickCarry = target.burnTickCarry || 0;
@@ -2697,10 +2728,13 @@ function update(dt, now) {
     obj.angle += obj.spin * dt;
 
     if (obj.burnUntil && obj.burnUntil > state.time && obj.hp > 0) {
-      obj.burnTickCarry = (obj.burnTickCarry || 0) + (obj.burnDps || 0) * dt;
+      const burnStacks = Math.max(1, obj.burnStacks || 1);
+      obj.burnTickCarry = (obj.burnTickCarry || 0) + (obj.burnDps || 0) * burnStacks * dt;
       while (obj.burnTickCarry >= 1 && obj.hp > 0) {
         obj.burnTickCarry -= 1;
-        obj.hp -= computeBurnTickDamage();
+        const burnDmg = computeBurnTickDamage();
+        obj.hp -= burnDmg;
+        addDamageText(obj.x, obj.y - obj.size * 0.35, burnDmg, burnDmg > 1);
         if (obj.hp <= 0) {
           destroyObject(obj, "shot");
         }
@@ -2754,10 +2788,13 @@ function update(dt, now) {
 
   if (state.bossActive && state.boss) {
     if (state.boss.burnUntil && state.boss.burnUntil > state.time && state.boss.hp > 0) {
-      state.boss.burnTickCarry = (state.boss.burnTickCarry || 0) + (state.boss.burnDps || 0) * dt;
+      const burnStacks = Math.max(1, state.boss.burnStacks || 1);
+      state.boss.burnTickCarry = (state.boss.burnTickCarry || 0) + (state.boss.burnDps || 0) * burnStacks * dt;
       while (state.boss.burnTickCarry >= 1 && state.boss.hp > 0) {
         state.boss.burnTickCarry -= 1;
-        state.boss.hp -= computeBurnTickDamage();
+        const burnDmg = computeBurnTickDamage();
+        state.boss.hp -= burnDmg;
+        addDamageText(state.boss.x, state.boss.y - state.boss.size * 0.4, burnDmg, burnDmg > 1);
         if (state.boss.hp <= 0) {
           onBossDefeated();
           break;
@@ -2822,6 +2859,7 @@ function update(dt, now) {
         bullet.life = 0;
         const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
         state.boss.hp -= dmg.damage;
+        addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
         createExplosion(bullet.x, bullet.y, "#ffe188", 6);
         if (state.boss.hp <= 0) {
           onBossDefeated();
@@ -2848,6 +2886,7 @@ function update(dt, now) {
         if (obj.destructible) {
           const dmg = computeDamage(1 * state.weapon.cannonEffectiveness, "physical");
           obj.hp -= dmg.damage;
+          addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
           if (obj.hp <= 0) {
             destroyObject(obj, "shot");
           }
@@ -2881,6 +2920,7 @@ function update(dt, now) {
         explodeRocketAt(missile.x, missile.y);
         const dmg = computeDamage(18, "explosive");
         state.boss.hp -= dmg.damage;
+        addDamageText(missile.x, missile.y - 8, dmg.damage, dmg.crit);
         missile.life = 0;
         if (state.boss.hp <= 0) {
           onBossDefeated();
@@ -2962,6 +3002,13 @@ function update(dt, now) {
     p.vx *= 0.97;
     p.vy *= 0.97;
     p.life -= dt;
+  }
+
+  for (const text of state.damageTexts) {
+    text.x += (text.vx || 0) * dt;
+    text.y += (text.vy || -28) * dt;
+    text.vy *= 0.94;
+    text.life -= dt;
   }
 
   for (const pickup of state.pickups) {
@@ -3050,6 +3097,7 @@ function update(dt, now) {
   state.pickups = state.pickups.filter((p) => p.life > 0 && p.x > -60 && p.x < WORLD.width + 60 && p.y > -60 && p.y < WORLD.height + 60);
   state.bossProjectiles = state.bossProjectiles.filter((p) => p.life > 0 && p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80);
   state.particles = state.particles.filter((p) => p.life > 0);
+  state.damageTexts = state.damageTexts.filter((t) => t.life > 0);
 
   refreshHud();
 }
@@ -3629,6 +3677,22 @@ function draw() {
     ctx.restore();
   }
 
+  for (const text of state.damageTexts) {
+    const maxLife = text.maxLife || 0.6;
+    const alpha = Math.max(0, Math.min(1, text.life / maxLife));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = text.crit ? "bold 24px Trebuchet MS" : "bold 15px Trebuchet MS";
+    ctx.strokeStyle = "rgba(8, 16, 32, 0.9)";
+    ctx.lineWidth = text.crit ? 4 : 3;
+    ctx.strokeText(text.text, text.x, text.y);
+    ctx.fillStyle = text.crit ? "#ffe08f" : "#f5f8ff";
+    ctx.fillText(text.text, text.x, text.y);
+    ctx.restore();
+  }
+
   drawDebugOverlay();
 
   drawMobileCanvasHud();
@@ -3784,6 +3848,9 @@ window.addEventListener("keydown", (event) => {
 
   if (event.code === "KeyH" && !event.repeat) {
     state.debugHitboxes = !state.debugHitboxes;
+    if (!state.debugHitboxes) {
+      state.damageTexts = [];
+    }
   }
 
   if (event.code === "KeyI" && !event.repeat) {
