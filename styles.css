@@ -41,6 +41,15 @@ body {
   backdrop-filter: blur(4px);
 }
 
+.pill.pause {
+  border-color: rgba(255, 190, 110, 0.75);
+  color: #ffe6c2;
+}
+
+.hidden {
+  display: none !important;
+}
+
 .stage-wrap {
   position: relative;
   border-radius: 18px;
@@ -114,11 +123,12 @@ canvas {
   align-content: center;
   gap: 12px;
   text-align: center;
-.rotate-hint {
-  display: none;
-}
   padding: 28px;
   background: rgba(2, 8, 20, 0.72);
+}
+
+.rotate-hint {
+  display: none;
 }
 
 .joystick {
