@@ -25,10 +25,21 @@ Seitwaerts scrollender Flappy-Bird-Clone mit Raumschiff, Traegheit, Maus-Zielen 
 
 ## Steuerung
 - Pfeiltasten: Schub in 4 Richtungen
+- WASD: alternative Schubsteuerung
 - Maus bewegen: Zielcursor
 - Leertaste oder linke Maustaste halten: feuern
 - Rechte Maustaste: Rakete (nach Freischaltung)
 - H: Hitbox-Debug ein/aus
+
+## Android / Touch
+- Touch-DPad links fuer Bewegung
+- FIRE-Button rechts zum Schiessen
+- RKT-Button rechts fuer Rakete
+- Auf dem Canvas ziehen, um das Ziel zu setzen
+
+## Deployment (GitHub Pages)
+- Workflow ist enthalten in [.github/workflows/pages.yml](.github/workflows/pages.yml)
+- Nach Push auf `main` oder `master` deployed die Seite automatisch auf GitHub Pages
 
 ## Kampf-Feedback
 - Boss-Warnung mit visuellem Banner vor Boss-Start
