@@ -1,5 +1,8 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const stageWrapEl = document.querySelector(".stage-wrap");
+const hudEl = document.querySelector(".hud");
+const notesEl = document.querySelector(".notes");
 
 const overlay = document.getElementById("overlay");
 const shipInfoPanelEl = document.getElementById("shipInfoPanel");
@@ -23,6 +26,12 @@ const WORLD = {
   width: canvas.width,
   height: canvas.height,
   scrollSpeed: 220,
+};
+
+const BASE_WORLD = {
+  width: canvas.width,
+  height: canvas.height,
+  aspect: canvas.width / canvas.height,
 };
 
 const input = {
@@ -483,6 +492,91 @@ function playSfx(type) {
 
 function randomFrom(array) {
   return array[Math.floor(Math.random() * array.length)];
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function scaleEntitiesToWorld(sx, sy) {
+  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.missiles, state.bossProjectiles, state.particles, state.stars]) {
+    for (const entity of collection) {
+      if (typeof entity.x === "number") entity.x *= sx;
+      if (typeof entity.y === "number") entity.y *= sy;
+      if (typeof entity.x1 === "number") entity.x1 *= sx;
+      if (typeof entity.y1 === "number") entity.y1 *= sy;
+      if (typeof entity.x2 === "number") entity.x2 *= sx;
+      if (typeof entity.y2 === "number") entity.y2 *= sy;
+    }
+  }
+
+  if (state.ship) {
+    state.ship.x *= sx;
+    state.ship.y *= sy;
+  }
+
+  if (state.boss) {
+    state.boss.x *= sx;
+    state.boss.y *= sy;
+    state.boss.baseY *= sy;
+  }
+
+  input.mouseX *= sx;
+  input.mouseY *= sy;
+}
+
+function applyWorldSize(newWidth, newHeight) {
+  const oldWidth = WORLD.width;
+  const oldHeight = WORLD.height;
+
+  if (oldWidth === newWidth && oldHeight === newHeight) return;
+
+  const sx = newWidth / oldWidth;
+  const sy = newHeight / oldHeight;
+
+  WORLD.width = newWidth;
+  WORLD.height = newHeight;
+  canvas.width = newWidth;
+  canvas.height = newHeight;
+
+  scaleEntitiesToWorld(sx, sy);
+
+  input.mouseX = clamp(input.mouseX, 0, WORLD.width);
+  input.mouseY = clamp(input.mouseY, 0, WORLD.height);
+
+  if (state.ship) {
+    state.ship.x = clamp(state.ship.x, state.ship.radius, WORLD.width - state.ship.radius);
+    state.ship.y = clamp(state.ship.y, state.ship.radius, WORLD.height - state.ship.radius);
+  }
+}
+
+function fitMobileViewport() {
+  if (!IS_COARSE_POINTER) {
+    if (stageWrapEl) stageWrapEl.style.removeProperty("width");
+    return;
+  }
+
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const hudHeight = hudEl ? hudEl.offsetHeight : 0;
+  const notesHeight = notesEl ? notesEl.offsetHeight : 0;
+
+  const horizontalSpace = Math.max(320, viewportWidth - 12);
+  const verticalSpace = Math.max(190, viewportHeight - hudHeight - notesHeight - 126);
+
+  let nextWidth = horizontalSpace;
+  let nextHeight = Math.floor(nextWidth / BASE_WORLD.aspect);
+
+  if (nextHeight > verticalSpace) {
+    nextHeight = verticalSpace;
+    nextWidth = Math.floor(nextHeight * BASE_WORLD.aspect);
+  }
+
+  applyWorldSize(Math.max(320, nextWidth), Math.max(190, nextHeight));
+
+  if (stageWrapEl) {
+    stageWrapEl.style.width = `${WORLD.width}px`;
+  }
 }
 
 function selectedShipModel() {
@@ -2639,4 +2733,12 @@ overlay.addEventListener("click", (event) => {
 
 showShipSelectionMenu();
 setupTouchControls();
+fitMobileViewport();
+window.addEventListener("resize", fitMobileViewport);
+window.addEventListener("orientationchange", () => {
+  setTimeout(fitMobileViewport, 60);
+});
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fitMobileViewport);
+}
 requestAnimationFrame(gameLoop);

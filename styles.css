@@ -204,8 +204,43 @@ button:hover {
 }
 
 @media (hover: none), (pointer: coarse) {
+  body {
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app {
+    width: 100vw;
+    min-height: 100dvh;
+    padding: 8px;
+    gap: 8px;
+    align-content: start;
+  }
+
+  .hud {
+    gap: 6px;
+  }
+
+  .pill {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
   .stage-wrap {
-    padding-bottom: 122px;
+    margin: 0 auto;
+    max-width: 100%;
+    padding-bottom: 96px;
+    border-radius: 12px;
+  }
+
+  .notes {
+    display: none;
+  }
+
+  .overlay {
+    padding: 18px;
+    gap: 10px;
+    font-size: 14px;
   }
 
   .mobile-controls {
@@ -222,6 +257,8 @@ button:hover {
 
   .touch-aim-hint {
     align-self: end;
+    font-size: 12px;
+    padding: 8px 10px;
   }
 }
 
