@@ -967,7 +967,7 @@ function hitShip(damageType = "physical", amount = 1) {
   if (state.time < state.ship.invulnUntil) return true;
 
   if (consumeShield(damageType, amount)) {
-    state.ship.invulnUntil = state.time + 0.35;
+    state.ship.invulnUntil = state.time + 0.5;
     return true;
   }
 
@@ -982,7 +982,7 @@ function hitShip(damageType = "physical", amount = 1) {
   if (remaining > 0) {
     state.ship.hp -= Math.max(1, Math.ceil(remaining));
   }
-  state.ship.invulnUntil = state.time + 0.9;
+  state.ship.invulnUntil = state.time + 0.5;
   createExplosion(state.ship.x, state.ship.y, "#ff7f8a", 20);
   if (state.ship.hp <= 0) {
     return false;
@@ -1011,15 +1011,21 @@ function passiveScoreMultiplier() {
 }
 
 function computeNextLevelCost() {
+  const difficulty = selectedDifficultyMode();
   const elapsed = Math.max(1, state.time - state.lastLevelTime);
   const gained = Math.max(1, state.score - state.lastLevelScore);
   const scoreRate = gained / elapsed;
 
+  // Hard mode spawns more score opportunities, easy mode fewer.
+  // Scale required XP so all difficulties stay in roughly the same 30-60s per level band.
+  const difficultyLevelScale = Math.max(0.86, Math.min(1.18, (difficulty.spawnRateMult * 0.7) + (difficulty.edgeSpawnRateMult * 0.3)));
+  const adjustedRate = scoreRate * difficultyLevelScale;
+
   // Good runs should level closer to 30s, slower runs closer to 60s.
-  const perf = Math.max(0, Math.min(2.2, scoreRate / 28));
+  const perf = Math.max(0, Math.min(2.2, adjustedRate / 28));
   const targetSeconds = Math.max(30, Math.min(60, 60 - perf * 15));
 
-  const dynamicCost = Math.floor(scoreRate * targetSeconds);
+  const dynamicCost = Math.floor(adjustedRate * targetSeconds);
   const exponentialBase = Math.floor(state.levelCost * 1.14 + 18);
   const blended = Math.floor(exponentialBase * 0.45 + dynamicCost * 0.55);
 
