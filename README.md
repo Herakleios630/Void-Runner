@@ -48,6 +48,10 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Rechte Maustaste: Rakete (nach Freischaltung)
 - H: Hitbox-Debug ein/aus
 - O: Debug-Boost (+5 Waffenlevel fuer alle aktuell ausgeruesteten Systeme)
+- B: Balance-Debug Panel ein/aus
+- [ / ]: Im Balance-Panel Waffentrack wechseln
+- - / +: Im Balance-Panel Faktor verringern/erhoehen
+- 0: Im Balance-Panel Faktor auf x1.00 zuruecksetzen
 - M: Desktop-Feuermodus umschalten (manuell/automatisch)
 - P oder ESC: Pause/Fortsetzen
 
@@ -119,6 +123,11 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Waffen-Upgrades zeigen eine Level-Vorschau (z.B. L4 -> L5)
 - Wenn ein Upgrade einen Milestone erreicht, wird der Milestone-Effekt direkt im Auswahlfeld eingeblendet
 - Waffenkarten im Level-Up-Fenster sind farblich nach der Zielstufe markiert
+
+## Gameplay-Balance-Profile
+- Per Konstante in [game.js](game.js) umschaltbar: `BALANCE_PROFILE_ID = "safe" | "medium" | "chaos"`
+- Profile steuern die Basis-Skalierung pro Waffenlevel
+- Live-Feintuning ist im Debug-Panel moeglich und wirkt auf weitere Level-Ups
 
 ## Idee fuer spaeter
 - Soundeffekte

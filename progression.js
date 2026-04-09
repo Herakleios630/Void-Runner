@@ -13,7 +13,94 @@
       bossLootDefs,
       weaponUpgradeTrack,
       weaponLevelMilestones,
+      balanceProfileId = "medium",
     } = deps;
+
+    const BALANCE_PROFILES = {
+      safe: {
+        cannonDamageAdd: 0.045,
+        cannonCooldownEvery: 5,
+        cannonCooldownMult: 0.994,
+        laserDamageAdd: 0.22,
+        laserRangeAdd: 6,
+        laserCooldownMult: 0.997,
+        rocketDamageAdd: 0.7,
+        rocketRadiusAdd: 3,
+        rocketCooldownMult: 0.997,
+        drillReachAdd: 0.55,
+        drillRadiusAdd: 0.16,
+        drillRechargeMult: 0.995,
+        plasmaBurnAdd: 0.08,
+        plasmaRangeAdd: 6,
+        plasmaCooldownMult: 0.997,
+        shieldRechargeMult: 0.994,
+        shieldPulseAdd: 0.8,
+        shieldBreakAdd: 1.1,
+      },
+      medium: {
+        cannonDamageAdd: 0.06,
+        cannonCooldownEvery: 4,
+        cannonCooldownMult: 0.992,
+        laserDamageAdd: 0.3,
+        laserRangeAdd: 8,
+        laserCooldownMult: 0.996,
+        rocketDamageAdd: 0.9,
+        rocketRadiusAdd: 4,
+        rocketCooldownMult: 0.995,
+        drillReachAdd: 0.7,
+        drillRadiusAdd: 0.22,
+        drillRechargeMult: 0.993,
+        plasmaBurnAdd: 0.1,
+        plasmaRangeAdd: 8,
+        plasmaCooldownMult: 0.996,
+        shieldRechargeMult: 0.992,
+        shieldPulseAdd: 1,
+        shieldBreakAdd: 1.4,
+      },
+      chaos: {
+        cannonDamageAdd: 0.08,
+        cannonCooldownEvery: 3,
+        cannonCooldownMult: 0.989,
+        laserDamageAdd: 0.4,
+        laserRangeAdd: 11,
+        laserCooldownMult: 0.994,
+        rocketDamageAdd: 1.2,
+        rocketRadiusAdd: 5.5,
+        rocketCooldownMult: 0.992,
+        drillReachAdd: 0.95,
+        drillRadiusAdd: 0.3,
+        drillRechargeMult: 0.99,
+        plasmaBurnAdd: 0.14,
+        plasmaRangeAdd: 10,
+        plasmaCooldownMult: 0.994,
+        shieldRechargeMult: 0.989,
+        shieldPulseAdd: 1.3,
+        shieldBreakAdd: 1.9,
+      },
+    };
+
+    const activeProfileId = BALANCE_PROFILES[balanceProfileId] ? balanceProfileId : "medium";
+    const levelTuning = {
+      cannon: 1,
+      laser: 1,
+      rocket: 1,
+      drill: 1,
+      plasma: 1,
+      shield: 1,
+    };
+
+    function activeProfile() {
+      return BALANCE_PROFILES[activeProfileId];
+    }
+
+    function tuningFor(track) {
+      return Math.max(0.5, Math.min(2.5, levelTuning[track] || 1));
+    }
+
+    function tunedCooldownMult(baseMult, track) {
+      const tune = tuningFor(track);
+      return Math.max(0.85, Math.min(1, Math.pow(baseMult, tune)));
+    }
 
     function tierClassByLevel(level) {
       if (level >= 20) return "weapon-level-tier-orange";
@@ -82,47 +169,69 @@
     }
 
     function applyWeaponLevelBonus(track, levelReached) {
+      const profile = activeProfile();
+      const tune = tuningFor(track);
+
       if (track === "cannon") {
-        state.weapon.cannonEffectiveness = Math.min(3.2, state.weapon.cannonEffectiveness + 0.06);
-        if (levelReached % 4 === 0) {
-          state.shotCooldown = Math.max(0.042, state.shotCooldown * 0.992);
+        state.weapon.cannonEffectiveness = Math.min(3.2, state.weapon.cannonEffectiveness + (profile.cannonDamageAdd * tune));
+        if (levelReached % profile.cannonCooldownEvery === 0) {
+          state.shotCooldown = Math.max(0.042, state.shotCooldown * tunedCooldownMult(profile.cannonCooldownMult, track));
         }
         return;
       }
 
       if (track === "laser") {
-        state.weapon.laserDamage = Math.min(8, state.weapon.laserDamage + 0.3);
-        state.weapon.laserRange = Math.min(900, state.weapon.laserRange + 8);
-        state.weapon.laserCooldown = Math.max(0.07, state.weapon.laserCooldown * 0.996);
+        state.weapon.laserDamage = Math.min(8, state.weapon.laserDamage + (profile.laserDamageAdd * tune));
+        state.weapon.laserRange = Math.min(900, state.weapon.laserRange + (profile.laserRangeAdd * tune));
+        state.weapon.laserCooldown = Math.max(0.07, state.weapon.laserCooldown * tunedCooldownMult(profile.laserCooldownMult, track));
         return;
       }
 
       if (track === "rocket") {
-        state.weapon.rocketDamage = Math.min(80, state.weapon.rocketDamage + 0.9);
-        state.weapon.rocketBlastRadius = Math.min(280, state.weapon.rocketBlastRadius + 4);
-        state.weapon.rocketCooldown = Math.max(2.2, state.weapon.rocketCooldown * 0.995);
+        state.weapon.rocketDamage = Math.min(80, state.weapon.rocketDamage + (profile.rocketDamageAdd * tune));
+        state.weapon.rocketBlastRadius = Math.min(280, state.weapon.rocketBlastRadius + (profile.rocketRadiusAdd * tune));
+        state.weapon.rocketCooldown = Math.max(2.2, state.weapon.rocketCooldown * tunedCooldownMult(profile.rocketCooldownMult, track));
         return;
       }
 
       if (track === "drill") {
-        state.weapon.drillReach = Math.min(56, state.weapon.drillReach + 0.7);
-        state.weapon.drillRadius = Math.min(24, state.weapon.drillRadius + 0.22);
-        state.weapon.drillRechargeDelay = Math.max(1.3, state.weapon.drillRechargeDelay * 0.993);
+        state.weapon.drillReach = Math.min(56, state.weapon.drillReach + (profile.drillReachAdd * tune));
+        state.weapon.drillRadius = Math.min(24, state.weapon.drillRadius + (profile.drillRadiusAdd * tune));
+        state.weapon.drillRechargeDelay = Math.max(1.3, state.weapon.drillRechargeDelay * tunedCooldownMult(profile.drillRechargeMult, track));
         return;
       }
 
       if (track === "plasma") {
-        state.weapon.plasmaBurnDps = Math.min(7, state.weapon.plasmaBurnDps + 0.1);
-        state.weapon.plasmaRange = Math.min(900, state.weapon.plasmaRange + 8);
-        state.weapon.plasmaCooldown = Math.max(0.06, state.weapon.plasmaCooldown * 0.996);
+        state.weapon.plasmaBurnDps = Math.min(7, state.weapon.plasmaBurnDps + (profile.plasmaBurnAdd * tune));
+        state.weapon.plasmaRange = Math.min(900, state.weapon.plasmaRange + (profile.plasmaRangeAdd * tune));
+        state.weapon.plasmaCooldown = Math.max(0.06, state.weapon.plasmaCooldown * tunedCooldownMult(profile.plasmaCooldownMult, track));
         return;
       }
 
       if (track === "shield") {
-        state.shield.rechargeDelay = Math.max(2.8, state.shield.rechargeDelay * 0.992);
-        state.shield.thornPulseRadius = Math.min(140, (state.shield.thornPulseRadius || 78) + 1);
-        state.shield.thornBreakRadius = Math.min(180, (state.shield.thornBreakRadius || 105) + 1.4);
+        state.shield.rechargeDelay = Math.max(2.8, state.shield.rechargeDelay * tunedCooldownMult(profile.shieldRechargeMult, track));
+        state.shield.thornPulseRadius = Math.min(140, (state.shield.thornPulseRadius || 78) + (profile.shieldPulseAdd * tune));
+        state.shield.thornBreakRadius = Math.min(180, (state.shield.thornBreakRadius || 105) + (profile.shieldBreakAdd * tune));
       }
+    }
+
+    function setTrackLevelTuning(track, value) {
+      if (!(track in levelTuning)) return null;
+      const clamped = Math.max(0.5, Math.min(2.5, value));
+      levelTuning[track] = clamped;
+      return clamped;
+    }
+
+    function adjustTrackLevelTuning(track, delta) {
+      if (!(track in levelTuning)) return null;
+      return setTrackLevelTuning(track, (levelTuning[track] || 1) + delta);
+    }
+
+    function getLevelTuningSnapshot() {
+      return {
+        profileId: activeProfileId,
+        tracks: { ...levelTuning },
+      };
     }
 
     function canOfferUpgrade(def) {
@@ -498,6 +607,9 @@
       showBossRewardChoice,
       applyBossReward,
       debugBoostCurrentWeapons,
+      setTrackLevelTuning,
+      adjustTrackLevelTuning,
+      getLevelTuningSnapshot,
     };
   }
 

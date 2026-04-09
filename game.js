@@ -63,6 +63,9 @@ const { createEncountersSystem } = window.VoidEncounters;
 const { createProgressionSystem } = window.VoidProgression;
 const { createWeaponsSystem } = window.VoidWeapons;
 
+const BALANCE_PROFILE_ID = "medium"; // safe | medium | chaos
+const BALANCE_TUNING_TRACKS = ["cannon", "laser", "rocket", "drill", "plasma", "shield"];
+
 const state = {
   running: false,
   gameOver: false,
@@ -202,6 +205,16 @@ const state = {
   upgradesTaken: {},
   pendingUpgradeOptions: [],
 };
+
+const balanceDebug = {
+  visible: false,
+  selectedTrackIndex: 0,
+  tuneStep: 0.05,
+};
+
+const balanceDebugPanelEl = document.createElement("aside");
+balanceDebugPanelEl.className = "balance-debug hidden";
+stageWrapEl.appendChild(balanceDebugPanelEl);
 
 const UPGRADE_WEIGHTS = {
   shield_core: 7,
@@ -1081,6 +1094,7 @@ const progression = createProgressionSystem({
   bossLootDefs: BOSS_LOOT_DEFS,
   weaponUpgradeTrack: WEAPON_UPGRADE_TRACK,
   weaponLevelMilestones: WEAPON_LEVEL_MILESTONES,
+  balanceProfileId: BALANCE_PROFILE_ID,
 });
 
 function onBossDefeated() {
@@ -1338,6 +1352,42 @@ function refreshHud() {
     const left = getRocketCooldownLeft();
     rocketStatusEl.textContent = left > 0.05 ? `${left.toFixed(1)}s` : "Bereit";
   }
+
+  updateBalanceDebugPanel();
+}
+
+function selectedBalanceTrack() {
+  return BALANCE_TUNING_TRACKS[Math.max(0, Math.min(BALANCE_TUNING_TRACKS.length - 1, balanceDebug.selectedTrackIndex))] || "cannon";
+}
+
+function cycleBalanceTrack(dir) {
+  const len = BALANCE_TUNING_TRACKS.length;
+  if (len <= 0) return;
+  balanceDebug.selectedTrackIndex = (balanceDebug.selectedTrackIndex + dir + len) % len;
+}
+
+function updateBalanceDebugPanel() {
+  if (!balanceDebug.visible) {
+    balanceDebugPanelEl.classList.add("hidden");
+    return;
+  }
+
+  const snapshot = progression.getLevelTuningSnapshot();
+  const selected = selectedBalanceTrack();
+  const rows = BALANCE_TUNING_TRACKS
+    .map((track) => {
+      const marker = track === selected ? ">" : " ";
+      const value = snapshot.tracks[track] || 1;
+      return `<div>${marker} ${track.padEnd(6, " ")}: x${value.toFixed(2)}</div>`;
+    })
+    .join("");
+
+  balanceDebugPanelEl.classList.remove("hidden");
+  balanceDebugPanelEl.innerHTML = `
+    <div><strong>Balance Debug</strong> (${snapshot.profileId})</div>
+    <div class="balance-debug-hint">B: Panel | [ ]: Waffe | - / +: Faktor | 0: Reset</div>
+    <div class="balance-debug-rows">${rows}</div>
+  `;
 }
 
 function setGameOver() {
@@ -2410,6 +2460,38 @@ window.addEventListener("keydown", (event) => {
     progression.debugBoostCurrentWeapons(5);
   }
 
+  if (event.code === "KeyB" && !event.repeat) {
+    balanceDebug.visible = !balanceDebug.visible;
+    refreshHud();
+  }
+
+  if (balanceDebug.visible && !event.repeat) {
+    if (event.code === "BracketLeft") {
+      cycleBalanceTrack(-1);
+      refreshHud();
+    }
+
+    if (event.code === "BracketRight") {
+      cycleBalanceTrack(1);
+      refreshHud();
+    }
+
+    if (event.code === "Minus" || event.code === "NumpadSubtract") {
+      progression.adjustTrackLevelTuning(selectedBalanceTrack(), -balanceDebug.tuneStep);
+      refreshHud();
+    }
+
+    if (event.code === "Equal" || event.code === "NumpadAdd") {
+      progression.adjustTrackLevelTuning(selectedBalanceTrack(), balanceDebug.tuneStep);
+      refreshHud();
+    }
+
+    if (event.code === "Digit0" || event.code === "Numpad0") {
+      progression.setTrackLevelTuning(selectedBalanceTrack(), 1);
+      refreshHud();
+    }
+  }
+
   if (event.code === "KeyI" && !event.repeat) {
     state.showShipInfo = !state.showShipInfo;
     if (shipInfoPanelEl) {
@@ -2417,7 +2499,7 @@ window.addEventListener("keydown", (event) => {
     }
   }
 
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyO"].includes(event.code)) {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyO", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
     event.preventDefault();
   }
 
