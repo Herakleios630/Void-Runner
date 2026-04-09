@@ -29,6 +29,13 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Fehlende Dateien sind kein Problem: dann nutzt das Spiel automatisch die bisherigen Canvas-Formen (Fallback).
 - PNG/WebP sind fuer Einheiten/Hindernisse empfohlen (Transparenz), JPG eher fuer Hintergruende.
 
+## Modulstruktur (ohne Build-Tool)
+- [config.js](config.js): Schiff- und Schwierigkeits-Definitionen
+- [utils.js](utils.js): Mathe-/Hilfsfunktionen fuer Gameplay-Hotpaths
+- [audio.js](audio.js): Sound-Engine und SFX-Presets
+- [assets.js](assets.js): Asset-Manifest + Bild-Preload/Fallback
+- [game.js](game.js): Spielzustand, Game-Loop, Kampf, Rendering, Input
+
 ## Steuerung
 - Pfeiltasten: Schub in 4 Richtungen
 - WASD: alternative Schubsteuerung
