@@ -364,9 +364,9 @@ const state = {
     plasmaUnlocked: false,
     plasmaCooldown: 0.12,
     lastPlasmaShot: -999,
-    plasmaRange: 130,
+    plasmaRange: 260,
     plasmaArc: 0.48,
-    plasmaDamage: 1,
+    plasmaDamage: 0.55,
     plasmaBurnDps: 1.1,
     plasmaBurnDuration: 5,
   },
@@ -1228,6 +1228,13 @@ function computeBurnTickDamage() {
   return Math.max(1, Math.round(critMult * 0.8));
 }
 
+function applyAcidToShip(duration = 3.8, dps = 0.8) {
+  if (!state.ship) return;
+  state.ship.acidUntil = Math.max(state.ship.acidUntil || 0, state.time + duration);
+  state.ship.acidDps = Math.max(state.ship.acidDps || 0, dps);
+  state.ship.acidTickCarry = state.ship.acidTickCarry || 0;
+}
+
 function hitShip(damageType = "physical", amount = 1) {
   if (!state.ship) return false;
   if (state.time < state.ship.invulnUntil) return true;
@@ -1241,7 +1248,7 @@ function hitShip(damageType = "physical", amount = 1) {
   if (state.ship.armor > 0) {
     // One armor point is consumed per hit and mitigates damage by source type.
     state.ship.armor = Math.max(0, state.ship.armor - 1);
-    const reduction = damageType === "physical" ? 1 : damageType === "explosive" ? 1 : 0.5;
+    const reduction = damageType === "physical" ? 1 : damageType === "explosive" ? 1 : damageType === "acid" ? 0.2 : 0.5;
     remaining = Math.max(0, remaining - reduction);
   }
 
@@ -1531,9 +1538,9 @@ function resetGame() {
   state.weapon.plasmaUnlocked = false;
   state.weapon.plasmaCooldown = 0.12;
   state.weapon.lastPlasmaShot = -999;
-  state.weapon.plasmaRange = 190;
+  state.weapon.plasmaRange = 260;
   state.weapon.plasmaArc = 0.48;
-  state.weapon.plasmaDamage = 1;
+  state.weapon.plasmaDamage = 0.55;
   state.weapon.plasmaBurnDps = 1.1;
   state.weapon.plasmaBurnDuration = 5;
 
@@ -1826,6 +1833,11 @@ function nextObjectId() {
 
 function spawnObject() {
   const difficulty = selectedDifficultyMode();
+  const alienShipChance = difficulty.id === "easy" ? 0.06 : difficulty.id === "hard" ? 0.18 : 0.12;
+  const miniAlienChance = difficulty.id === "easy" ? 0.11 : difficulty.id === "hard" ? 0.15 : 0.13;
+  const firstCut = miniAlienChance;
+  const secondCut = firstCut + alienShipChance;
+
   const r = Math.random();
   let type = "debris";
   let size = 30;
@@ -1834,24 +1846,24 @@ function spawnObject() {
   let collisionScale = 0.8;
   let corners = 8;
 
-  if (r < 0.13) {
+  if (r < firstCut) {
     type = "miniAlien";
     size = 14 + Math.random() * 10;
-    hp = 2;
+    hp = 3;
     destructible = true;
     collisionScale = 0.7;
     corners = 0;
-  } else if (r < 0.25) {
+  } else if (r < secondCut) {
     type = "alienShip";
     size = 20 + Math.random() * 10;
-    hp = 4;
+    hp = 6;
     destructible = true;
     collisionScale = 0.74;
     corners = 0;
   } else if (r < 0.42) {
     type = "smallRock";
     size = 11 + Math.random() * 12;
-    hp = 2;
+    hp = 3;
     destructible = true;
     collisionScale = 0.78;
     corners = 8;
@@ -2279,6 +2291,9 @@ function firePlasmaPulse(now) {
 }
 
 function applyHeatHit(target, damage, hitX, hitY) {
+  if (target.heatHitUntil && target.heatHitUntil > state.time) return;
+  target.heatHitUntil = state.time + 0.18;
+
   const dmg = computeDamage(damage, "heat");
   target.hp -= dmg.damage;
   target.burnUntil = Math.max(target.burnUntil || 0, state.time + state.weapon.plasmaBurnDuration);
@@ -2573,6 +2588,22 @@ function update(dt, now) {
   }
 
   const ship = state.ship;
+
+  if (ship.acidUntil && ship.acidUntil > state.time) {
+    ship.acidTickCarry = (ship.acidTickCarry || 0) + (ship.acidDps || 0) * dt;
+    while (ship.acidTickCarry >= 1) {
+      ship.acidTickCarry -= 1;
+      if (ship.armor > 0) {
+        ship.armor = Math.max(0, ship.armor - 1);
+      } else {
+        ship.hp -= 1;
+      }
+      if (ship.hp <= 0) {
+        setGameOver();
+        return;
+      }
+    }
+  }
   ship.vx += input.axisX * ship.thrust * dt;
   ship.vy += input.axisY * ship.thrust * dt;
   if (input.up) ship.vy -= ship.thrust * dt;
@@ -2887,12 +2918,30 @@ function update(dt, now) {
     proj.y += proj.vy * dt;
     proj.life -= dt;
 
+    if (proj.damageType === "explosive") {
+      const splashR = proj.radius + 30;
+      const dSplash = Math.hypot(proj.x - ship.x, proj.y - ship.y);
+      if (dSplash < splashR + ship.radius) {
+        proj.life = 0;
+        const splashDamage = dSplash < proj.radius + ship.radius ? 2 : 1;
+        if (!hitShip("explosive", splashDamage)) {
+          setGameOver();
+          return;
+        }
+        createExplosion(proj.x, proj.y, "#ff8f64", 12);
+      }
+    }
+
     const dShip = Math.hypot(proj.x - ship.x, proj.y - ship.y);
     if (dShip < proj.radius + ship.radius) {
       proj.life = 0;
       if (!hitShip(proj.damageType || "physical", proj.damageAmount || 1)) {
         setGameOver();
         return;
+      }
+      if (proj.damageType === "acid") {
+        applyAcidToShip(4, 0.9);
+        createExplosion(proj.x, proj.y, "#7eff6f", 9);
       }
     }
 
@@ -3233,6 +3282,15 @@ function drawBurningEffect(x, y, size) {
     ctx.arc(px, py, rr, 0, Math.PI * 2);
     ctx.fill();
     burnVfxSpriteCount += 1;
+
+    const smokeR = rr * 0.72;
+    const smoke = ctx.createRadialGradient(px, py - smokeR * 0.2, 1, px, py - smokeR * 0.2, smokeR);
+    smoke.addColorStop(0, "rgba(60, 48, 44, 0.25)");
+    smoke.addColorStop(1, "rgba(14, 14, 14, 0)");
+    ctx.fillStyle = smoke;
+    ctx.beginPath();
+    ctx.arc(px, py - smokeR * 0.18, smokeR, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
