@@ -610,15 +610,15 @@ function showShipSelectionMenu() {
     <h1>Void Runner</h1>
     <p>Waehle dein Raumschiff</p>
     <div style="display:grid;gap:10px;width:min(92vw,740px)">
-      <button data-action="select-ship" data-ship-id="tank" style="text-align:left;line-height:1.4;">
+      <button data-action="select-ship" data-ship-id="tank" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
         <strong>Bulwark (Tank)</strong><br />
         <span>HP 5 | Speed 82% | Krit 6% | Krit-DMG 140% | Reload 90% | XP 95%</span>
       </button>
-      <button data-action="select-ship" data-ship-id="normal" style="text-align:left;line-height:1.4;">
+      <button data-action="select-ship" data-ship-id="normal" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
         <strong>Scout (Normal)</strong><br />
         <span>HP 3 | Speed 100% | Krit 10% | Krit-DMG 150% | Reload 100% | XP 100%</span>
       </button>
-      <button data-action="select-ship" data-ship-id="glass" style="text-align:left;line-height:1.4;">
+      <button data-action="select-ship" data-ship-id="glass" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
         <strong>Viper (Glaskanone)</strong><br />
         <span>HP 2 | Speed 120% | Krit 22% | Krit-DMG 180% | Reload 110% | XP 110%</span>
       </button>
@@ -745,7 +745,7 @@ function showBossRewardChoice() {
   const cards = state.pendingBossRewards
     .map(
       (u) => `
-        <button data-action="boss-reward" data-reward-id="${u.id}" style="max-width:560px;text-align:left;display:block;line-height:1.4;">
+        <button data-action="boss-reward" data-reward-id="${u.id}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
           <strong>${u.title}</strong><br />
           <span>${u.description}</span>
         </button>
@@ -1095,7 +1095,7 @@ function showLevelUpChoice() {
   const cards = state.pendingUpgradeOptions
     .map(
       (u) => `
-        <button data-action="upgrade" data-upgrade-id="${u.id}" style="max-width:560px;text-align:left;display:block;line-height:1.4;">
+        <button data-action="upgrade" data-upgrade-id="${u.id}" style="width:100%;max-width:560px;text-align:left;display:block;line-height:1.4;white-space:normal;word-break:break-word;">
           <strong>${u.title}</strong><br />
           <span>${u.description}</span>
         </button>

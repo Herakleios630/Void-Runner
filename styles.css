@@ -118,6 +118,7 @@ canvas {
 .overlay {
   position: absolute;
   inset: 0;
+  z-index: 9;
   display: grid;
   place-items: center;
   align-content: center;
@@ -125,6 +126,12 @@ canvas {
   text-align: center;
   padding: 28px;
   background: rgba(2, 8, 20, 0.72);
+  overflow: auto;
+}
+
+.overlay button {
+  white-space: normal;
+  word-break: break-word;
 }
 
 .rotate-hint {
@@ -246,6 +253,7 @@ button:hover {
     padding: 18px;
     gap: 10px;
     font-size: 14px;
+    align-content: start;
   }
 
   .mobile-controls {
