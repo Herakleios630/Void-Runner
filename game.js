@@ -638,9 +638,10 @@ const UPGRADE_DEFS = [
     maxStacks: 6,
     canOffer: () => true,
     apply: () => {
+      if (!state.ship || !state.shipStats) return;
       state.ship.maxHp += 1;
-      state.ship.hp = Math.min(state.ship.maxHp, state.ship.hp + 1);
       state.shipStats.maxHp = state.ship.maxHp;
+      state.ship.hp = Math.min(state.ship.maxHp, state.ship.hp + 1);
       playSfx("upgrade");
     },
   },
@@ -1081,14 +1082,10 @@ function hitShip(damageType = "physical", amount = 1) {
 
   let remaining = Math.max(0, amount);
   if (state.ship.armor > 0) {
-    const armorBlock = damageType === "physical" ? 1 : damageType === "explosive" ? 0.75 : 0.25;
-    const maxAbsorb = state.ship.armor * armorBlock;
-    const absorbed = Math.min(remaining, maxAbsorb);
-    if (absorbed > 0) {
-      const armorUsed = Math.max(1, Math.ceil(absorbed / armorBlock));
-      state.ship.armor = Math.max(0, state.ship.armor - armorUsed);
-      remaining -= absorbed;
-    }
+    // One armor point is consumed per hit and mitigates damage by source type.
+    state.ship.armor = Math.max(0, state.ship.armor - 1);
+    const reduction = damageType === "physical" ? 1 : damageType === "explosive" ? 1 : 0.5;
+    remaining = Math.max(0, remaining - reduction);
   }
 
   if (remaining > 0) {
@@ -1296,7 +1293,7 @@ function resetGame() {
   initAudio();
   const model = selectedShipModel();
   const difficulty = selectedDifficultyMode();
-  const maxHp = Math.max(1, Math.round(model.maxHp * difficulty.playerHpMult));
+  const maxHp = Math.max(2, Math.round(model.maxHp * difficulty.playerHpMult * 2));
   state.shipStats = {
     maxHp,
     maxArmor: Math.max(1, Math.round(model.maxArmor * difficulty.playerHpMult)),
@@ -1910,6 +1907,7 @@ function consumeShield(damageType = "physical", amount = 1) {
     damageNearbyFromShieldPulse(105, false);
   }
 
+  // This hit is still fully consumed by the shield break.
   return true;
 }
 
@@ -2195,7 +2193,7 @@ function spawnBossMinion(boss) {
   });
 }
 
-function spawnEnemyProjectile(fromX, fromY, toX, toY, speed, damageType) {
+function spawnEnemyProjectile(fromX, fromY, toX, toY, speed, damageType, damageAmount = 1) {
   const dx = toX - fromX;
   const dy = toY - fromY;
   const len = Math.hypot(dx, dy) || 1;
@@ -2208,7 +2206,7 @@ function spawnEnemyProjectile(fromX, fromY, toX, toY, speed, damageType) {
     life: 6,
     radius,
     damageType,
-    damageAmount: damageType === "explosive" ? 2 : 1,
+    damageAmount,
   });
 }
 
@@ -2275,6 +2273,7 @@ function updateBoss(dt) {
       const dy = state.ship.y - boss.y;
       const a = Math.atan2(dy, dx) + spread;
       const speed = (boss.variant === "warship" ? 300 : 260) * difficulty.enemyProjectileSpeedMult;
+      const bossDamage = 2;
       spawnEnemyProjectile(
         boss.x - boss.size * 0.38,
         boss.y,
@@ -2282,6 +2281,7 @@ function updateBoss(dt) {
         boss.y + Math.sin(a) * 100,
         speed,
         damageType,
+        bossDamage,
       );
     }
   }
@@ -2404,7 +2404,7 @@ function update(dt, now) {
 
     if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
       const spread = (Math.random() - 0.5) * 18;
-      spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 230, "energy");
+      spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 230, "energy", 1);
       obj.nextShotAt = state.time + 1.8 + Math.random() * 1.9;
     }
 
@@ -2413,7 +2413,8 @@ function update(dt, now) {
       if (tryUseDrillOnObject(obj)) {
         continue;
       }
-      if (!hitShip("physical", 1)) {
+      const objDamage = obj.type === "boulder" || obj.type === "mediumRock" ? 2 : 1;
+      if (!hitShip("physical", objDamage)) {
         setGameOver();
         return;
       }
@@ -2426,7 +2427,7 @@ function update(dt, now) {
   if (state.bossActive && state.boss) {
     const dBoss = Math.hypot(state.boss.x - ship.x, state.boss.y - ship.y);
     if (dBoss < state.boss.collisionRadius + ship.radius - 3) {
-      if (!hitShip("physical", 1)) {
+      if (!hitShip("physical", 2)) {
         setGameOver();
         return;
       }
@@ -2439,7 +2440,8 @@ function update(dt, now) {
 
     const dShip = Math.hypot(hazard.x - ship.x, hazard.y - ship.y);
     if (dShip < hazard.hitRadius + ship.radius - 3) {
-      if (!hitShip("physical", 1)) {
+      const hazardDamage = hazard.kind === "blackHole" || hazard.kind === "planet" ? 2 : 1;
+      if (!hitShip("physical", hazardDamage)) {
         createExplosion(ship.x, ship.y, "#71f4ff", 28);
         setGameOver();
         return;
