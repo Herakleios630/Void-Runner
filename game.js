@@ -58,16 +58,27 @@ const audio = {
 const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
 
 const SHIP_MODELS = {
-  normal: {
-    id: "normal",
+  scout: {
+    id: "scout",
     name: "Scout",
-    role: "Ausgewogen",
+    role: "Allrounder",
     maxHp: 3,
+    maxArmor: 2,
     speed: 1,
     critChance: 0.1,
     critDamage: 1.5,
     reloadRate: 1,
+    physicalDamage: 1,
+    energyDamage: 1,
+    explosiveDamage: 1,
     xpBonus: 1,
+    shieldRechargeMult: 1,
+    drillRechargeMult: 1,
+    rocketCooldownMult: 1,
+    startShield: false,
+    startLaser: false,
+    startRocket: false,
+    startDrill: false,
     colorA: "#71f4ff",
     colorB: "#ff995a",
   },
@@ -76,11 +87,22 @@ const SHIP_MODELS = {
     name: "Bulwark",
     role: "Tank",
     maxHp: 5,
+    maxArmor: 5,
     speed: 0.82,
     critChance: 0.06,
     critDamage: 1.4,
     reloadRate: 0.9,
+    physicalDamage: 1.08,
+    energyDamage: 0.9,
+    explosiveDamage: 1,
     xpBonus: 0.95,
+    shieldRechargeMult: 1,
+    drillRechargeMult: 0.86,
+    rocketCooldownMult: 1,
+    startShield: false,
+    startLaser: false,
+    startRocket: false,
+    startDrill: true,
     colorA: "#6db5ff",
     colorB: "#8bd2ff",
   },
@@ -89,13 +111,96 @@ const SHIP_MODELS = {
     name: "Viper",
     role: "Glaskanone",
     maxHp: 2,
+    maxArmor: 1,
     speed: 1.2,
     critChance: 0.22,
     critDamage: 1.8,
     reloadRate: 1.1,
+    physicalDamage: 0.95,
+    energyDamage: 1.22,
+    explosiveDamage: 1,
     xpBonus: 1.1,
+    shieldRechargeMult: 1,
+    drillRechargeMult: 1,
+    rocketCooldownMult: 1,
+    startShield: false,
+    startLaser: true,
+    startRocket: false,
+    startDrill: false,
     colorA: "#ff8f8f",
     colorB: "#ffc06f",
+  },
+  aegis: {
+    id: "aegis",
+    name: "Aegis",
+    role: "Schild-Experte",
+    maxHp: 3,
+    maxArmor: 3,
+    speed: 0.95,
+    critChance: 0.1,
+    critDamage: 1.5,
+    reloadRate: 1,
+    physicalDamage: 1,
+    energyDamage: 1.06,
+    explosiveDamage: 0.95,
+    xpBonus: 1,
+    shieldRechargeMult: 0.72,
+    drillRechargeMult: 1,
+    rocketCooldownMult: 1,
+    startShield: true,
+    startLaser: false,
+    startRocket: false,
+    startDrill: false,
+    colorA: "#7ee6d0",
+    colorB: "#b7fff0",
+  },
+  demolisher: {
+    id: "demolisher",
+    name: "Demolisher",
+    role: "Raketenboot",
+    maxHp: 3,
+    maxArmor: 2,
+    speed: 0.92,
+    critChance: 0.09,
+    critDamage: 1.55,
+    reloadRate: 0.95,
+    physicalDamage: 0.95,
+    energyDamage: 0.9,
+    explosiveDamage: 1.22,
+    xpBonus: 1,
+    shieldRechargeMult: 1,
+    drillRechargeMult: 1,
+    rocketCooldownMult: 0.78,
+    startShield: false,
+    startLaser: false,
+    startRocket: true,
+    startDrill: false,
+    colorA: "#ffad66",
+    colorB: "#ffd7a7",
+  },
+  pioneer: {
+    id: "pioneer",
+    name: "Pioneer",
+    role: "Bohrer-Pilot",
+    maxHp: 4,
+    maxArmor: 3,
+    speed: 1.02,
+    critChance: 0.11,
+    critDamage: 1.55,
+    reloadRate: 1,
+    physicalDamage: 1.06,
+    energyDamage: 1,
+    explosiveDamage: 0.95,
+    xpBonus: 1,
+    shieldRechargeMult: 1,
+    drillRechargeMult: 0.78,
+    rocketCooldownMult: 1,
+    startShield: false,
+    startLaser: false,
+    startRocket: false,
+    startDrill: true,
+    colorA: "#9cc2ff",
+    colorB: "#e7f0ff",
   },
 };
 
@@ -148,7 +253,7 @@ const state = {
   debugHitboxes: false,
   showShipInfo: false,
   selectedDifficultyId: "medium",
-  selectedShipId: "normal",
+  selectedShipId: "scout",
   desktopAutoFire: false,
   mouseInCanvas: false,
   joystickPointerId: null,
@@ -204,7 +309,7 @@ const state = {
     rocketSplit: false,
     rocketBlastRadius: 110,
     drillUnlocked: false,
-    drillRechargeDelay: 6,
+    drillRechargeDelay: 5,
     drillCharges: 0,
     drillMaxCharges: 1,
     drillCooldownUntil: 0,
@@ -458,7 +563,7 @@ const UPGRADE_DEFS = [
   {
     id: "drill_module",
     title: "Bohrer-Modul",
-    description: "Front-Bohrer zerstoert 1 Objekt, dann Aufladung.",
+    description: "Front-Bohrer zerstoert 1 Objekt, dann 5s Aufladung.",
     maxStacks: 1,
     canOffer: () => !state.weapon.drillUnlocked,
     apply: () => {
@@ -848,7 +953,16 @@ function scheduleMobileViewportFit() {
 }
 
 function selectedShipModel() {
-  return SHIP_MODELS[state.selectedShipId] || SHIP_MODELS.normal;
+  return SHIP_MODELS[state.selectedShipId] || SHIP_MODELS.scout;
+}
+
+function shipStartKitText(model) {
+  const kit = [];
+  if (model.startDrill) kit.push("Bohrer");
+  if (model.startLaser) kit.push("Laser");
+  if (model.startShield) kit.push("Schild");
+  if (model.startRocket) kit.push("Raketenwerfer");
+  return kit.length > 0 ? kit.join(", ") : "Kein Startmodul";
 }
 
 function selectedDifficultyMode() {
@@ -893,24 +1007,25 @@ function showShipSelectionMenu() {
   setPauseIndicatorVisible(false);
   const diff = selectedDifficultyMode();
 
+  const shipButtons = Object.values(SHIP_MODELS)
+    .map(
+      (model) => `
+      <button data-action="select-ship" data-ship-id="${model.id}" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
+        <strong>${model.name} (${model.role})</strong><br />
+        <span>HP ${model.maxHp} | ARM ${model.maxArmor} | Speed ${Math.round(model.speed * 100)}% | Krit ${Math.round(model.critChance * 100)}% | Krit-DMG ${Math.round(model.critDamage * 100)}% | Reload ${Math.round(model.reloadRate * 100)}% | XP ${Math.round(model.xpBonus * 100)}%</span><br />
+        <span>Start: ${shipStartKitText(model)}</span>
+      </button>
+    `,
+    )
+    .join("");
+
   overlay.classList.remove("hidden");
   overlay.innerHTML = `
     <h1>Void Runner</h1>
     <p>Schwierigkeit: <strong>${diff.title}</strong></p>
     <p>Waehle dein Raumschiff</p>
     <div style="display:grid;gap:10px;width:min(92vw,740px)">
-      <button data-action="select-ship" data-ship-id="tank" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
-        <strong>Bulwark (Tank)</strong><br />
-        <span>HP 5 | Speed 82% | Krit 6% | Krit-DMG 140% | Reload 90% | XP 95%</span>
-      </button>
-      <button data-action="select-ship" data-ship-id="normal" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
-        <strong>Scout (Normal)</strong><br />
-        <span>HP 3 | Speed 100% | Krit 10% | Krit-DMG 150% | Reload 100% | XP 100%</span>
-      </button>
-      <button data-action="select-ship" data-ship-id="glass" style="width:100%;max-width:740px;text-align:left;line-height:1.4;white-space:normal;word-break:break-word;">
-        <strong>Viper (Glaskanone)</strong><br />
-        <span>HP 2 | Speed 120% | Krit 22% | Krit-DMG 180% | Reload 110% | XP 110%</span>
-      </button>
+      ${shipButtons}
     </div>
     <p style="margin-top:10px;">Steuerung: WASD/Pfeile, LMB/Space = Geschuetz, RMB = Rakete</p>
   `;
@@ -997,7 +1112,8 @@ function addPoints(base) {
 }
 
 function spawnIntensity() {
-  return 1 + Math.min(1.8, (state.level - 1) * 0.06);
+  // Progression pressure increases only after each defeated boss.
+  return 1 + Math.min(1.25, state.bossLevelsCleared * 0.2);
 }
 
 function passiveScoreMultiplier() {
@@ -1183,13 +1299,13 @@ function resetGame() {
   const maxHp = Math.max(1, Math.round(model.maxHp * difficulty.playerHpMult));
   state.shipStats = {
     maxHp,
-    maxArmor: Math.max(1, Math.round(2 * difficulty.playerHpMult)),
+    maxArmor: Math.max(1, Math.round(model.maxArmor * difficulty.playerHpMult)),
     speed: model.speed,
     critChance: model.critChance,
     critDamage: model.critDamage,
-    physicalDamage: 1,
-    energyDamage: 1,
-    explosiveDamage: 1,
+    physicalDamage: model.physicalDamage,
+    energyDamage: model.energyDamage,
+    explosiveDamage: model.explosiveDamage,
     reloadRate: model.reloadRate,
     xpBonus: model.xpBonus,
     colorA: model.colorA,
@@ -1241,14 +1357,14 @@ function resetGame() {
   state.weapon.laserDamage = 1;
   state.weapon.laserPierce = 1;
   state.weapon.rocketUnlocked = false;
-  state.weapon.rocketCooldown = 10;
+  state.weapon.rocketCooldown = 10 * model.rocketCooldownMult;
   state.weapon.lastRocketShot = -999;
   state.weapon.lastRocketRealShot = -999;
   state.weapon.rocketHoming = false;
   state.weapon.rocketSplit = false;
   state.weapon.rocketBlastRadius = 110;
   state.weapon.drillUnlocked = false;
-  state.weapon.drillRechargeDelay = 6;
+  state.weapon.drillRechargeDelay = 5 * model.drillRechargeMult;
   state.weapon.drillCharges = 0;
   state.weapon.drillMaxCharges = 1;
   state.weapon.drillCooldownUntil = 0;
@@ -1259,7 +1375,7 @@ function resetGame() {
   state.shield.charges = 0;
   state.shield.integrity = 0;
   state.shield.maxCharges = 1;
-  state.shield.rechargeDelay = 10;
+  state.shield.rechargeDelay = 10 * model.shieldRechargeMult;
   state.shield.cooldownUntil = 0;
   state.shield.thorns = false;
   state.shield.nova = false;
@@ -1284,7 +1400,7 @@ function resetGame() {
     vy: 0,
     hp: maxHp,
     maxHp: maxHp,
-    armor: Math.max(0, Math.round((state.shipStats ? state.shipStats.maxArmor : 2) * 0.5)),
+    armor: Math.max(0, Math.round((state.shipStats ? state.shipStats.maxArmor : 2) * 0.65)),
     maxArmor: state.shipStats ? state.shipStats.maxArmor : 2,
     invulnUntil: 0,
     radius: 17,
@@ -1298,6 +1414,22 @@ function resetGame() {
     size: Math.random() * 2 + 0.6,
     speed: 25 + Math.random() * 90,
   }));
+
+  // Starter loadout by ship archetype.
+  state.weapon.laserUnlocked = model.startLaser;
+  state.weapon.rocketUnlocked = model.startRocket;
+  state.weapon.drillUnlocked = model.startDrill;
+  if (state.weapon.drillUnlocked) {
+    state.weapon.drillCharges = state.weapon.drillMaxCharges;
+    state.weapon.drillCooldownUntil = state.time;
+  }
+
+  state.shield.unlocked = model.startShield;
+  if (state.shield.unlocked) {
+    state.shield.charges = state.shield.maxCharges;
+    state.shield.integrity = state.shield.charges;
+    state.shield.cooldownUntil = state.time;
+  }
 
   overlay.classList.add("hidden");
   setPauseIndicatorVisible(false);
@@ -2232,14 +2364,14 @@ function update(dt, now) {
     const intensity = spawnIntensity();
 
     state.lastSpawn += dt;
-    const dynamicSpawn = Math.max(0.19, (state.spawnInterval / (intensity * difficulty.spawnRateMult)) - Math.min(0.45, state.time * 0.012));
+    const dynamicSpawn = Math.max(0.24, state.spawnInterval / (intensity * difficulty.spawnRateMult));
     while (state.lastSpawn >= dynamicSpawn) {
       state.lastSpawn -= dynamicSpawn;
       spawnObject();
     }
 
     state.lastEdgeSpawn += dt;
-    const dynamicEdgeSpawn = Math.max(0.72, (state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult)) - Math.min(0.9, state.time * 0.01));
+    const dynamicEdgeSpawn = Math.max(0.86, state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult));
     while (state.lastEdgeSpawn >= dynamicEdgeSpawn) {
       state.lastEdgeSpawn -= dynamicEdgeSpawn;
       spawnEdgeHazard();
