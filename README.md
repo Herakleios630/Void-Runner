@@ -1,6 +1,6 @@
-# Orbital Flappy
+# Void Runner
 
-Seitwaerts scrollender Flappy-Bird-Clone mit Raumschiff, Traegheit, Maus-Zielen und Schiessen.
+Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit, Maus-Zielen und Schiessen.
 
 ## Features
 - 4-Pfeiltasten-Steuerung mit Traegheit (kein permanentes Herunterfallen)
