@@ -86,6 +86,27 @@ body {
   font-size: 14px;
 }
 
+.weapon-level-tier-white {
+  color: #f2f7ff;
+}
+
+.weapon-level-tier-green {
+  color: #9dffb2;
+}
+
+.weapon-level-tier-blue {
+  color: #8fd6ff;
+}
+
+.weapon-level-tier-purple {
+  color: #d39bff;
+}
+
+.weapon-level-sep {
+  color: rgba(216, 235, 255, 0.55);
+  padding: 0 4px;
+}
+
 .mobile-controls {
   display: none;
 }

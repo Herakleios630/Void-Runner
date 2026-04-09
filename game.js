@@ -1383,14 +1383,20 @@ function refreshHud() {
   reloadStatusEl.textContent = `${Math.round(reloadRate() * 100)}%`;
   xpStatusEl.textContent = `${Math.round(((state.shipStats ? state.shipStats.xpBonus : 1) - 1) * 100)}%`;
   if (weaponLevelsStatusEl) {
+    const tierClass = (lvl) => {
+      if (lvl >= 15) return "weapon-level-tier-purple";
+      if (lvl >= 10) return "weapon-level-tier-blue";
+      if (lvl >= 5) return "weapon-level-tier-green";
+      return "weapon-level-tier-white";
+    };
     const entries = [];
-    if ((state.weaponLevels.cannon || 0) > 0) entries.push(`Geschuetz L${state.weaponLevels.cannon}`);
-    if ((state.weaponLevels.laser || 0) > 0) entries.push(`Laser L${state.weaponLevels.laser}`);
-    if ((state.weaponLevels.rocket || 0) > 0) entries.push(`Rakete L${state.weaponLevels.rocket}`);
-    if ((state.weaponLevels.drill || 0) > 0) entries.push(`Bohrer L${state.weaponLevels.drill}`);
-    if ((state.weaponLevels.plasma || 0) > 0) entries.push(`Plasma L${state.weaponLevels.plasma}`);
-    if ((state.weaponLevels.shield || 0) > 0) entries.push(`Schild L${state.weaponLevels.shield}`);
-    weaponLevelsStatusEl.textContent = entries.length > 0 ? entries.join(" | ") : "-";
+    if ((state.weaponLevels.cannon || 0) > 0) entries.push(`<span class="${tierClass(state.weaponLevels.cannon)}">Geschuetz L${state.weaponLevels.cannon}</span>`);
+    if ((state.weaponLevels.laser || 0) > 0) entries.push(`<span class="${tierClass(state.weaponLevels.laser)}">Laser L${state.weaponLevels.laser}</span>`);
+    if ((state.weaponLevels.rocket || 0) > 0) entries.push(`<span class="${tierClass(state.weaponLevels.rocket)}">Rakete L${state.weaponLevels.rocket}</span>`);
+    if ((state.weaponLevels.drill || 0) > 0) entries.push(`<span class="${tierClass(state.weaponLevels.drill)}">Bohrer L${state.weaponLevels.drill}</span>`);
+    if ((state.weaponLevels.plasma || 0) > 0) entries.push(`<span class="${tierClass(state.weaponLevels.plasma)}">Plasma L${state.weaponLevels.plasma}</span>`);
+    if ((state.weaponLevels.shield || 0) > 0) entries.push(`<span class="${tierClass(state.weaponLevels.shield)}">Schild L${state.weaponLevels.shield}</span>`);
+    weaponLevelsStatusEl.innerHTML = entries.length > 0 ? entries.join('<span class="weapon-level-sep">|</span>') : "-";
   }
   if (fireModeStatusEl) {
     fireModeStatusEl.textContent = state.desktopAutoFire ? "Automatisch" : "Manuell (LMB)";
