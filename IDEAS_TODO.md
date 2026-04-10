@@ -14,6 +14,23 @@
 - [ ] Finalize camera/encounter culling and spawn pressure for free-flight
 - [ ] Full QA pass for balancing and edge cases
 
+## Architecture Cleanup Backlog (Core-Adjacent)
+- [ ] Extract status-effects module (burn, acid, shield-break side effects)
+- [ ] Extract enemy AI steering module (aggro acquire, chase, disengage memory)
+- [ ] Extract ship damage + mitigation module (armor/shield/type scaling)
+- [ ] Extract projectile-vs-target resolver (bullet/missile/plasma/boss projectile)
+- [ ] Extract hazard interaction module (planet/black-hole/station/hazard collision outcomes)
+- [ ] Extract object lifecycle module (destroy reasons, fragment spawn, pickup drops)
+- [ ] Extract world-space sync helpers into separate movement-utils file
+- [ ] Extract entity culling filters into dedicated culling module
+- [ ] Extract pickup simulation + collection module
+- [ ] Extract boss combat loop (DoT ticks, body collision, death transition)
+- [ ] Extract input-to-ship thrust integration into flight-control module
+- [ ] Extract debug toggles and debug-data formatting module
+- [ ] Move gameplay constants (distances, timers, damping) into tuned config file
+- [ ] Replace string-based destroy reasons with enum-like constants map
+- [ ] Add lightweight perf counters per update phase (movement/combat/cleanup)
+
 ## Future Features
 - [ ] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
 - [ ] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX

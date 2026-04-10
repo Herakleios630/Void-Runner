@@ -55,6 +55,7 @@
     let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
     const activeRadius = typeof options.activeRadius === "number" ? options.activeRadius : 2;
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
+    const systemGridSize = 3;
 
     const activeChunks = new Map();
 
@@ -64,6 +65,10 @@
 
     function chunkCoord(value) {
       return Math.floor(value / chunkSize);
+    }
+
+    function systemCellCoord(chunkCoordValue) {
+      return Math.floor(chunkCoordValue / systemGridSize);
     }
 
     function generateChunk(cx, cy) {
@@ -147,7 +152,15 @@
         });
       }
 
-      const hasPlanetarySystem = rand() < 0.16;
+      const systemCellX = systemCellCoord(cx);
+      const systemCellY = systemCellCoord(cy);
+      const systemSeed = mixSeed(systemCellX, systemCellY, worldSeed ^ 0x51e9a3d7);
+      const systemRand = createRng(systemSeed);
+      const hasSystemInCell = systemRand() < 0.74;
+      const anchorCx = systemCellX * systemGridSize + Math.floor(systemRand() * systemGridSize);
+      const anchorCy = systemCellY * systemGridSize + Math.floor(systemRand() * systemGridSize);
+      const hasPlanetarySystem = hasSystemInCell && cx === anchorCx && cy === anchorCy;
+
       if (hasPlanetarySystem) {
         const orbitDirection = rand() < 0.5 ? -1 : 1;
         const primaryPlanet = {
@@ -157,7 +170,7 @@
           collidablePlane: true,
           x: originX + rand() * chunkSize,
           y: originY + rand() * chunkSize,
-          radius: 46 + rand() * 44,
+          radius: 34 + rand() * 26,
           hue: Math.floor(rand() * 360),
         };
         background.push(primaryPlanet);
@@ -236,7 +249,7 @@
             });
           }
         }
-      } else if (rand() < 0.06) {
+      } else if (rand() < 0.03) {
         background.push({
           type: "planet",
           drawOrder: 5,

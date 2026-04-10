@@ -2017,13 +2017,10 @@ function update(dt, now) {
         obj.vx += deltaVx * scale;
         obj.vy += deltaVy * scale;
       } else {
-        const cruiseSpeed = obj.cruiseSpeed || 140;
-        const cruiseSteer = Math.max(0.4, (obj.steering || 1.25) * 0.75);
-        const desiredVx = (dxToShip / distToShip) * cruiseSpeed;
-        const desiredVy = (dyToShip / distToShip) * cruiseSpeed;
-        const blend = Math.min(1, cruiseSteer * dt);
-        obj.vx += (desiredVx - obj.vx) * blend;
-        obj.vy += (desiredVy - obj.vy) * blend;
+        // Outside aggro, enemies should not actively home toward the player.
+        const cruiseDamp = Math.max(0.94, 1 - dt * 0.18);
+        obj.vx *= cruiseDamp;
+        obj.vy *= cruiseDamp;
       }
     }
 
