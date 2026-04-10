@@ -200,7 +200,7 @@
       const systemCellY = systemCellCoord(cy);
       const systemSeed = mixSeed(systemCellX, systemCellY, worldSeed ^ 0x51e9a3d7);
       const systemRand = createRng(systemSeed);
-      const hasSystemInCell = systemRand() < 0.5;
+      const hasSystemInCell = systemRand() < 0.34;
       const anchorCx = systemCellX * systemGridSize + Math.floor(systemRand() * systemGridSize);
       const anchorCy = systemCellY * systemGridSize + Math.floor(systemRand() * systemGridSize);
       const hasPlanetarySystem = hasSystemInCell && cx === anchorCx && cy === anchorCy;
@@ -210,9 +210,9 @@
         const sun = {
           type: "sun",
           drawOrder: 0,
-          parallax: 0.05,
-          x: originX + (0.2 + rand() * 0.6) * chunkSize,
-          y: originY + (0.2 + rand() * 0.6) * chunkSize,
+          parallax: 0.16,
+          x: originX + chunkSize * 0.5,
+          y: originY + chunkSize * 0.5,
           radius: 88 + rand() * 110,
           coreColor: sunProfile.core,
           glowColor: sunProfile.glow,
@@ -314,11 +314,18 @@
           }
         }
 
-        const orbitSlotCount = 3 + Math.floor(rand() * 2);
-        const shellBase = sun.radius * (2.2 + rand() * 0.25);
-        const shellSpacing = sun.radius * (1.15 + rand() * 0.22);
+        const orbitSlotCount = 1 + Math.floor(rand() * 10);
+        const shellBase = sun.radius * (2.3 + rand() * 0.2);
+        const shellSpacing = sun.radius * (1.55 + rand() * 0.25);
+        let lastPlanetRadius = 0;
+        let lastOrbitRadius = shellBase - shellSpacing;
         for (let slot = 0; slot < orbitSlotCount; slot += 1) {
-          const orbitRadius = shellBase + slot * shellSpacing + (rand() - 0.5) * sun.radius * 0.12;
+          const nearPlanePlanet = slot <= 1 || rand() < 0.24;
+          const shellScale = 1 - slot / Math.max(1, orbitSlotCount + 1);
+          const predictedPlanetRadius = (nearPlanePlanet ? 20 + rand() * 18 : 10 + rand() * 13) * (0.8 + shellScale * 0.35);
+          const minimumGap = (lastPlanetRadius + predictedPlanetRadius) * 1.5;
+          const shellRadius = shellBase + slot * shellSpacing;
+          const orbitRadius = Math.max(shellRadius, lastOrbitRadius + minimumGap);
           const slotAngle = rand() * Math.PI * 2;
           const beltInsteadOfPlanet = slot > 0 && rand() < (slot >= 2 ? 0.38 : 0.26);
 
@@ -340,11 +347,11 @@
                 alpha: 0.4 + rand() * 0.3,
               });
             }
+            lastOrbitRadius = orbitRadius;
             continue;
           }
 
-          const nearPlanePlanet = slot <= 1 || rand() < 0.24;
-          const shellScale = 1 - slot / Math.max(1, orbitSlotCount + 1);
+          const planetRadius = predictedPlanetRadius;
           const planet = {
             type: "planet",
             drawOrder: nearPlanePlanet ? 6 : 5,
@@ -355,13 +362,15 @@
             orbitRadius,
             orbitAngle: slotAngle,
             orbitSpeed: sunOrbitAngularSpeed(orbitRadius, nearPlanePlanet ? 1 : 0.92 + rand() * 0.14),
-            radius: (nearPlanePlanet ? 20 + rand() * 18 : 10 + rand() * 13) * (0.8 + shellScale * 0.35),
+            radius: planetRadius,
             hue: Math.floor(rand() * 360),
           };
           planet.x = planet.orbitCx + Math.cos(planet.orbitAngle) * planet.orbitRadius;
           planet.y = planet.orbitCy + Math.sin(planet.orbitAngle) * planet.orbitRadius;
           background.push(planet);
           addPlanetSubOrbits(planet);
+          lastPlanetRadius = planetRadius;
+          lastOrbitRadius = orbitRadius;
         }
       }
 

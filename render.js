@@ -788,7 +788,8 @@
             const parentKey = `p:${obj.parentOrbitCx.toFixed(1)}:${obj.parentOrbitCy.toFixed(1)}:${obj.parentOrbitRadius.toFixed(1)}`;
             if (!orbitKeys.has(parentKey)) {
               orbitKeys.add(parentKey);
-              const c = cameraSystem.worldToScreen(obj.parentOrbitCx, obj.parentOrbitCy, 1, WORLD.width, WORLD.height);
+              const orbitParallax = obj.parallax || 1;
+              const c = cameraSystem.worldToScreen(obj.parentOrbitCx, obj.parentOrbitCy, orbitParallax, WORLD.width, WORLD.height);
               ctx.beginPath();
               ctx.arc(c.x, c.y, obj.parentOrbitRadius, 0, Math.PI * 2);
               ctx.stroke();
@@ -800,7 +801,8 @@
             const key = `o:${center.x.toFixed(1)}:${center.y.toFixed(1)}:${obj.orbitRadius.toFixed(1)}`;
             if (!orbitKeys.has(key)) {
               orbitKeys.add(key);
-              const c = cameraSystem.worldToScreen(center.x, center.y, 1, WORLD.width, WORLD.height);
+              const orbitParallax = obj.parallax || 1;
+              const c = cameraSystem.worldToScreen(center.x, center.y, orbitParallax, WORLD.width, WORLD.height);
               ctx.beginPath();
               ctx.arc(c.x, c.y, obj.orbitRadius, 0, Math.PI * 2);
               ctx.stroke();
