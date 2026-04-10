@@ -1447,6 +1447,22 @@ function projectWorldToScreen(worldX, worldY, cameraX, cameraY) {
   };
 }
 
+function ensureEntityWorldPosition(entity) {
+  if (Number.isFinite(entity.worldX) && Number.isFinite(entity.worldY)) {
+    return;
+  }
+  const worldPos = screenToWorld(entity.x, entity.y);
+  entity.worldX = worldPos.x;
+  entity.worldY = worldPos.y;
+}
+
+function syncEntityScreenPosition(entity, cameraX, cameraY) {
+  if (!Number.isFinite(entity.worldX) || !Number.isFinite(entity.worldY)) return;
+  const screenPos = projectWorldToScreen(entity.worldX, entity.worldY, cameraX, cameraY);
+  entity.x = screenPos.x;
+  entity.y = screenPos.y;
+}
+
 
 function createExplosion(x, y, color, amount = 18) {
   for (let i = 0; i < amount; i += 1) {
@@ -1966,6 +1982,12 @@ function update(dt, now) {
     }
 
     if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+      const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
+      const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
+      const distShip = Math.hypot(dxShip, dyShip);
+      if (distShip > Math.max(WORLD.width, WORLD.height) * 0.95) {
+        obj.nextShotAt = state.time + 0.6 + Math.random() * 0.9;
+      } else {
       const spread = (Math.random() - 0.5) * 18;
       if (Math.random() < 0.62) {
         encounters.spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 235, "acid", 1);
@@ -1973,9 +1995,16 @@ function update(dt, now) {
         encounters.spawnEnemyFlameBurst(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4);
       }
       obj.nextShotAt = state.time + 1.7 + Math.random() * 1.8;
+      }
     }
 
     if (obj.type === "alienShip" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+      const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
+      const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
+      const distShip = Math.hypot(dxShip, dyShip);
+      if (distShip > Math.max(WORLD.width, WORLD.height) * 1.05) {
+        obj.nextShotAt = state.time + 0.55 + Math.random() * 0.8;
+      } else {
       const spread = (Math.random() - 0.5) * 22;
       if (Math.random() < 0.66) {
         encounters.spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.5, 280, "energy", 1);
@@ -1983,6 +2012,7 @@ function update(dt, now) {
         encounters.spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.5, 220, "explosive", 2);
       }
       obj.nextShotAt = state.time + 1.35 + Math.random() * 1.45;
+      }
     }
 
     const d = Math.hypot(obj.x - ship.x, obj.y - ship.y);
@@ -2072,8 +2102,10 @@ function update(dt, now) {
   }
 
   for (const bullet of state.bullets) {
-    bullet.x += bullet.vx * dt;
-    bullet.y += bullet.vy * dt;
+    ensureEntityWorldPosition(bullet);
+    bullet.worldX += bullet.vx * dt;
+    bullet.worldY += bullet.vy * dt;
+    syncEntityScreenPosition(bullet, cameraX, cameraY);
     bullet.life -= dt;
 
     if (bullet.life <= 0) continue;
@@ -2135,6 +2167,7 @@ function update(dt, now) {
   }
 
   for (const missile of state.missiles) {
+    ensureEntityWorldPosition(missile);
     if (state.weapon.rocketHoming) {
       missile.acquireIn = (missile.acquireIn || 0) - dt;
       let target = missile.targetRef;
@@ -2144,8 +2177,10 @@ function update(dt, now) {
         missile.acquireIn = 0.12 + Math.random() * 0.08;
       }
       if (target) {
-        const dx = target.x - missile.x;
-        const dy = target.y - missile.y;
+        const targetX = Number.isFinite(target.worldX) ? target.worldX : target.x;
+        const targetY = Number.isFinite(target.worldY) ? target.worldY : target.y;
+        const dx = targetX - missile.worldX;
+        const dy = targetY - missile.worldY;
         const dist = Math.hypot(dx, dy) || 1;
         const desiredVx = (dx / dist) * missile.speed;
         const desiredVy = (dy / dist) * missile.speed;
@@ -2154,8 +2189,9 @@ function update(dt, now) {
       }
     }
 
-    missile.x += missile.vx * dt;
-    missile.y += missile.vy * dt;
+    missile.worldX += missile.vx * dt;
+    missile.worldY += missile.vy * dt;
+    syncEntityScreenPosition(missile, cameraX, cameraY);
     missile.life -= dt;
 
     if (state.bossActive && state.boss) {
@@ -2196,8 +2232,10 @@ function update(dt, now) {
   }
 
   for (const proj of state.bossProjectiles) {
-    proj.x += proj.vx * dt;
-    proj.y += proj.vy * dt;
+    ensureEntityWorldPosition(proj);
+    proj.worldX += proj.vx * dt;
+    proj.worldY += proj.vy * dt;
+    syncEntityScreenPosition(proj, cameraX, cameraY);
     proj.life -= dt;
 
     if (proj.damageType === "explosive") {
@@ -2288,8 +2326,10 @@ function update(dt, now) {
   }
 
   for (const burst of state.plasmaBursts) {
-    burst.x += burst.vx * dt;
-    burst.y += burst.vy * dt;
+    ensureEntityWorldPosition(burst);
+    burst.worldX += burst.vx * dt;
+    burst.worldY += burst.vy * dt;
+    syncEntityScreenPosition(burst, cameraX, cameraY);
     burst.life -= dt;
     burst.radius += burst.growth * dt;
     burst.vx *= 0.975;
@@ -2358,10 +2398,31 @@ function update(dt, now) {
     const d = Math.hypot(h.worldX - cameraX, h.worldY - cameraY);
     return d < worldCullBase + h.radius * 1.4;
   });
-  state.bullets = state.bullets.filter((b) => b.life > 0 && b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30);
+  state.bullets = state.bullets.filter((b) => {
+    if (b.life <= 0) return false;
+    if (!Number.isFinite(b.worldX) || !Number.isFinite(b.worldY)) {
+      return b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30;
+    }
+    const d = Math.hypot(b.worldX - cameraX, b.worldY - cameraY);
+    return d < worldCullBase + 120;
+  });
   state.laserBeams = state.laserBeams.filter((b) => b.life > 0);
-  state.plasmaBursts = state.plasmaBursts.filter((b) => b.life > 0 && b.rangeLeft > 0 && b.x > -80 && b.x < WORLD.width + 80 && b.y > -80 && b.y < WORLD.height + 80);
-  state.missiles = state.missiles.filter((m) => m.life > 0 && m.x > -60 && m.x < WORLD.width + 60 && m.y > -60 && m.y < WORLD.height + 60);
+  state.plasmaBursts = state.plasmaBursts.filter((b) => {
+    if (b.life <= 0 || b.rangeLeft <= 0) return false;
+    if (!Number.isFinite(b.worldX) || !Number.isFinite(b.worldY)) {
+      return b.x > -80 && b.x < WORLD.width + 80 && b.y > -80 && b.y < WORLD.height + 80;
+    }
+    const d = Math.hypot(b.worldX - cameraX, b.worldY - cameraY);
+    return d < worldCullBase + 220;
+  });
+  state.missiles = state.missiles.filter((m) => {
+    if (m.life <= 0) return false;
+    if (!Number.isFinite(m.worldX) || !Number.isFinite(m.worldY)) {
+      return m.x > -60 && m.x < WORLD.width + 60 && m.y > -60 && m.y < WORLD.height + 60;
+    }
+    const d = Math.hypot(m.worldX - cameraX, m.worldY - cameraY);
+    return d < worldCullBase + 180;
+  });
   state.pickups = state.pickups.filter((p) => {
     if (p.life <= 0) return false;
     if (!Number.isFinite(p.worldX) || !Number.isFinite(p.worldY)) {
@@ -2370,7 +2431,14 @@ function update(dt, now) {
     const d = Math.hypot(p.worldX - cameraX, p.worldY - cameraY);
     return d < worldCullBase + 120;
   });
-  state.bossProjectiles = state.bossProjectiles.filter((p) => p.life > 0 && p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80);
+  state.bossProjectiles = state.bossProjectiles.filter((p) => {
+    if (p.life <= 0) return false;
+    if (!Number.isFinite(p.worldX) || !Number.isFinite(p.worldY)) {
+      return p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80;
+    }
+    const d = Math.hypot(p.worldX - cameraX, p.worldY - cameraY);
+    return d < worldCullBase + 240;
+  });
   state.particles = state.particles.filter((p) => p.life > 0);
   state.damageTexts = state.damageTexts.filter((t) => t.life > 0);
 

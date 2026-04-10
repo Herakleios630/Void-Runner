@@ -308,11 +308,13 @@
       const effectiveY = Number.isFinite(cameraY) ? cameraY : (cameraSystem && typeof cameraSystem.getY === "function" ? cameraSystem.getY() : 0);
       const centerCx = chunkCoord(effectiveX);
       const centerCy = chunkCoord(effectiveY);
+      const speed = state.ship ? Math.hypot(state.ship.vx || 0, state.ship.vy || 0) : 0;
+      const dynamicRadius = Math.max(radius, speed > 420 ? 2 : radius);
 
       pruneChunkEncounterCache(centerCx, centerCy);
 
-      for (let y = centerCy - radius; y <= centerCy + radius; y += 1) {
-        for (let x = centerCx - radius; x <= centerCx + radius; x += 1) {
+      for (let y = centerCy - dynamicRadius; y <= centerCy + dynamicRadius; y += 1) {
+        for (let x = centerCx - dynamicRadius; x <= centerCx + dynamicRadius; x += 1) {
           spawnChunkEncounter(x, y);
         }
       }
@@ -416,9 +418,12 @@
       const dy = toY - fromY;
       const len = Math.hypot(dx, dy) || 1;
       const radius = damageType === "energy" ? 8 : damageType === "explosive" ? 9 : damageType === "acid" ? 7.5 : 7;
+      const worldFrom = screenToWorld(fromX, fromY);
       state.bossProjectiles.push({
         x: fromX,
         y: fromY,
+        worldX: worldFrom.x,
+        worldY: worldFrom.y,
         vx: (dx / len) * speed,
         vy: (dy / len) * speed,
         life: 6,
@@ -431,6 +436,7 @@
     function spawnEnemyFlameBurst(fromX, fromY, toX, toY) {
       const aim = Math.atan2(toY - fromY, toX - fromX);
       const pellets = 5;
+      const worldFrom = screenToWorld(fromX, fromY);
       for (let i = 0; i < pellets; i += 1) {
         const t = pellets <= 1 ? 0 : i / (pellets - 1);
         const spread = (t - 0.5) * 0.55;
@@ -440,6 +446,8 @@
         state.plasmaBursts.push({
           x: fromX,
           y: fromY,
+          worldX: worldFrom.x,
+          worldY: worldFrom.y,
           vx: Math.cos(a) * speed,
           vy: Math.sin(a) * speed,
           life,
