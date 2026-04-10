@@ -70,7 +70,10 @@ const { createInputSystem } = window.VoidInput;
 const BALANCE_PROFILE_ID = "medium"; // safe | medium | chaos
 const BALANCE_TUNING_TRACKS = ["cannon", "laser", "rocket", "drill", "plasma", "shield"];
 const WORLD_CHUNK_SIZE = 960;
-const WORLD_SEED = 20260410;
+
+function generateWorldSeed() {
+  return 100000 + Math.floor(Math.random() * 900000000);
+}
 
 const state = {
   running: false,
@@ -80,6 +83,7 @@ const state = {
   showShipInfo: false,
   selectedDifficultyId: "medium",
   selectedShipId: "scout",
+  worldSeed: generateWorldSeed(),
   desktopAutoFire: false,
   mouseInCanvas: false,
   joystickPointerId: null,
@@ -873,7 +877,7 @@ const menus = createMenuSystem({
 
 const worldSystem = createWorldSystem({
   chunkSize: WORLD_CHUNK_SIZE,
-  worldSeed: WORLD_SEED,
+  worldSeed: state.worldSeed,
   activeRadius: 2,
   unloadRadius: 3,
 });
@@ -1144,6 +1148,7 @@ function resetGame() {
   state.bossRewardPending = false;
   state.pendingBossRewards = [];
   state.bossLootTaken = {};
+  worldSystem.setSeed(state.worldSeed);
   state.world.playerX = 0;
   state.world.playerY = 0;
   cameraSystem.snap(0, 0);
@@ -1811,6 +1816,29 @@ function update(dt, now) {
   cameraSystem.update(dt, state.world.playerX, state.world.playerY);
   worldSystem.update(cameraSystem.getX(), cameraSystem.getY());
 
+  const collidablePlanets = worldSystem.getCollidablePlanets();
+  if (collidablePlanets.length > 0) {
+    for (const planet of collidablePlanets) {
+      const p = cameraSystem.worldToScreen(planet.x, planet.y, planet.parallax || 1, WORLD.width, WORLD.height);
+      const d = Math.hypot(ship.x - p.x, ship.y - p.y);
+      const hitR = (planet.radius || 0) + ship.radius - 2;
+      if (d < hitR) {
+        if (!hitShip("physical", 2)) {
+          setGameOver();
+          return;
+        }
+
+        const nx = d > 0 ? (ship.x - p.x) / d : 1;
+        const ny = d > 0 ? (ship.y - p.y) / d : 0;
+        const pushOut = Math.max(0, hitR - d) + 1;
+        ship.x += nx * pushOut;
+        ship.y += ny * pushOut;
+        ship.vx += nx * 80;
+        ship.vy += ny * 80;
+      }
+    }
+  }
+
   const desktopAutoShooting = state.desktopAutoFire && !IS_COARSE_POINTER && state.mouseInCanvas;
   if (input.shooting || desktopAutoShooting) weapons.shootAtCursor(now);
 
@@ -2281,12 +2309,38 @@ function gameLoop(nowMs) {
   requestAnimationFrame(gameLoop);
 }
 function handleOverlayAction(actionNode) {
+  if (actionNode.dataset.action === "seed-randomize") {
+    state.worldSeed = generateWorldSeed();
+    menus.showDifficultySelectionMenu();
+    return;
+  }
+
+  if (actionNode.dataset.action === "seed-apply") {
+    const seedInputEl = overlay.querySelector("#worldSeedInput");
+    if (seedInputEl) {
+      const parsed = Number.parseInt(seedInputEl.value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        state.worldSeed = parsed;
+      }
+    }
+    menus.showDifficultySelectionMenu();
+    return;
+  }
+
   if (actionNode.dataset.action === "restart") {
     menus.showDifficultySelectionMenu();
     return;
   }
 
   if (actionNode.dataset.action === "select-difficulty") {
+    const seedInputEl = overlay.querySelector("#worldSeedInput");
+    if (seedInputEl) {
+      const parsed = Number.parseInt(seedInputEl.value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        state.worldSeed = parsed;
+      }
+    }
+
     const difficultyId = actionNode.dataset.difficultyId;
     if (difficultyId && DIFFICULTY_MODES[difficultyId]) {
       state.selectedDifficultyId = difficultyId;
