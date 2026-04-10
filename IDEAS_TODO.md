@@ -16,6 +16,12 @@
 
 ## Future Features
 - [ ] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
+- [ ] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX
+- [ ] Comets: seltene Stern-Orbits mit sehr grossem Radius (deutlich langsamer fern der Sonne)
+- [ ] Rogue planet / brown dwarf (sehr selten): grosses, dunkles Objekt ohne lokales Planetensystem
+- [ ] Derelict stations / Wracks als erkundbare Background-Makroobjekte (optional mit Loot-Events)
+- [ ] Ion storms / plasma clouds als raeumliche Wetterzonen (Sicht + Projektilverhalten beeinflussen)
+- [ ] Debris streams / meteor showers als gerichtete, temporale Flow-Objekte
 - [ ] High-detail procedural planets (bands, craters, rim light, atmospheric scattering)
 - [ ] Rich nebula rendering (layered noise, color palettes, wisps, depth fade)
 - [ ] Improved starfield quality (twinkle variance, color temperature, density falloff)
