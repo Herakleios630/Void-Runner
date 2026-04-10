@@ -20,10 +20,12 @@
 - [ ] Distortion VFX/accretion ring for black holes
 - [ ] Optional: black hole influence on player ship (tunable)
 - [x] Space stations orbiting planets
+- [x] No free-floating station hazards (stations only as planet orbits)
 - [x] Asteroid groups/fields as clustered encounters
 - [x] Dense asteroid belts around planets
 - [x] Enemy aggro + pursuit tuning pass (engage radius, follow persistence, speed)
 - [x] Planet depth readability via atmosphere thickness by layer
+- [x] Early-game level-up pacing retune (avoid immediate level-up)
 
 ## Notes
 - Add new ideas as checklist items here so they can be tracked and checked off.

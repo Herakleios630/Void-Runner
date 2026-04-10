@@ -239,15 +239,11 @@
       const side = Math.sin(angle) < 0 ? "top" : "bottom";
       const r = rand();
 
-      if (r < 0.36) {
+      if (r < 0.46) {
         const radius = 270 + rand() * 150;
         const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
         const x = focusX + Math.cos(angle) * spawnRing;
         const y = focusY + Math.sin(angle) * spawnRing;
-        const pullDx = focusX - x;
-        const pullDy = focusY - y;
-        const pullLen = Math.hypot(pullDx, pullDy) || 1;
-        const speed = WORLD.scrollSpeed * (0.84 + rand() * 0.22) * difficulty.edgeSpeedMult;
         const spawnWorld = screenToWorld(x, y);
         state.edgeHazards.push({
           kind: "planet",
@@ -266,41 +262,10 @@
         return;
       }
 
-      if (r < 0.72) {
-        const radius = 48 + rand() * 22;
-        const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
-        const x = focusX + Math.cos(angle) * spawnRing;
-        const y = focusY + Math.sin(angle) * spawnRing;
-        const pullDx = focusX - x;
-        const pullDy = focusY - y;
-        const pullLen = Math.hypot(pullDx, pullDy) || 1;
-        const speed = WORLD.scrollSpeed * (1 + rand() * 0.25) * difficulty.edgeSpeedMult;
-        const spawnWorld = screenToWorld(x, y);
-        state.edgeHazards.push({
-          kind: "station",
-          side,
-          x,
-          y,
-          worldX: spawnWorld.x,
-          worldY: spawnWorld.y,
-          radius,
-          hitRadius: radius * 0.66,
-          vx: 0,
-          vy: 0,
-          angle: rand() * Math.PI * 2,
-          spin: (rand() - 0.5) * 0.4,
-        });
-        return;
-      }
-
       const radius = 44 + rand() * 18;
       const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
       const x = focusX + Math.cos(angle) * spawnRing;
       const y = focusY + Math.sin(angle) * spawnRing;
-      const pullDx = focusX - x;
-      const pullDy = focusY - y;
-      const pullLen = Math.hypot(pullDx, pullDy) || 1;
-      const speed = WORLD.scrollSpeed * (0.92 + rand() * 0.22) * difficulty.edgeSpeedMult;
       const spawnWorld = screenToWorld(x, y);
       state.edgeHazards.push({
         kind: "blackHole",
