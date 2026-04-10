@@ -95,7 +95,7 @@
             hit.ref.hp -= dmg.damage;
             addDamageText(ox + dx * hit.t, oy + dy * hit.t - 6, dmg.damage, dmg.crit);
             if (hit.ref.hp <= 0) {
-              destroyObject(hit.ref, "shot");
+              destroyObject(hit.ref, DESTROY_REASONS.SHOT);
             }
           }
           createExplosion(ox + dx * hit.t, oy + dy * hit.t, hitColor, 6);
@@ -365,7 +365,7 @@
         if (d > radius + obj.collisionRadius) continue;
 
         if (obj.destructible || obj.type === "boulder" || obj.type === "debris") {
-          destroyObject(obj, "rocket");
+          destroyObject(obj, DESTROY_REASONS.ROCKET);
         }
       }
 

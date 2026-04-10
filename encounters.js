@@ -14,6 +14,7 @@
     } = deps;
 
     const spawnedChunkEncounters = new Set();
+    const chunkEventMap = new Map(); // key -> zone label for debug overlay
     let gameplaySunsCache = [];
     let gameplaySunsCacheUntil = -1;
 
@@ -102,6 +103,9 @@
 
     function getGameplaySystemInfluence(worldX, worldY) {
       if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return 0;
+      if (worldSystem && typeof worldSystem.estimateSystemInfluence === "function") {
+        return worldSystem.estimateSystemInfluence(worldX, worldY);
+      }
       const suns = getGameplaySuns();
       if (suns.length <= 0) return 0;
       const chunkSize = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
@@ -136,6 +140,23 @@
         collisionScale: 0.7,
         corners: 0,
       };
+    }
+
+    function selectEnemyWeapon(type, rand) {
+      const r = rand();
+      if (type === "miniAlien") {
+        if (r < 0.36) return "acid";
+        if (r < 0.62) return "laser";
+        if (r < 0.84) return "plasma";
+        return "cannon";
+      }
+      if (type === "alienShip") {
+        if (r < 0.42) return "laser";
+        if (r < 0.7) return "rocket";
+        if (r < 0.87) return "acid";
+        return "cannon";
+      }
+      return null;
     }
 
     function createObjectBlueprint(rand, difficulty, options = {}) {
@@ -289,6 +310,7 @@
       const rockProfile = blueprint.corners > 0 ? Array.from({ length: blueprint.corners }, () => 0.72 + rand() * 0.26) : null;
       const spawnWorld = screenToWorld(spawnX, spawnY);
       const spawnInfluence = getGameplaySystemInfluence(spawnWorld.x, spawnWorld.y);
+      const enemyWeapon = isEnemy ? selectEnemyWeapon(blueprint.type, rand) : null;
 
       state.objects.push({
         id: nextObjectId(),
@@ -320,6 +342,7 @@
         cruiseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 150 : 130) * difficulty.objectSpeedMult : 0,
         preferredRange: isEnemy ? (blueprint.type === "alienShip" ? 220 + rand() * 80 : 150 + rand() * 70) : 0,
         nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
+        enemyWeapon,
         systemInfluence: spawnInfluence,
       });
     }
@@ -338,6 +361,7 @@
       const chunkCenterY = (cy + 0.5) * chunkSize;
       const centerInfluence = getGameplaySystemInfluence(chunkCenterX, chunkCenterY);
       const insideSystem = centerInfluence >= 0.33;
+      const interstellarZone = centerInfluence < 0.2;
       const baseObjects = insideSystem ? (difficulty.id === "hard" ? 2 : 1) : (difficulty.id === "hard" ? 3 : 2);
       const bonusObjects = Math.floor(distancePressure * (insideSystem ? 1 : (difficulty.id === "hard" ? 2 : 1)));
       const objectCount = 1 + Math.floor(rand() * (baseObjects + bonusObjects));
@@ -351,7 +375,7 @@
       }
 
       // Clustered asteroid fields are intentionally outside gameplay solar systems.
-      if (centerInfluence < 0.2 && rand() < 0.74) {
+      if (interstellarZone && rand() < 0.74) {
         const clusterCount = 1 + Math.floor(rand() * (distancePressure > 0.7 ? 2 : 1));
         for (let c = 0; c < clusterCount; c += 1) {
           const baseAngle = spawnAngleFromSides(rand);
@@ -364,6 +388,109 @@
               forceType: forcedType,
               angle: baseAngle + (rand() - 0.5) * 0.6,
               spawnPadding: 55 + rand() * 130,
+            });
+          }
+        }
+      }
+
+      // Debris clusters in interstellar space improve readability between major systems.
+      if (interstellarZone && rand() < 0.58) {
+        const debrisClusterCount = 1 + Math.floor(rand() * (distancePressure > 0.85 ? 2 : 1));
+        for (let c = 0; c < debrisClusterCount; c += 1) {
+          const baseAngle = spawnAngleFromSides(rand);
+          const debrisCount = 3 + Math.floor(rand() * 4);
+          for (let i = 0; i < debrisCount; i += 1) {
+            const pick = rand();
+            const forcedType = pick < 0.66 ? "debris" : (pick < 0.88 ? "smallRock" : "mediumRock");
+            spawnObject({
+              rand,
+              forceType: forcedType,
+              angle: baseAngle + (rand() - 0.5) * 0.42,
+              spawnPadding: 68 + rand() * 150,
+            });
+          }
+        }
+      }
+
+      // Interstellar patrols: small enemy wings that occasionally roam between systems.
+      const patrolChance = 0.16 + Math.min(0.14, distancePressure * 0.08) + (difficulty.id === "hard" ? 0.05 : 0);
+      if (interstellarZone && rand() < patrolChance) {
+        const patrolSize = difficulty.id === "hard"
+          ? (2 + Math.floor(rand() * 3))
+          : (difficulty.id === "easy" ? (2 + Math.floor(rand() * 2)) : (2 + Math.floor(rand() * 2)));
+        const patrolAngle = spawnAngleFromSides(rand);
+        for (let i = 0; i < patrolSize; i += 1) {
+          spawnObject({
+            rand,
+            systemInterior: true,
+            angle: patrolAngle + (rand() - 0.5) * 0.35,
+            spawnPadding: 72 + rand() * 120,
+          });
+        }
+      }
+
+      // Record zone type for debug overlay.
+      if (!chunkEventMap.has(key)) {
+        chunkEventMap.set(key, insideSystem ? "system" : (interstellarZone ? "interstellar" : "edge"));
+      }
+
+      // Dynamic interstellar events: mutually exclusive, ~30% of interstellar chunks.
+      // Ambush: coordinated multi-wing enemy attack, pre-aggroed.
+      // Drift-Feld: dense isotropic debris cloud - tight ring for visible density.
+      // Schrottspur: linear wreckage trail along a clear axis.
+      if (interstellarZone && rand() < 0.30) {
+        const eventType = rand();
+        if (eventType < 0.33) {
+          // Ambush: 2-3 attack wings converging from different angles, enemies pre-aggroed.
+          chunkEventMap.set(key, "ambush");
+          const sideCount = 2 + Math.floor(rand() * 2);
+          const baseAngle = rand() * Math.PI * 2;
+          for (let s = 0; s < sideCount; s += 1) {
+            const wingAngle = baseAngle + (s / sideCount) * Math.PI * 2;
+            const wingSize = difficulty.id === "hard" ? (3 + Math.floor(rand() * 3)) : (2 + Math.floor(rand() * 2));
+            for (let i = 0; i < wingSize; i += 1) {
+              spawnObject({
+                rand,
+                systemInterior: true,
+                angle: wingAngle + (rand() - 0.5) * 0.28,
+                spawnPadding: 80 + rand() * 100,
+              });
+              // Pre-aggro the last spawned enemy so the ambush is immediately active.
+              const spawned = state.objects[state.objects.length - 1];
+              if (spawned && spawned.enemy) {
+                spawned.aggroLocked = true;
+                spawned.aggroUntil = state.time + 30;
+              }
+            }
+          }
+        } else if (eventType < 0.66) {
+          // Drift-Feld: dense debris cloud - tight uniform ring so it reads as a wall.
+          chunkEventMap.set(key, "drift");
+          const fieldSize = 20 + Math.floor(rand() * 12);
+          for (let i = 0; i < fieldSize; i += 1) {
+            const pick = rand();
+            const forcedType = pick < 0.5 ? "smallRock" : (pick < 0.78 ? "debris" : "mediumRock");
+            spawnObject({
+              rand,
+              forceType: forcedType,
+              angle: rand() * Math.PI * 2,
+              spawnPadding: -20 + rand() * 80,
+            });
+          }
+        } else {
+          // Schrottspur: dense debris along one straight axis - clearly directional.
+          chunkEventMap.set(key, "trail");
+          const trailAngle = rand() * Math.PI;
+          const trailCount = 14 + Math.floor(rand() * 8);
+          for (let i = 0; i < trailCount; i += 1) {
+            const side = rand() < 0.5 ? 0 : Math.PI;
+            const pick = rand();
+            const forcedType = pick < 0.70 ? "debris" : (pick < 0.88 ? "smallRock" : "mediumRock");
+            spawnObject({
+              rand,
+              forceType: forcedType,
+              angle: trailAngle + side + (rand() - 0.5) * 0.18,
+              spawnPadding: -10 + rand() * 160,
             });
           }
         }
@@ -384,6 +511,7 @@
         }
         if (Math.abs(x - centerCx) > keepRadius || Math.abs(y - centerCy) > keepRadius) {
           spawnedChunkEncounters.delete(key);
+          chunkEventMap.delete(key);
         }
       }
     }
@@ -544,10 +672,12 @@
       });
     }
 
-    function spawnEnemyFlameBurst(fromX, fromY, toX, toY) {
+    function spawnEnemyFlameBurst(fromX, fromY, toX, toY, options = {}) {
       const aim = Math.atan2(toY - fromY, toX - fromX);
       const pellets = 5;
       const worldFrom = screenToWorld(fromX, fromY);
+      const damageType = options.damageType || "heat";
+      const damage = Number.isFinite(options.damage) ? options.damage : 1;
       for (let i = 0; i < pellets; i += 1) {
         const t = pellets <= 1 ? 0 : i / (pellets - 1);
         const spread = (t - 0.5) * 0.55;
@@ -565,7 +695,8 @@
           maxLife: life,
           radius: 2.8 + Math.random() * 1,
           growth: 34 + Math.random() * 24,
-          damage: 1,
+          damage,
+          damageType,
           rangeLeft: 115,
           hitDone: false,
           enemyOwned: true,
@@ -668,6 +799,8 @@
       }
     }
 
+    function getChunkEventMap() { return chunkEventMap; }
+
     return {
       spawnObject,
       spawnChunksAround,
@@ -676,6 +809,7 @@
       spawnEnemyProjectile,
       spawnEnemyFlameBurst,
       updateBoss,
+      getChunkEventMap,
     };
   }
 
