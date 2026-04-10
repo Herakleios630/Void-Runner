@@ -60,6 +60,16 @@
       };
     }
 
+    function worldToScreen(worldX, worldY) {
+      if (cameraSystem && typeof cameraSystem.worldToScreen === "function") {
+        return cameraSystem.worldToScreen(worldX, worldY, 1, WORLD.width, WORLD.height);
+      }
+      return {
+        x: worldX,
+        y: worldY,
+      };
+    }
+
     function createObjectBlueprint(rand, difficulty) {
       const alienShipChance = difficulty.id === "easy" ? 0.06 : difficulty.id === "hard" ? 0.18 : 0.12;
       const miniAlienChance = difficulty.id === "easy" ? 0.11 : difficulty.id === "hard" ? 0.15 : 0.13;
@@ -335,11 +345,19 @@
 
       const thresholds = [0.72 + Math.random() * 0.08, 0.38 + Math.random() * 0.12].sort((a, b) => b - a);
 
+      const shipWX = state.ship && Number.isFinite(state.ship.worldX) ? state.ship.worldX : 0;
+      const shipWY = state.ship && Number.isFinite(state.ship.worldY) ? state.ship.worldY : 0;
+      const startWorldX = shipWX + WORLD.width * 0.56;
+      const startWorldY = shipWY;
+      const startScreen = worldToScreen(startWorldX, startWorldY);
+
       state.boss = {
         variant,
-        x: WORLD.width * 0.78,
-        y: WORLD.height * 0.5,
-        baseY: WORLD.height * 0.5,
+        x: startScreen.x,
+        y: startScreen.y,
+        worldX: startWorldX,
+        worldY: startWorldY,
+        anchorWorldX: startWorldX,
         size,
         collisionRadius: size * 0.72,
         hp,
@@ -363,7 +381,7 @@
       state.bossActive = true;
       state.bossProjectiles = [];
 
-      createExplosion(state.boss.x, state.boss.y, "#ff8e4f", 42);
+      createExplosion(startScreen.x, startScreen.y, "#ff8e4f", 42);
       playSfx("levelup");
     }
 
@@ -391,12 +409,17 @@
 
       const yOffset = (Math.random() - 0.5) * boss.size * 0.95;
       const rockProfile = corners > 0 ? Array.from({ length: corners }, () => 0.72 + Math.random() * 0.26) : null;
+      const worldX = boss.worldX - boss.size * 0.42;
+      const worldY = boss.worldY + yOffset;
+      const screenPos = worldToScreen(worldX, worldY);
 
       state.objects.push({
         id: nextObjectId(),
         type,
-        x: boss.x - boss.size * 0.42,
-        y: boss.y + yOffset,
+        x: screenPos.x,
+        y: screenPos.y,
+        worldX,
+        worldY,
         vx: -(210 + Math.random() * 110),
         vy: (Math.random() - 0.5) * 95,
         size,
@@ -485,16 +508,26 @@
         }
       }
 
+      const shipWX = state.ship && Number.isFinite(state.ship.worldX) ? state.ship.worldX : 0;
+      const shipWY = state.ship && Number.isFinite(state.ship.worldY) ? state.ship.worldY : 0;
+      const anchorX = shipWX + WORLD.width * 0.56;
+
       if (boss.variant === "tentacle") {
-        boss.y = boss.baseY + Math.sin(boss.phase * 1.4) * 125;
+        boss.worldX = anchorX + Math.sin(boss.phase * 0.42) * 36;
+        boss.worldY = shipWY + Math.sin(boss.phase * 1.4) * 125;
       } else if (boss.variant === "warship") {
-        boss.y = boss.baseY + Math.sin(boss.phase * 0.85) * 170;
+        boss.worldX = anchorX + Math.sin(boss.phase * 0.32) * 54;
+        boss.worldY = shipWY + Math.sin(boss.phase * 0.85) * 170;
       } else {
-        boss.y = boss.baseY + Math.sin(boss.phase * 1.1) * 95;
-        boss.x = WORLD.width * 0.8 + Math.sin(boss.phase * 0.45) * 30;
+        boss.worldX = anchorX + Math.sin(boss.phase * 0.45) * 30;
+        boss.worldY = shipWY + Math.sin(boss.phase * 1.1) * 95;
       }
 
-      boss.y = Math.max(boss.size * 0.65, Math.min(WORLD.height - boss.size * 0.65, boss.y));
+      const maxOffsetY = WORLD.height * 0.42;
+      boss.worldY = Math.max(shipWY - maxOffsetY, Math.min(shipWY + maxOffsetY, boss.worldY));
+      const bossScreen = worldToScreen(boss.worldX, boss.worldY);
+      boss.x = bossScreen.x;
+      boss.y = bossScreen.y;
 
       if (boss.hasPhases) {
         const hpPct = boss.hp / boss.maxHp;
@@ -521,16 +554,24 @@
         const damageType = boss.variant === "warship" ? "physical" : "energy";
         for (let i = 0; i < shots; i += 1) {
           const spread = (i - (shots - 1) / 2) * 0.24;
-          const dx = state.ship.x - boss.x;
-          const dy = state.ship.y - boss.y;
+          const dx = shipWX - boss.worldX;
+          const dy = shipWY - boss.worldY;
           const a = Math.atan2(dy, dx) + spread;
           const speed = (boss.variant === "warship" ? 300 : 260) * difficulty.enemyProjectileSpeedMult;
           const bossDamage = 2;
+
+          const muzzleWorldX = boss.worldX - boss.size * 0.38;
+          const muzzleWorldY = boss.worldY;
+          const muzzleScreen = worldToScreen(muzzleWorldX, muzzleWorldY);
+          const targetWorldX = muzzleWorldX + Math.cos(a) * 100;
+          const targetWorldY = muzzleWorldY + Math.sin(a) * 100;
+          const targetScreen = worldToScreen(targetWorldX, targetWorldY);
+
           spawnEnemyProjectile(
-            boss.x - boss.size * 0.38,
-            boss.y,
-            boss.x - boss.size * 0.38 + Math.cos(a) * 100,
-            boss.y + Math.sin(a) * 100,
+            muzzleScreen.x,
+            muzzleScreen.y,
+            targetScreen.x,
+            targetScreen.y,
             speed,
             damageType,
             bossDamage,
