@@ -11,6 +11,7 @@
       gainB: null,
       transitionMs: 1800,
       pauseToken: null,
+      pendingCategory: null,
       tracks: {
         menu: [
           "assets/music/Title.mp3",
@@ -119,11 +120,18 @@
       crossfadeTo(nextPath, category);
     });
 
-    to.el.play().catch(() => {
-      // autoplay may still be blocked until user gesture
-    });
     audio.music.active = to;
     audio.music.category = category;
+    to.el.play().then(() => {
+      audio.music.pendingCategory = null;
+    }).catch(() => {
+      // autoplay may still be blocked until user gesture
+      stopTrack(to);
+      if (audio.music.active === to) {
+        audio.music.active = null;
+      }
+      audio.music.pendingCategory = category;
+    });
   }
 
   function playMusicCategory(category) {
@@ -149,10 +157,21 @@
   }
 
   function initAudio() {
-    if (audio.ctx) return;
+    if (audio.ctx) {
+      if (audio.ctx.state === "suspended") {
+        audio.ctx.resume();
+      }
+      if (!audio.music.active && (audio.music.pendingCategory || audio.music.category)) {
+        playMusicCategory(audio.music.pendingCategory || audio.music.category);
+      }
+      return;
+    }
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     audio.ctx = new Ctx();
+    if (!audio.music.active && (audio.music.pendingCategory || audio.music.category)) {
+      playMusicCategory(audio.music.pendingCategory || audio.music.category);
+    }
   }
 
   function playTone(freq, duration, type = "sine", volume = 0.03, slide = 1) {
