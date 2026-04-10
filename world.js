@@ -67,6 +67,7 @@
       ? Math.max(0.5, Math.min(2.2, visualTuning.nebulaDensity))
       : 1;
     const TOXIC_NEBULA_CHANCE = 0.34;
+    const WORMHOLE_CHANCE = 0.2;
 
     const activeChunks = new Map();
 
@@ -118,6 +119,59 @@
         x: anchor.x,
         y: anchor.y,
         priority: anchor.priority,
+      };
+    }
+
+    function getWormholeLinkForCell(cellX, cellY) {
+      const sourceAnchor = getSystemAnchorForCell(cellX, cellY);
+      if (!sourceAnchor) return null;
+
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x739ac521);
+      const rand = createRng(seed);
+      if (rand() >= WORMHOLE_CHANCE) return null;
+
+      let targetCellX = cellX;
+      let targetCellY = cellY;
+      let targetAnchor = null;
+
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const jumpCells = 3 + Math.floor(rand() * 10);
+        const angle = rand() * Math.PI * 2;
+        const tx = cellX + Math.round(Math.cos(angle) * jumpCells);
+        const ty = cellY + Math.round(Math.sin(angle) * jumpCells);
+        if (tx === cellX && ty === cellY) continue;
+
+        const candidate = getSystemAnchorForCell(tx, ty);
+        if (!candidate) continue;
+
+        targetCellX = tx;
+        targetCellY = ty;
+        targetAnchor = candidate;
+        break;
+      }
+
+      if (!targetAnchor) return null;
+
+      const sourcePortalSeed = mixSeed(cellX, cellY, worldSeed ^ 0x1185d3b9);
+      const targetPortalSeed = mixSeed(targetCellX, targetCellY, worldSeed ^ 0x42cb6a17);
+      const sourceRand = createRng(sourcePortalSeed);
+      const targetRand = createRng(targetPortalSeed);
+
+      const sourceAngle = sourceRand() * Math.PI * 2;
+      const targetAngle = targetRand() * Math.PI * 2;
+      const sourceRadius = chunkSize * (1.5 + sourceRand() * 1.25);
+      const targetRadius = chunkSize * (1.5 + targetRand() * 1.25);
+
+      return {
+        sourceCellX: cellX,
+        sourceCellY: cellY,
+        targetCellX,
+        targetCellY,
+        sourceX: sourceAnchor.x + Math.cos(sourceAngle) * sourceRadius,
+        sourceY: sourceAnchor.y + Math.sin(sourceAngle) * sourceRadius,
+        targetX: targetAnchor.x + Math.cos(targetAngle) * targetRadius,
+        targetY: targetAnchor.y + Math.sin(targetAngle) * targetRadius,
+        pairId: `${cellX},${cellY}->${targetCellX},${targetCellY}`,
       };
     }
 
@@ -355,6 +409,8 @@
       const hasPlanetarySystem = Boolean(sunAnchor);
 
       if (hasPlanetarySystem) {
+        const systemCellX = Math.floor(cx / systemCellChunks);
+        const systemCellY = Math.floor(cy / systemCellChunks);
         const systemSeed = mixSeed(cx, cy, worldSeed ^ 0x51e9a3d7);
         const systemRand = createRng(systemSeed);
         const sunProfile = chooseSunProfile(systemRand);
@@ -394,6 +450,22 @@
             scannerJam,
             colorA: `rgba(122, 245, 136, ${(0.12 + scannerJam * 0.16).toFixed(3)})`,
             colorB: `rgba(36, 122, 58, ${(0.04 + scannerJam * 0.1).toFixed(3)})`,
+          });
+        }
+
+        const wormholeLink = getWormholeLinkForCell(systemCellX, systemCellY);
+        if (wormholeLink) {
+          background.push({
+            type: "wormholePortal",
+            drawOrder: 8,
+            parallax: SYSTEM_PARALLAX,
+            x: wormholeLink.sourceX,
+            y: wormholeLink.sourceY,
+            radius: chunkSize * 0.032,
+            hitRadius: chunkSize * 0.024,
+            linkedX: wormholeLink.targetX,
+            linkedY: wormholeLink.targetY,
+            pairId: wormholeLink.pairId,
           });
         }
 
@@ -872,6 +944,27 @@
       return out;
     }
 
+    function getWormholePortals() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "wormholePortal") continue;
+          out.push({
+            type: "wormholePortal",
+            x: bg.x,
+            y: bg.y,
+            parallax: bg.parallax || 1,
+            radius: bg.radius || 24,
+            hitRadius: bg.hitRadius || bg.radius || 20,
+            linkedX: bg.linkedX,
+            linkedY: bg.linkedY,
+            pairId: bg.pairId || "pair",
+          });
+        }
+      }
+      return out;
+    }
+
     function setSeed(nextSeed) {
       const numeric = Number.parseInt(nextSeed, 10);
       if (!Number.isFinite(numeric)) return false;
@@ -938,6 +1031,7 @@
       getOrbitalStations,
       getSolarHeatZones,
       getToxicNebulaZones,
+      getWormholePortals,
       resolveOrbitPosition,
       estimateSystemInfluence,
       getActiveChunkRects,

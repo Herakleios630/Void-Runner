@@ -397,6 +397,35 @@
           continue;
         }
 
+        if (obj.type === "wormholePortal") {
+          const pulse = 0.62 + 0.38 * Math.sin(state.time * 2.2 + stableUnitFrom2(worldX, worldY, radius || 1) * Math.PI * 2);
+          const outer = (obj.radius || 26) * (1.1 + pulse * 0.14);
+          const inner = (obj.radius || 26) * 0.48;
+
+          const halo = ctx.createRadialGradient(pos.x, pos.y, inner * 0.6, pos.x, pos.y, outer * 1.3);
+          halo.addColorStop(0, "rgba(188, 224, 255, 0.92)");
+          halo.addColorStop(0.35, "rgba(116, 162, 255, 0.66)");
+          halo.addColorStop(1, "rgba(10, 22, 58, 0)");
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, outer * 1.3, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(168, 216, 255, ${(0.55 + pulse * 0.35).toFixed(3)})`;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, outer, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = `rgba(86, 136, 255, ${(0.45 + pulse * 0.28).toFixed(3)})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, inner, 0, Math.PI * 2);
+          ctx.stroke();
+
+          continue;
+        }
+
         if (obj.type === "galaxy") {
           ctx.save();
           ctx.translate(pos.x, pos.y);

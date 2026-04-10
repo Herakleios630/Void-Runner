@@ -1256,6 +1256,7 @@ function resetGame() {
     scannerJam: 0,
     scannerHarden: 0,
     acidResist: 0,
+    wormholeCooldownUntil: 0,
     radius: 17,
     thrust: 420 * model.speed,
     maxSpeed: 560 * model.speed,
@@ -1839,6 +1840,10 @@ function update(dt, now) {
   }
 
   if (!hazardInteractions.handleShipToxicNebula(ship, dt)) {
+    return;
+  }
+
+  if (!hazardInteractions.handleShipWormholes(ship, cameraX, cameraY)) {
     return;
   }
 
