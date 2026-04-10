@@ -39,6 +39,8 @@
 - [ ] Derelict stations / Wracks als erkundbare Background-Makroobjekte (optional mit Loot-Events)
 - [ ] Ion storms / plasma clouds als raeumliche Wetterzonen (Sicht + Projektilverhalten beeinflussen)
 - [ ] Debris streams / meteor showers als gerichtete, temporale Flow-Objekte
+- [ ] Spezial-Asteroiden: Gold-Asteroid (Bonus-Punkte)
+- [ ] Spezial-Asteroiden: Eisen-Asteroid (garantierter Panzerungs-Drop)
 - [ ] High-detail procedural planets (bands, craters, rim light, atmospheric scattering)
 - [ ] Rich nebula rendering (layered noise, color palettes, wisps, depth fade)
 - [ ] Improved starfield quality (twinkle variance, color temperature, density falloff)

@@ -28,9 +28,15 @@
       const bgObjects = worldSystem.getBackgroundObjects();
       if (!bgObjects || bgObjects.length === 0) return;
 
+      const farStarCap = IS_COARSE_POINTER ? 220 : 360;
       const deepStarCap = IS_COARSE_POINTER ? 220 : 360;
+      const midStarCap = IS_COARSE_POINTER ? 140 : 240;
+      const nearStarCap = IS_COARSE_POINTER ? 90 : 160;
       const beltRockCap = IS_COARSE_POINTER ? 180 : 300;
+      let farStarCount = 0;
       let deepStarCount = 0;
+      let midStarCount = 0;
+      let nearStarCount = 0;
       let beltRockCount = 0;
 
       for (const obj of bgObjects) {
@@ -46,9 +52,21 @@
         if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
 
         if (obj.type === "star") {
+          if (obj.layer === "far") {
+            farStarCount += 1;
+            if (farStarCount > farStarCap) continue;
+          }
           if (obj.layer === "deep") {
             deepStarCount += 1;
             if (deepStarCount > deepStarCap) continue;
+          }
+          if (obj.layer === "mid") {
+            midStarCount += 1;
+            if (midStarCount > midStarCap) continue;
+          }
+          if (obj.layer === "near") {
+            nearStarCount += 1;
+            if (nearStarCount > nearStarCap) continue;
           }
           if (pos.x < -6 || pos.x > WORLD.width + 6 || pos.y < -6 || pos.y > WORLD.height + 6) continue;
           ctx.fillStyle = `rgba(186, 220, 255, ${obj.alpha || 0.5})`;
