@@ -102,7 +102,6 @@ const state = {
   lastLevelKills: 0,
   levelUpPending: false,
   objects: [],
-  edgeHazards: [],
   bullets: [],
   laserBeams: [],
   plasmaBursts: [],
@@ -117,8 +116,6 @@ const state = {
   objectIdCounter: 1,
   lastSpawn: 0,
   spawnInterval: 0.8,
-  lastEdgeSpawn: 0,
-  edgeSpawnInterval: 2.2,
   lastShot: 0,
   shotCooldown: 0.14,
   bossActive: false,
@@ -764,7 +761,7 @@ function getSprite(key) {
 }
 
 function scaleEntitiesToWorld(sx, sy) {
-  for (const collection of [state.objects, state.edgeHazards, state.bullets, state.laserBeams, state.plasmaBursts, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.damageTexts, state.stars]) {
+  for (const collection of [state.objects, state.bullets, state.laserBeams, state.plasmaBursts, state.missiles, state.pickups, state.bossProjectiles, state.particles, state.damageTexts, state.stars]) {
     for (const entity of collection) {
       if (typeof entity.x === "number") entity.x *= sx;
       if (typeof entity.y === "number") entity.y *= sy;
@@ -1103,7 +1100,6 @@ function resetGame() {
   state.lastLevelTime = 0;
   state.lastLevelKills = 0;
   state.objects = [];
-  state.edgeHazards = [];
   state.bullets = [];
   state.laserBeams = [];
   state.plasmaBursts = [];
@@ -1115,7 +1111,6 @@ function resetGame() {
   state.pendingUpgradeOptions = [];
   state.objectIdCounter = 1;
   state.lastSpawn = 0;
-  state.lastEdgeSpawn = 0;
   state.lastShot = 0;
   state.shotCooldown = 0.14;
   state.bossActive = false;
@@ -1896,8 +1891,6 @@ function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
     state.lastSpawn = dynamicSpawn * maxSpawnsPerFrame;
   }
 
-  // Legacy edge hazards disabled for core free-flight orbit systems.
-  state.lastEdgeSpawn = 0;
 }
 
 function update(dt, now) {
@@ -2118,51 +2111,6 @@ function update(dt, now) {
     }
   }
 
-  for (const hazard of state.edgeHazards) {
-    if (!Number.isFinite(hazard.worldX) || !Number.isFinite(hazard.worldY)) {
-      const worldPos = screenToWorld(hazard.x, hazard.y);
-      hazard.worldX = worldPos.x;
-      hazard.worldY = worldPos.y;
-    }
-
-    hazard.worldX += hazard.vx * dt;
-    hazard.worldY += (hazard.vy || 0) * dt;
-
-    const hazardScreen = projectWorldToScreen(hazard.worldX, hazard.worldY, cameraX, cameraY);
-    hazard.x = hazardScreen.x;
-    hazard.y = hazardScreen.y;
-    hazard.angle += hazard.spin * dt;
-
-    const dShip = Math.hypot((hazard.worldX || hazard.x) - (ship.worldX || ship.x), (hazard.worldY || hazard.y) - (ship.worldY || ship.y));
-    if (dShip < hazard.hitRadius + ship.radius - 3) {
-      const hazardDamage = hazard.kind === "blackHole" || hazard.kind === "planet" ? 2 : 1;
-      if (!hitShip("physical", hazardDamage)) {
-        createExplosion(ship.x, ship.y, "#71f4ff", 28);
-        setGameOver();
-        return;
-      }
-    }
-
-    if (hazard.kind === "blackHole") {
-      const pullX = (hazard.worldX || hazard.x) - (ship.worldX || ship.x);
-      const pullY = (hazard.worldY || hazard.y) - (ship.worldY || ship.y);
-      const distSq = pullX * pullX + pullY * pullY;
-      const minDistSq = Math.max(900, distSq);
-      const force = 32000 / minDistSq;
-      ship.vx += (pullX / Math.sqrt(minDistSq)) * force * dt;
-      ship.vy += (pullY / Math.sqrt(minDistSq)) * force * dt;
-    }
-  }
-
-  for (const obj of state.objects) {
-    for (const hazard of state.edgeHazards) {
-      if (circlesOverlapWorldEntities(hazard, hazard.hitRadius - 2, obj, obj.collisionRadius)) {
-        destroyObject(obj, "hazard");
-        break;
-      }
-    }
-  }
-
   for (const bullet of state.bullets) {
     ensureEntityWorldPosition(bullet);
     bullet.worldX += bullet.vx * dt;
@@ -2188,16 +2136,6 @@ function update(dt, now) {
       }
       continue;
     }
-
-    let blockedByHazard = false;
-    for (const hazard of state.edgeHazards) {
-      if (circlesOverlapWorldEntities(hazard, hazard.hitRadius, bulletW, bullet.radius)) {
-        tryRicochetBullet(bullet, entityWorldX(bullet) - entityWorldX(hazard), entityWorldY(bullet) - entityWorldY(hazard), bullet.x, bullet.y);
-        blockedByHazard = true;
-        break;
-      }
-    }
-    if (blockedByHazard) continue;
 
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
@@ -2271,14 +2209,6 @@ function update(dt, now) {
     }
 
     if (exploded) continue;
-
-    for (const hazard of state.edgeHazards) {
-      if (circlesOverlapWorldEntities(hazard, hazard.hitRadius, missileW, missile.radius)) {
-        weapons.explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
-        missile.life = 0;
-        break;
-      }
-    }
   }
 
   for (const proj of state.bossProjectiles) {
@@ -2419,16 +2349,6 @@ function update(dt, now) {
         }
       }
 
-      if (!burst.hitDone) {
-        for (const hazard of state.edgeHazards) {
-          const d = Math.hypot(hazard.x - burst.x, hazard.y - burst.y);
-          if (d < hazard.hitRadius + burst.radius) {
-            burst.hitDone = true;
-            burst.life = 0;
-            break;
-          }
-        }
-      }
     }
   }
 
@@ -2440,13 +2360,6 @@ function update(dt, now) {
     }
     const d = Math.hypot(o.worldX - cameraX, o.worldY - cameraY);
     return d < worldCullBase + o.size * 2;
-  });
-  state.edgeHazards = state.edgeHazards.filter((h) => {
-    if (!Number.isFinite(h.worldX) || !Number.isFinite(h.worldY)) {
-      return h.x > -h.radius * 1.3 && h.x < WORLD.width + h.radius * 1.3 && h.y > -h.radius * 1.3 && h.y < WORLD.height + h.radius * 1.3;
-    }
-    const d = Math.hypot(h.worldX - cameraX, h.worldY - cameraY);
-    return d < worldCullBase + h.radius * 1.4;
   });
   state.bullets = state.bullets.filter((b) => {
     if (b.life <= 0) return false;

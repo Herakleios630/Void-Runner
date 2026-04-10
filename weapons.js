@@ -67,12 +67,6 @@
         }
       }
 
-      for (const hazard of state.edgeHazards) {
-        const t = rayCircleHitDistance(ox, oy, dx, dy, hazard.x, hazard.y, hazard.hitRadius, maxRange);
-        if (t === null) continue;
-        candidates.push({ t, kind: "hazard", ref: hazard });
-      }
-
       candidates.sort((a, b) => a.t - b.t);
 
       let remainingPierce = state.weapon.laserPierce;

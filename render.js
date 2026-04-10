@@ -15,6 +15,9 @@
 
     const BURN_VFX_MAX_SPRITES = 80;
     let burnVfxSpriteCount = 0;
+    let miniMapRefreshAt = 0;
+    let miniMapPlanetPoints = [];
+    let miniMapBeltRings = [];
 
     function resolveBgWorldPosition(obj, atTime) {
       if (worldSystem && typeof worldSystem.resolveOrbitPosition === "function") {
@@ -593,78 +596,6 @@
       }
     }
 
-    function drawEdgeHazard(hazard) {
-      const spriteKey =
-        hazard.kind === "planet"
-          ? "hazard.planet"
-          : hazard.kind === "station"
-            ? "hazard.station"
-            : "hazard.blackHole";
-      const sprite = getSprite(spriteKey);
-
-      ctx.save();
-      ctx.translate(hazard.x, hazard.y);
-      ctx.rotate(hazard.angle);
-
-      if (sprite) {
-        const d = hazard.radius * 2;
-        ctx.drawImage(sprite, -d * 0.5, -d * 0.5, d, d);
-      } else if (hazard.kind === "planet") {
-        const grad = ctx.createRadialGradient(-hazard.radius * 0.28, -hazard.radius * 0.28, hazard.radius * 0.1, 0, 0, hazard.radius);
-        grad.addColorStop(0, "#9ec8ff");
-        grad.addColorStop(0.45, "#4a74a8");
-        grad.addColorStop(1, "#1a2a44");
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = "rgba(214, 236, 255, 0.22)";
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius * 0.83, -1.8, 1.2);
-        ctx.stroke();
-      } else if (hazard.kind === "station") {
-        ctx.fillStyle = "#96a9c3";
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius * 0.38, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = "#74839a";
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius * 0.72, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle = "#5a667c";
-        ctx.fillRect(-hazard.radius * 0.95, -8, hazard.radius * 1.9, 16);
-        ctx.fillRect(-8, -hazard.radius * 0.95, 16, hazard.radius * 1.9);
-      } else {
-        const rim = ctx.createRadialGradient(0, 0, hazard.radius * 0.25, 0, 0, hazard.radius);
-        rim.addColorStop(0, "rgba(10, 12, 22, 0.98)");
-        rim.addColorStop(0.45, "rgba(26, 28, 52, 0.95)");
-        rim.addColorStop(0.72, "rgba(86, 70, 168, 0.62)");
-        rim.addColorStop(1, "rgba(10, 8, 24, 0)");
-        ctx.fillStyle = rim;
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = "rgba(138, 120, 226, 0.45)";
-        ctx.lineWidth = Math.max(2, hazard.radius * 0.08);
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius * 0.62, 0.18, Math.PI * 1.88);
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(4, 6, 14, 0.96)";
-        ctx.beginPath();
-        ctx.arc(0, 0, hazard.radius * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.restore();
-    }
-
     function drawBoss() {
       if (!state.bossActive || !state.boss) return;
 
@@ -838,13 +769,6 @@
         ctx.stroke();
       }
 
-      ctx.strokeStyle = "rgba(255, 94, 121, 0.95)";
-      for (const hazard of state.edgeHazards) {
-        ctx.beginPath();
-        ctx.arc(hazard.x, hazard.y, hazard.hitRadius, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
       ctx.strokeStyle = "rgba(255, 218, 107, 0.95)";
       for (const bullet of state.bullets) {
         ctx.beginPath();
@@ -880,13 +804,138 @@
       ctx.restore();
     }
 
+    function refreshMiniMapCache() {
+      if (!state.ship || state.time < miniMapRefreshAt) return;
+      miniMapRefreshAt = state.time + 0.24;
+
+      const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
+      const planetPoints = [];
+      const beltRings = new Map();
+
+      for (const obj of bgObjects) {
+        if (obj.type === "planet") {
+          const pos = resolveBgWorldPosition(obj, state.time);
+          planetPoints.push({
+            x: pos.x,
+            y: pos.y,
+            isMoon: Boolean(obj.isMoon),
+          });
+          continue;
+        }
+
+        if (obj.type !== "beltRock" || !Number.isFinite(obj.orbitRadius)) continue;
+
+        let centerX = Number.isFinite(obj.orbitCx) ? obj.orbitCx : obj.x;
+        let centerY = Number.isFinite(obj.orbitCy) ? obj.orbitCy : obj.y;
+        if (Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy)) {
+          const parentCenter = resolveLocalOrbitCenter(obj, state.time);
+          centerX = parentCenter.x;
+          centerY = parentCenter.y;
+        }
+
+        const key = `${Math.round(centerX / 16)}:${Math.round(centerY / 16)}:${Math.round(obj.orbitRadius / 8)}`;
+        if (!beltRings.has(key)) {
+          beltRings.set(key, {
+            x: centerX,
+            y: centerY,
+            radius: obj.orbitRadius,
+          });
+        }
+      }
+
+      miniMapPlanetPoints = planetPoints.slice(0, 240);
+      miniMapBeltRings = Array.from(beltRings.values()).slice(0, 40);
+    }
+
+    function drawMiniMap() {
+      if (!state.running || !state.ship) return;
+
+      refreshMiniMapCache();
+
+      const chunkSpan = 6;
+      const worldSpan = Math.max((worldSystem.chunkSize || 960) * chunkSpan, 4200);
+      const halfSpan = worldSpan * 0.5;
+      const centerX = state.ship.worldX || 0;
+      const centerY = state.ship.worldY || 0;
+
+      const mapSize = Math.max(140, Math.min(220, Math.floor(Math.min(WORLD.width, WORLD.height) * 0.29)));
+      const padding = 14;
+      const mapX = WORLD.width - mapSize - padding;
+      const mapY = padding;
+
+      function project(wx, wy) {
+        const nx = (wx - (centerX - halfSpan)) / worldSpan;
+        const ny = (wy - (centerY - halfSpan)) / worldSpan;
+        return {
+          x: mapX + nx * mapSize,
+          y: mapY + ny * mapSize,
+          visible: nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1,
+        };
+      }
+
+      ctx.save();
+      ctx.fillStyle = "rgba(7, 14, 26, 0.78)";
+      ctx.fillRect(mapX, mapY, mapSize, mapSize);
+
+      ctx.strokeStyle = "rgba(122, 170, 215, 0.72)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(mapX + 0.5, mapY + 0.5, mapSize - 1, mapSize - 1);
+
+      ctx.strokeStyle = "rgba(122, 170, 215, 0.2)";
+      ctx.beginPath();
+      ctx.moveTo(mapX + mapSize * 0.5, mapY);
+      ctx.lineTo(mapX + mapSize * 0.5, mapY + mapSize);
+      ctx.moveTo(mapX, mapY + mapSize * 0.5);
+      ctx.lineTo(mapX + mapSize, mapY + mapSize * 0.5);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.rect(mapX + 1, mapY + 1, mapSize - 2, mapSize - 2);
+      ctx.clip();
+
+      ctx.strokeStyle = "rgba(132, 170, 214, 0.35)";
+      ctx.lineWidth = 1;
+      for (const ring of miniMapBeltRings) {
+        const center = project(ring.x, ring.y);
+        const radiusPx = (ring.radius / worldSpan) * mapSize;
+        if (radiusPx < 2 || radiusPx > mapSize * 1.2) continue;
+        if (center.x + radiusPx < mapX || center.x - radiusPx > mapX + mapSize || center.y + radiusPx < mapY || center.y - radiusPx > mapY + mapSize) {
+          continue;
+        }
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radiusPx, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      for (const planet of miniMapPlanetPoints) {
+        const p = project(planet.x, planet.y);
+        if (!p.visible) continue;
+        const r = planet.isMoon ? 1.5 : 2.2;
+        ctx.fillStyle = planet.isMoon ? "rgba(140, 175, 215, 0.82)" : "rgba(214, 232, 255, 0.96)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "rgba(255, 164, 108, 0.98)";
+      ctx.beginPath();
+      ctx.arc(mapX + mapSize * 0.5, mapY + mapSize * 0.5, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      ctx.fillStyle = "rgba(210, 231, 255, 0.9)";
+      ctx.font = "11px Trebuchet MS";
+      ctx.fillText("MAP", mapX + 7, mapY + 13);
+      ctx.fillText(`${chunkSpan} chunks`, mapX + mapSize - 60, mapY + 13);
+    }
+
     function draw() {
       burnVfxSpriteCount = 0;
       ctx.clearRect(0, 0, WORLD.width, WORLD.height);
 
       drawParallaxBackground();
 
-      for (const hazard of state.edgeHazards) drawEdgeHazard(hazard);
       for (const obj of state.objects) drawObject(obj);
 
       ctx.fillStyle = "#ffda6b";
@@ -1057,6 +1106,7 @@
         ctx.restore();
       }
 
+      drawMiniMap();
       drawDebugOverlay();
       drawMobileCanvasHud();
     }
