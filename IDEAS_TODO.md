@@ -64,6 +64,7 @@
 - [ ] UI: kleines Missions-Widget (oben links), minimales Logging bei Fortschritt
 - [ ] Fail-Conditions je Missionstyp (optional): Zeitlimit, Trefferlimit, no-hit Bonus
 - [ ] Missionen nur ausserhalb von Level-Up/Boss-Choice Overlays aktualisieren
+- [ ] I-Bildschirm: erweiterte Run-Statistiken (erkundete Chunks, Kills pro Gegnertyp, Top-Speed, Distanz)
 - [ ] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX
 - [ ] Comets: seltene Stern-Orbits mit sehr grossem Radius (deutlich langsamer fern der Sonne)
 - [ ] Rogue planet / brown dwarf (sehr selten): grosses, dunkles Objekt ohne lokales Planetensystem
