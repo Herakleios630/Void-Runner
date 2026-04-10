@@ -349,8 +349,10 @@
       let bestDistSq = Infinity;
       for (const obj of state.objects) {
         if (obj.hp <= 0) continue;
-        const dx = obj.x - x;
-        const dy = obj.y - y;
+        const tx = Number.isFinite(obj.worldX) ? obj.worldX : obj.x;
+        const ty = Number.isFinite(obj.worldY) ? obj.worldY : obj.y;
+        const dx = tx - x;
+        const dy = ty - y;
         const dSq = dx * dx + dy * dy;
         if (dSq < bestDistSq) {
           bestDistSq = dSq;

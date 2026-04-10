@@ -1972,13 +1972,14 @@ function update(dt, now) {
       }
     }
 
-    if (obj.y < obj.size || obj.y > WORLD.height - obj.size) {
-      obj.vy *= -1;
-    }
-
-    if (!obj.passed && obj.x + obj.size < ship.x) {
+    if (!obj.passed) {
+      const dxPass = (obj.worldX || obj.x) - (ship.worldX || ship.x);
+      const dyPass = (obj.worldY || obj.y) - (ship.worldY || ship.y);
+      const distPass = Math.hypot(dxPass, dyPass);
+      if (distPass > Math.max(WORLD.width, WORLD.height) * 1.05) {
       obj.passed = true;
-      addPoints(obj.destructible ? 2 : 4);
+        addPoints(obj.destructible ? 1 : 2);
+      }
     }
 
     if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
@@ -2015,7 +2016,9 @@ function update(dt, now) {
       }
     }
 
-    const d = Math.hypot(obj.x - ship.x, obj.y - ship.y);
+    const dxShip = (obj.worldX || obj.x) - (ship.worldX || ship.x);
+    const dyShip = (obj.worldY || obj.y) - (ship.worldY || ship.y);
+    const d = Math.hypot(dxShip, dyShip);
     if (d < obj.collisionRadius + ship.radius - 2) {
       if (tryUseDrillOnObject(obj)) {
         continue;
@@ -2047,7 +2050,7 @@ function update(dt, now) {
       }
     }
 
-    const dBoss = Math.hypot(state.boss.x - ship.x, state.boss.y - ship.y);
+    const dBoss = Math.hypot((state.boss.worldX || state.boss.x) - (ship.worldX || ship.x), (state.boss.worldY || state.boss.y) - (ship.worldY || ship.y));
     if (dBoss < state.boss.collisionRadius + ship.radius - 3) {
       if (!hitShip("physical", 2)) {
         setGameOver();
@@ -2071,7 +2074,7 @@ function update(dt, now) {
     hazard.y = hazardScreen.y;
     hazard.angle += hazard.spin * dt;
 
-    const dShip = Math.hypot(hazard.x - ship.x, hazard.y - ship.y);
+    const dShip = Math.hypot((hazard.worldX || hazard.x) - (ship.worldX || ship.x), (hazard.worldY || hazard.y) - (ship.worldY || ship.y));
     if (dShip < hazard.hitRadius + ship.radius - 3) {
       const hazardDamage = hazard.kind === "blackHole" || hazard.kind === "planet" ? 2 : 1;
       if (!hitShip("physical", hazardDamage)) {
@@ -2082,8 +2085,8 @@ function update(dt, now) {
     }
 
     if (hazard.kind === "blackHole") {
-      const pullX = hazard.x - ship.x;
-      const pullY = hazard.y - ship.y;
+      const pullX = (hazard.worldX || hazard.x) - (ship.worldX || ship.x);
+      const pullY = (hazard.worldY || hazard.y) - (ship.worldY || ship.y);
       const distSq = pullX * pullX + pullY * pullY;
       const minDistSq = Math.max(900, distSq);
       const force = 32000 / minDistSq;
@@ -2109,20 +2112,6 @@ function update(dt, now) {
     bullet.life -= dt;
 
     if (bullet.life <= 0) continue;
-
-    if (bullet.x <= bullet.radius) {
-      tryRicochetBullet(bullet, 1, 0, bullet.radius, bullet.y);
-    } else if (bullet.x >= WORLD.width - bullet.radius) {
-      tryRicochetBullet(bullet, -1, 0, WORLD.width - bullet.radius, bullet.y);
-    }
-
-    if (bullet.life <= 0) continue;
-
-    if (bullet.y <= bullet.radius) {
-      tryRicochetBullet(bullet, 0, 1, bullet.x, bullet.radius);
-    } else if (bullet.y >= WORLD.height - bullet.radius) {
-      tryRicochetBullet(bullet, 0, -1, bullet.x, WORLD.height - bullet.radius);
-    }
   }
 
   for (const bullet of state.bullets) {
@@ -2172,7 +2161,7 @@ function update(dt, now) {
       missile.acquireIn = (missile.acquireIn || 0) - dt;
       let target = missile.targetRef;
       if (!target || target.hp <= 0 || missile.acquireIn <= 0) {
-        target = weapons.findNearestObject(missile.x, missile.y);
+        target = weapons.findNearestObject(missile.worldX, missile.worldY);
         missile.targetRef = target || null;
         missile.acquireIn = 0.12 + Math.random() * 0.08;
       }
