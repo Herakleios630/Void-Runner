@@ -45,7 +45,7 @@
 - [x] Discovery pacing: Systemabstand adaptiv je Region (Core dichter, aussen weiter auseinander)
 - [x] Interstellar Space: Zwischenraeume mit random Asteroidenfeldern, Truemmerclustern und Alien-Patrouillen beleben
 - [x] Interstellar Space: dynamische Ereignisse zwischen Systemen (Ambush, Drift-Feld, Schrottspur)
-- [ ] Giftige Nebelwolken: raeumliche Gefahrenzonen mit DoT/Scanner-Sichtreduktion
+- [x] Giftige Nebelwolken: raeumliche Gefahrenzonen mit DoT/Scanner-Sichtreduktion
 - [ ] Giftige Nebelwolken: klare Telegraphs/Farbcode und Gegenmassnahmen als spaetere Upgrades
 - [ ] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
 - [ ] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung

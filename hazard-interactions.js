@@ -75,9 +75,43 @@
       return true;
     }
 
+    function handleShipToxicNebula(ship, dt = 1 / 60) {
+      const zones = typeof worldSystem.getToxicNebulaZones === "function" ? worldSystem.getToxicNebulaZones() : [];
+      let strongestJam = 0;
+
+      for (const zone of zones) {
+        const p = cameraSystem.worldToScreen(zone.x, zone.y, zone.parallax || 1, WORLD.width, WORLD.height);
+        const d = Math.hypot(ship.x - p.x, ship.y - p.y);
+        const hitRadius = (zone.hazardRadius || 160) + ship.radius * 0.35;
+        if (d > hitRadius) continue;
+
+        const t = Math.max(0, 1 - d / hitRadius);
+        const jam = (zone.scannerJam || 0.4) * (0.35 + t * 0.75);
+        if (jam > strongestJam) strongestJam = jam;
+
+        const dps = (zone.toxicDps || 0.45) * (0.55 + t * 0.9);
+        applyAcidToShip(0.34, dps);
+
+        if (!ship.nextToxicNebulaFxAt || state.time >= ship.nextToxicNebulaFxAt) {
+          ship.nextToxicNebulaFxAt = state.time + 0.2;
+          createExplosion(ship.x, ship.y, "#86f79d", 3);
+        }
+      }
+
+      const currentJam = ship.scannerJam || 0;
+      if (strongestJam > currentJam) {
+        ship.scannerJam = strongestJam;
+      } else {
+        ship.scannerJam = Math.max(0, currentJam - dt * 0.9);
+      }
+
+      return true;
+    }
+
     return {
       handleShipStructureCollisions,
       handleShipSolarHeat,
+      handleShipToxicNebula,
     };
   }
 
