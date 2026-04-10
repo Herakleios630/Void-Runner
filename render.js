@@ -1518,6 +1518,10 @@
       ctx.font = "11px Trebuchet MS";
       ctx.fillText("MAP", mapX + 7, mapY + 13);
       ctx.fillText(`${chunkSpan} chunks`, mapX + mapSize - 60, mapY + 13);
+      if (miniMapToxicZones.length > 0) {
+        ctx.fillStyle = "rgba(142, 255, 164, 0.85)";
+        ctx.fillText("TOXIC=GREEN", mapX + 7, mapY + mapSize - 8);
+      }
       if (scannerJam > 0.25) {
         ctx.fillStyle = "rgba(170, 244, 170, 0.9)";
         ctx.fillText("SCANNER JAM", mapX + 42, mapY + mapSize - 8);
@@ -1728,6 +1732,21 @@
       }
 
       drawMiniMap();
+
+      if (state.ship && (state.ship.scannerJam || 0) > 0.12) {
+        const jam = Math.max(0, Math.min(0.9, state.ship.scannerJam || 0));
+        ctx.save();
+        ctx.fillStyle = `rgba(44, 120, 52, ${(0.05 + jam * 0.12).toFixed(3)})`;
+        ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+        ctx.strokeStyle = `rgba(152, 255, 168, ${(0.16 + jam * 0.24).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(16, 16, WORLD.width - 32, WORLD.height - 32);
+        ctx.fillStyle = "rgba(205, 255, 214, 0.95)";
+        ctx.font = "bold 15px Trebuchet MS";
+        ctx.fillText("TOXIC CLOUD", 24, WORLD.height - 22);
+        ctx.restore();
+      }
+
       drawDebugOverlay();
       drawMobileCanvasHud();
     }

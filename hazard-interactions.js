@@ -86,7 +86,8 @@
         if (d > hitRadius) continue;
 
         const t = Math.max(0, 1 - d / hitRadius);
-        const jam = (zone.scannerJam || 0.4) * (0.35 + t * 0.75);
+        const scannerHarden = Math.max(0, Math.min(0.85, ship.scannerHarden || 0));
+        const jam = (zone.scannerJam || 0.4) * (0.35 + t * 0.75) * (1 - scannerHarden);
         if (jam > strongestJam) strongestJam = jam;
 
         const dps = (zone.toxicDps || 0.45) * (0.55 + t * 0.9);
