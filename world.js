@@ -55,9 +55,9 @@
     let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
     const activeRadius = typeof options.activeRadius === "number" ? options.activeRadius : 2;
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
-    const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 260;
-    const maxOrbitShells = 8;
-    const systemCellChunks = 6;
+    const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 320;
+    const maxOrbitShells = 5;
+    const systemCellChunks = 8;
 
     const activeChunks = new Map();
 
@@ -74,7 +74,7 @@
       const cellY = Math.floor(cy / systemCellChunks);
       const seed = mixSeed(cellX, cellY, worldSeed ^ 0x5f74a1c3);
       const rand = createRng(seed);
-      const margin = 1;
+      const margin = 2;
       const span = Math.max(1, systemCellChunks - margin * 2);
       const localCx = margin + Math.floor(rand() * span);
       const localCy = margin + Math.floor(rand() * span);
@@ -227,10 +227,10 @@
         const sun = {
           type: "sun",
           drawOrder: 0,
-          parallax: 0.18,
+          parallax: 0.4,
           x: sunAnchor.x,
           y: sunAnchor.y,
-          radius: chunkSize * (0.34 + rand() * 0.52),
+          radius: chunkSize * (0.4 + rand() * 0.6),
           heatRadius: chunkSize * (0.22 + rand() * 0.12),
           heatDps: 0.45 + rand() * 0.25,
           coreColor: sunProfile.core,
@@ -238,6 +238,8 @@
           spectralClass: sunProfile.cls,
         };
         background.push(sun);
+
+        const maxSystemRadius = chunkSize * (systemCellChunks * 0.26);
 
         const orbitDirection = rand() < 0.5 ? -1 : 1;
         const orbitalSpeedNearSun = 0.095 + rand() * 0.05;
@@ -333,9 +335,10 @@
           }
         }
 
-        const orbitSlotCount = 4 + Math.floor(rand() * (maxOrbitShells - 3));
-        const shellBase = Math.max(orbitUnit * 2.2, sun.radius * 1.35);
-        const shellSpacing = orbitUnit * 1.15;
+        const orbitSlotCount = 3 + Math.floor(rand() * (maxOrbitShells - 2));
+        const shellBase = Math.max(orbitUnit * 2, sun.radius * 1.25);
+        const shellSpacing = orbitUnit * 1.4;
+        const minOrbitLaneGap = chunkSize;
         let lastPlanetRadius = 0;
         let lastOrbitRadius = shellBase - shellSpacing;
         for (let slot = 0; slot < orbitSlotCount; slot += 1) {
@@ -344,9 +347,15 @@
           const predictedPlanetRadius = (nearPlanePlanet
             ? chunkSize * (0.11 + rand() * 0.28)
             : chunkSize * (0.04 + rand() * 0.11)) * (0.82 + shellScale * 0.35);
-          const minimumGap = (lastPlanetRadius + predictedPlanetRadius) * 1.5;
+          const minimumGap = Math.max(
+            (lastPlanetRadius + predictedPlanetRadius) * 1.5,
+            minOrbitLaneGap + lastPlanetRadius + predictedPlanetRadius,
+          );
           const shellRadius = shellBase + slot * shellSpacing;
           const orbitRadius = Math.max(shellRadius, lastOrbitRadius + minimumGap);
+          if (orbitRadius + predictedPlanetRadius > maxSystemRadius) {
+            break;
+          }
           const slotAngle = rand() * Math.PI * 2;
           const beltInsteadOfPlanet = slot > 0 && rand() < (slot >= 2 ? 0.38 : 0.26);
 
