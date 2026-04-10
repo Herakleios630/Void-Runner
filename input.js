@@ -16,6 +16,7 @@
       onToggleMusic,
       onToggleHitboxes,
       onDebugBoostWeapons,
+      onDebugTeleportNearWormhole,
       onToggleBalancePanel,
       isBalancePanelVisible,
       onBalanceTrackPrev,
@@ -185,6 +186,10 @@
           onDebugBoostWeapons();
         }
 
+        if (event.code === "KeyT" && !event.repeat) {
+          onDebugTeleportNearWormhole();
+        }
+
         if (event.code === "KeyB" && !event.repeat) {
           onToggleBalancePanel();
         }
@@ -215,7 +220,7 @@
           onToggleShipInfo();
         }
 
-        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyN", "KeyO", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyN", "KeyO", "KeyT", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
           event.preventDefault();
         }
 

@@ -1447,6 +1447,14 @@
       const mapX = WORLD.width - mapSize - padding;
       const mapY = padding;
       const scannerJam = Math.max(0, Math.min(0.85, (state.ship && state.ship.scannerJam) || 0));
+      const chunkSize = worldSystem.chunkSize || 960;
+      const playerChunkX = Math.floor(centerX / chunkSize);
+      const playerChunkY = Math.floor(centerY / chunkSize);
+
+      function signedChunk(value) {
+        if (value > 0) return `+${value}`;
+        return `${value}`;
+      }
 
       function project(wx, wy) {
         const nx = (wx - (centerX - halfSpan)) / worldSpan;
@@ -1583,6 +1591,10 @@
       ctx.font = "11px Trebuchet MS";
       ctx.fillText("MAP", mapX + 7, mapY + 13);
       ctx.fillText(`${chunkSpan} chunks`, mapX + mapSize - 60, mapY + 13);
+      ctx.fillStyle = "rgba(184, 214, 255, 0.9)";
+      ctx.fillText(`CHUNK ${signedChunk(playerChunkX)}, ${signedChunk(playerChunkY)}`, mapX + 7, mapY + 27);
+      ctx.fillStyle = "rgba(144, 186, 236, 0.82)";
+      ctx.fillText("SPAWN ORIGIN: 0,0", mapX + 7, mapY + 41);
       if (miniMapToxicZones.length > 0) {
         ctx.fillStyle = "rgba(142, 255, 164, 0.85)";
         ctx.fillText("TOXIC=GREEN", mapX + 7, mapY + mapSize - 8);
