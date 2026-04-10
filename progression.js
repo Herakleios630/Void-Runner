@@ -310,6 +310,7 @@
       state.nextLevelScore += state.levelCost;
       state.lastLevelScore = state.score;
       state.lastLevelTime = state.time;
+      state.lastLevelKills = state.kills;
       state.levelUpPending = false;
       state.pauseReason = "running";
       state.running = true;

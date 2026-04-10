@@ -10,6 +10,9 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - Soundeffekte (Laser, Explosionen, Schild, Level-Up, Upgrades)
 - Grosse Planeten-Segmente tauchen oben/unten auf und verdecken einen grossen Teil des Spielfelds
 - Mehr Rand-Gefahren: Raumstationen und Schwarze Loecher
+- Gegner- und Gefahren-Spawns kommen aus allen Richtungen (360 Grad)
+- Gegner, Randgefahren und Pickups nutzen intern bereits Weltkoordinaten (mit Kamera-Projektion auf den Screen)
+- Das Schiff nutzt ebenfalls Weltkoordinaten als Basis; Screen-Position wird ueber die Kamera projiziert
 - Unzerstoerbare Hindernisse: Weltraumschrott, grosse Felsbrocken
 - Zerstoerbare Ziele: kleine Felsen, mittelgrosse Asteroiden, Mini-Aliens
 - Mittelgrosse Asteroiden zerbrechen beim Abschuss in 3-5 zerstoerbare Splitter
@@ -89,6 +92,7 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 
 ## Neues Balancing
 - Spawn-Dichte skaliert mit Level (mehr Druck in hohen Stufen)
+- Beim Betreten neuer Chunks loesen zusaetzliche Spawn-Bursts aus (seed-basiert)
 - Punkte skalieren mit Level und bleiben nach Objektklasse unterschiedlich
 - Upgrade-Auswahl nutzt Gewichtung: starke Upgrades sind seltener frueh, spaeter etwas wahrscheinlicher
 

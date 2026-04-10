@@ -97,6 +97,7 @@ const state = {
   nextLevelScore: 100,
   lastLevelScore: 0,
   lastLevelTime: 0,
+  lastLevelKills: 0,
   levelUpPending: false,
   objects: [],
   edgeHazards: [],
@@ -886,6 +887,9 @@ const cameraSystem = createCameraSystem({
   x: 0,
   y: 0,
   smoothing: 0.12,
+  lookAheadSeconds: 0.11,
+  lookAheadMax: 80,
+  lookSmoothing: 0.16,
 });
 
 function reloadRate() {
@@ -1014,23 +1018,29 @@ function computeNextLevelCost() {
   const difficulty = selectedDifficultyMode();
   const elapsed = Math.max(1, state.time - state.lastLevelTime);
   const gained = Math.max(1, state.score - state.lastLevelScore);
+  const killsGained = Math.max(0, state.kills - (state.lastLevelKills || 0));
   const scoreRate = gained / elapsed;
+  const killsPerMinute = (killsGained / elapsed) * 60;
+  const passiveRate = (2.4 + state.level * 0.14) * passiveScoreMultiplier();
+  const combatRate = Math.max(0, scoreRate - passiveRate);
 
   // Hard mode spawns more score opportunities, easy mode fewer.
-  // Scale required XP so all difficulties stay in roughly the same 30-60s per level band.
+  // Scale required XP so all difficulties stay in a comparable level-time corridor.
   const difficultyLevelScale = Math.max(0.86, Math.min(1.18, (difficulty.spawnRateMult * 0.7) + (difficulty.edgeSpawnRateMult * 0.3)));
   const adjustedRate = scoreRate * difficultyLevelScale;
 
-  // Good runs should level closer to 30s, slower runs closer to 60s.
-  const perf = Math.max(0, Math.min(2.2, adjustedRate / 28));
-  const targetSeconds = Math.max(30, Math.min(60, 60 - perf * 15));
+  // Kill-heavy play targets 30-60s; passive/low-kill windows may stretch toward 90s.
+  const killPressure = clamp(killsPerMinute / 7.5, 0, 2.2);
+  const combatPressure = clamp(combatRate / 24, 0, 2.2);
+  const pressure = clamp(killPressure * 0.68 + combatPressure * 0.32, 0, 2.2);
+  const targetSeconds = clamp(90 - pressure * 27, 30, 90);
 
   const dynamicCost = Math.floor(adjustedRate * targetSeconds);
   const exponentialBase = Math.floor(state.levelCost * 1.14 + 18);
-  const blended = Math.floor(exponentialBase * 0.45 + dynamicCost * 0.55);
+  const blended = Math.floor(exponentialBase * 0.38 + dynamicCost * 0.62);
 
   const minBound = state.levelCost + 14;
-  const maxBound = Math.floor(state.levelCost * 1.45 + 90);
+  const maxBound = Math.floor(state.levelCost * 1.5 + 120);
   return Math.max(minBound, Math.min(maxBound, blended));
 }
 
@@ -1043,6 +1053,8 @@ const encounters = createEncountersSystem({
   createExplosion,
   playSfx,
   nextObjectId,
+  worldSystem,
+  cameraSystem,
 });
 
 const progression = createProgressionSystem({
@@ -1126,6 +1138,7 @@ function resetGame() {
   state.nextLevelScore = 100;
   state.lastLevelScore = 0;
   state.lastLevelTime = 0;
+  state.lastLevelKills = 0;
   state.objects = [];
   state.edgeHazards = [];
   state.bullets = [];
@@ -1149,6 +1162,7 @@ function resetGame() {
   state.pendingBossRewards = [];
   state.bossLootTaken = {};
   worldSystem.setSeed(state.worldSeed);
+  encounters.resetChunkSpawns();
   state.world.playerX = 0;
   state.world.playerY = 0;
   cameraSystem.snap(0, 0);
@@ -1214,8 +1228,10 @@ function resetGame() {
   }
 
   state.ship = {
-    x: WORLD.width * 0.2,
+    x: WORLD.width * 0.5,
     y: WORLD.height * 0.5,
+    worldX: 0,
+    worldY: 0,
     vx: 0,
     vy: 0,
     hp: maxHp,
@@ -1227,6 +1243,11 @@ function resetGame() {
     thrust: 420 * model.speed,
     maxSpeed: 560 * model.speed,
   };
+
+  state.world.playerX = state.ship.worldX;
+  state.world.playerY = state.ship.worldY;
+  cameraSystem.snap(state.ship.worldX, state.ship.worldY);
+  worldSystem.update(state.ship.worldX, state.ship.worldY);
 
   state.stars = Array.from({ length: 120 }, () => ({
     x: Math.random() * WORLD.width,
@@ -1412,6 +1433,20 @@ function nextObjectId() {
   return id;
 }
 
+function screenToWorld(screenX, screenY) {
+  return {
+    x: cameraSystem.getX() + (screenX - WORLD.width * 0.5),
+    y: cameraSystem.getY() + (screenY - WORLD.height * 0.5),
+  };
+}
+
+function projectWorldToScreen(worldX, worldY, cameraX, cameraY) {
+  return {
+    x: worldX - cameraX + WORLD.width * 0.5,
+    y: worldY - cameraY + WORLD.height * 0.5,
+  };
+}
+
 
 function createExplosion(x, y, color, amount = 18) {
   for (let i = 0; i < amount; i += 1) {
@@ -1442,6 +1477,8 @@ function spawnRockFragments(parent) {
       type: "rockShard",
       x: parent.x + Math.cos(angle) * 4,
       y: parent.y + Math.sin(angle) * 4,
+      worldX: Number.isFinite(parent.worldX) ? parent.worldX + Math.cos(angle) * 4 : undefined,
+      worldY: Number.isFinite(parent.worldY) ? parent.worldY + Math.sin(angle) * 4 : undefined,
       vx: parent.vx + Math.cos(angle) * speed,
       vy: parent.vy + Math.sin(angle) * speed,
       size,
@@ -1469,6 +1506,8 @@ function maybeSpawnArmorPickup(obj) {
     type: "armor",
     x: obj.x,
     y: obj.y,
+    worldX: Number.isFinite(obj.worldX) ? obj.worldX : undefined,
+    worldY: Number.isFinite(obj.worldY) ? obj.worldY : undefined,
     vx: obj.vx * 0.35,
     vy: obj.vy * 0.35,
     radius: 10,
@@ -1484,17 +1523,23 @@ function destroyObject(obj, reason) {
 
   if (reason === "shot") {
     state.kills += 1;
-    if (obj.type === "miniAlien") addPoints(18);
-    else if (obj.type === "mediumRock") addPoints(20);
-    else addPoints(12);
+    if (obj.type === "miniAlien") addPoints(34);
+    else if (obj.type === "alienShip") addPoints(42);
+    else if (obj.type === "mediumRock") addPoints(38);
+    else if (obj.type === "smallRock") addPoints(30);
+    else if (obj.type === "rockShard") addPoints(22);
+    else addPoints(24);
   }
 
   if (reason === "rocket") {
     state.kills += 1;
-    if (obj.type === "boulder") addPoints(55);
-    else if (obj.type === "debris") addPoints(30);
-    else if (obj.type === "miniAlien") addPoints(24);
-    else addPoints(18);
+    if (obj.type === "boulder") addPoints(88);
+    else if (obj.type === "debris") addPoints(50);
+    else if (obj.type === "alienShip") addPoints(58);
+    else if (obj.type === "miniAlien") addPoints(44);
+    else if (obj.type === "mediumRock") addPoints(46);
+    else if (obj.type === "smallRock") addPoints(34);
+    else addPoints(30);
   }
 
   if (obj.type === "mediumRock") {
@@ -1750,7 +1795,7 @@ function update(dt, now) {
   const difficulty = selectedDifficultyMode();
 
   state.time += dt;
-  state.score += dt * (7 + state.level * 0.45) * passiveScoreMultiplier();
+  state.score += dt * (2.4 + state.level * 0.14) * passiveScoreMultiplier();
 
   if (state.score >= state.nextLevelScore && !state.levelUpPending && !state.bossActive) {
     progression.showLevelUpChoice();
@@ -1787,34 +1832,25 @@ function update(dt, now) {
     ship.vy = (ship.vy / speed) * ship.maxSpeed;
   }
 
-  ship.x += ship.vx * dt;
-  ship.y += ship.vy * dt;
-
-  if (ship.x < ship.radius) {
-    ship.x = ship.radius;
-    ship.vx *= -0.75;
-  }
-  if (ship.x > WORLD.width - ship.radius) {
-    ship.x = WORLD.width - ship.radius;
-    ship.vx *= -0.75;
-  }
-  if (ship.y < ship.radius) {
-    ship.y = ship.radius;
-    ship.vy *= -0.75;
-  }
-  if (ship.y > WORLD.height - ship.radius) {
-    ship.y = WORLD.height - ship.radius;
-    ship.vy *= -0.75;
+  if (!Number.isFinite(ship.worldX) || !Number.isFinite(ship.worldY)) {
+    const initialWorld = screenToWorld(ship.x, ship.y);
+    ship.worldX = initialWorld.x;
+    ship.worldY = initialWorld.y;
   }
 
-  const moveIntentX = input.axisX + Number(input.right) - Number(input.left);
-  const moveIntentY = input.axisY + Number(input.down) - Number(input.up);
-  const moveLen = Math.hypot(moveIntentX, moveIntentY) || 1;
-  const worldMoveScale = moveIntentX !== 0 || moveIntentY !== 0 ? 0.72 : 0.08;
-  state.world.playerX += ((moveIntentX / moveLen) * ship.maxSpeed * worldMoveScale + ship.vx * (1 - worldMoveScale)) * dt;
-  state.world.playerY += ((moveIntentY / moveLen) * ship.maxSpeed * worldMoveScale + ship.vy * (1 - worldMoveScale)) * dt;
-  cameraSystem.update(dt, state.world.playerX, state.world.playerY);
-  worldSystem.update(cameraSystem.getX(), cameraSystem.getY());
+  ship.worldX += ship.vx * dt;
+  ship.worldY += ship.vy * dt;
+
+  state.world.playerX = ship.worldX;
+  state.world.playerY = ship.worldY;
+  cameraSystem.update(dt, ship.worldX, ship.worldY);
+  const cameraX = cameraSystem.getX();
+  const cameraY = cameraSystem.getY();
+  worldSystem.update(cameraX, cameraY);
+
+  const shipScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
+  ship.x = shipScreen.x;
+  ship.y = shipScreen.y;
 
   const collidablePlanets = worldSystem.getCollidablePlanets();
   if (collidablePlanets.length > 0) {
@@ -1831,10 +1867,14 @@ function update(dt, now) {
         const nx = d > 0 ? (ship.x - p.x) / d : 1;
         const ny = d > 0 ? (ship.y - p.y) / d : 0;
         const pushOut = Math.max(0, hitR - d) + 1;
-        ship.x += nx * pushOut;
-        ship.y += ny * pushOut;
+        ship.worldX += nx * pushOut;
+        ship.worldY += ny * pushOut;
         ship.vx += nx * 80;
         ship.vy += ny * 80;
+
+        const pushedScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
+        ship.x = pushedScreen.x;
+        ship.y = pushedScreen.y;
       }
     }
   }
@@ -1866,17 +1906,19 @@ function update(dt, now) {
   }
 
   if (!state.bossActive) {
+    encounters.spawnChunksAround(cameraX, cameraY, 1);
+
     const intensity = spawnIntensity();
 
     state.lastSpawn += dt;
-    const dynamicSpawn = Math.max(0.24, state.spawnInterval / (intensity * difficulty.spawnRateMult));
+    const dynamicSpawn = Math.max(0.34, state.spawnInterval / (intensity * difficulty.spawnRateMult));
     while (state.lastSpawn >= dynamicSpawn) {
       state.lastSpawn -= dynamicSpawn;
       encounters.spawnObject();
     }
 
     state.lastEdgeSpawn += dt;
-    const dynamicEdgeSpawn = Math.max(0.86, state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult));
+    const dynamicEdgeSpawn = Math.max(1.2, state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult));
     while (state.lastEdgeSpawn >= dynamicEdgeSpawn) {
       state.lastEdgeSpawn -= dynamicEdgeSpawn;
       encounters.spawnEdgeHazard();
@@ -1886,8 +1928,18 @@ function update(dt, now) {
   encounters.updateBoss(dt);
 
   for (const obj of state.objects) {
-    obj.x += obj.vx * dt;
-    obj.y += obj.vy * dt;
+    if (!Number.isFinite(obj.worldX) || !Number.isFinite(obj.worldY)) {
+      const worldPos = screenToWorld(obj.x, obj.y);
+      obj.worldX = worldPos.x;
+      obj.worldY = worldPos.y;
+    }
+
+    obj.worldX += obj.vx * dt;
+    obj.worldY += obj.vy * dt;
+
+    const objScreen = projectWorldToScreen(obj.worldX, obj.worldY, cameraX, cameraY);
+    obj.x = objScreen.x;
+    obj.y = objScreen.y;
     obj.angle += obj.spin * dt;
 
     if (obj.burnUntil && obj.burnUntil > state.time && obj.hp > 0) {
@@ -1910,7 +1962,7 @@ function update(dt, now) {
 
     if (!obj.passed && obj.x + obj.size < ship.x) {
       obj.passed = true;
-      addPoints(obj.destructible ? 6 : 12);
+      addPoints(obj.destructible ? 2 : 4);
     }
 
     if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
@@ -1975,7 +2027,18 @@ function update(dt, now) {
   }
 
   for (const hazard of state.edgeHazards) {
-    hazard.x += hazard.vx * dt;
+    if (!Number.isFinite(hazard.worldX) || !Number.isFinite(hazard.worldY)) {
+      const worldPos = screenToWorld(hazard.x, hazard.y);
+      hazard.worldX = worldPos.x;
+      hazard.worldY = worldPos.y;
+    }
+
+    hazard.worldX += hazard.vx * dt;
+    hazard.worldY += (hazard.vy || 0) * dt;
+
+    const hazardScreen = projectWorldToScreen(hazard.worldX, hazard.worldY, cameraX, cameraY);
+    hazard.x = hazardScreen.x;
+    hazard.y = hazardScreen.y;
     hazard.angle += hazard.spin * dt;
 
     const dShip = Math.hypot(hazard.x - ship.x, hazard.y - ship.y);
@@ -2193,8 +2256,18 @@ function update(dt, now) {
   }
 
   for (const pickup of state.pickups) {
-    pickup.x += pickup.vx * dt;
-    pickup.y += pickup.vy * dt;
+    if (!Number.isFinite(pickup.worldX) || !Number.isFinite(pickup.worldY)) {
+      const worldPos = screenToWorld(pickup.x, pickup.y);
+      pickup.worldX = worldPos.x;
+      pickup.worldY = worldPos.y;
+    }
+
+    pickup.worldX += pickup.vx * dt;
+    pickup.worldY += pickup.vy * dt;
+
+    const pickupScreen = projectWorldToScreen(pickup.worldX, pickup.worldY, cameraX, cameraY);
+    pickup.x = pickupScreen.x;
+    pickup.y = pickupScreen.y;
     pickup.vx *= 0.985;
     pickup.vy *= 0.985;
     pickup.life -= dt;
@@ -2269,13 +2342,34 @@ function update(dt, now) {
     }
   }
 
-  state.objects = state.objects.filter((o) => o.x > -o.size * 2 && o.hp > 0);
-  state.edgeHazards = state.edgeHazards.filter((h) => h.x > -h.radius * 1.3);
+  const worldCullBase = Math.max(WORLD.width, WORLD.height) * 1.7;
+  state.objects = state.objects.filter((o) => {
+    if (o.hp <= 0) return false;
+    if (!Number.isFinite(o.worldX) || !Number.isFinite(o.worldY)) {
+      return o.x > -o.size * 2 && o.x < WORLD.width + o.size * 2 && o.y > -o.size * 2 && o.y < WORLD.height + o.size * 2;
+    }
+    const d = Math.hypot(o.worldX - cameraX, o.worldY - cameraY);
+    return d < worldCullBase + o.size * 2;
+  });
+  state.edgeHazards = state.edgeHazards.filter((h) => {
+    if (!Number.isFinite(h.worldX) || !Number.isFinite(h.worldY)) {
+      return h.x > -h.radius * 1.3 && h.x < WORLD.width + h.radius * 1.3 && h.y > -h.radius * 1.3 && h.y < WORLD.height + h.radius * 1.3;
+    }
+    const d = Math.hypot(h.worldX - cameraX, h.worldY - cameraY);
+    return d < worldCullBase + h.radius * 1.4;
+  });
   state.bullets = state.bullets.filter((b) => b.life > 0 && b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30);
   state.laserBeams = state.laserBeams.filter((b) => b.life > 0);
   state.plasmaBursts = state.plasmaBursts.filter((b) => b.life > 0 && b.rangeLeft > 0 && b.x > -80 && b.x < WORLD.width + 80 && b.y > -80 && b.y < WORLD.height + 80);
   state.missiles = state.missiles.filter((m) => m.life > 0 && m.x > -60 && m.x < WORLD.width + 60 && m.y > -60 && m.y < WORLD.height + 60);
-  state.pickups = state.pickups.filter((p) => p.life > 0 && p.x > -60 && p.x < WORLD.width + 60 && p.y > -60 && p.y < WORLD.height + 60);
+  state.pickups = state.pickups.filter((p) => {
+    if (p.life <= 0) return false;
+    if (!Number.isFinite(p.worldX) || !Number.isFinite(p.worldY)) {
+      return p.x > -60 && p.x < WORLD.width + 60 && p.y > -60 && p.y < WORLD.height + 60;
+    }
+    const d = Math.hypot(p.worldX - cameraX, p.worldY - cameraY);
+    return d < worldCullBase + 120;
+  });
   state.bossProjectiles = state.bossProjectiles.filter((p) => p.life > 0 && p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80);
   state.particles = state.particles.filter((p) => p.life > 0);
   state.damageTexts = state.damageTexts.filter((t) => t.life > 0);
