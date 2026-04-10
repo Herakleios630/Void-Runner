@@ -5,6 +5,8 @@
       state,
       input,
       WORLD,
+      worldSystem,
+      cameraSystem,
       IS_COARSE_POINTER,
       selectedShipModel,
       getRocketCooldownLeft,
@@ -13,6 +15,84 @@
 
     const BURN_VFX_MAX_SPRITES = 80;
     let burnVfxSpriteCount = 0;
+
+    function drawParallaxBackground() {
+      if (!worldSystem || !cameraSystem) {
+        for (const star of state.stars) {
+          ctx.fillStyle = `rgba(183, 218, 255, ${Math.min(1, star.size / 2)})`;
+          ctx.fillRect(star.x, star.y, star.size, star.size);
+        }
+        return;
+      }
+
+      const bgObjects = worldSystem.getBackgroundObjects();
+      if (!bgObjects || bgObjects.length === 0) return;
+
+      for (const obj of bgObjects) {
+        const pos = cameraSystem.worldToScreen(obj.x, obj.y, obj.parallax, WORLD.width, WORLD.height);
+
+        if (obj.type === "star") {
+          if (pos.x < -6 || pos.x > WORLD.width + 6 || pos.y < -6 || pos.y > WORLD.height + 6) continue;
+          ctx.fillStyle = `rgba(186, 220, 255, ${obj.alpha || 0.5})`;
+          const size = obj.size || 1.5;
+          ctx.fillRect(pos.x, pos.y, size, size);
+          continue;
+        }
+
+        const radius = obj.radius || 0;
+        if (radius > 0 && (pos.x < -radius * 1.2 || pos.x > WORLD.width + radius * 1.2 || pos.y < -radius * 1.2 || pos.y > WORLD.height + radius * 1.2)) {
+          continue;
+        }
+
+        if (obj.type === "nebula") {
+          const g = ctx.createRadialGradient(pos.x, pos.y, radius * 0.08, pos.x, pos.y, radius);
+          g.addColorStop(0, obj.colorA || "rgba(108,172,255,0.24)");
+          g.addColorStop(1, obj.colorB || "rgba(38,58,112,0.08)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+
+        if (obj.type === "galaxy") {
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(obj.rotation || 0);
+          ctx.fillStyle = obj.tint || "rgba(218,198,255,0.2)";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, radius, radius * 0.45, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = "rgba(244, 234, 255, 0.5)";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, radius * 0.3, radius * 0.14, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
+
+        if (obj.type === "planet") {
+          const hue = obj.hue || 210;
+          const grad = ctx.createRadialGradient(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.1, pos.x, pos.y, radius);
+          grad.addColorStop(0, `hsla(${hue}, 80%, 72%, 0.95)`);
+          grad.addColorStop(0.55, `hsla(${hue}, 58%, 44%, 0.88)`);
+          grad.addColorStop(1, `hsla(${hue}, 45%, 24%, 0.78)`);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (obj.collidablePlane) {
+            ctx.strokeStyle = "rgba(255, 226, 170, 0.35)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, radius * 1.05, 0.15, Math.PI * 1.85);
+            ctx.stroke();
+          }
+        }
+      }
+    }
 
     function drawMobileCanvasHud() {
       if (!IS_COARSE_POINTER) return;
@@ -579,10 +659,7 @@
       burnVfxSpriteCount = 0;
       ctx.clearRect(0, 0, WORLD.width, WORLD.height);
 
-      for (const star of state.stars) {
-        ctx.fillStyle = `rgba(183, 218, 255, ${Math.min(1, star.size / 2)})`;
-        ctx.fillRect(star.x, star.y, star.size, star.size);
-      }
+      drawParallaxBackground();
 
       for (const hazard of state.edgeHazards) drawEdgeHazard(hazard);
       for (const obj of state.objects) drawObject(obj);

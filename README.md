@@ -33,6 +33,8 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 - [config.js](config.js): Schiff- und Schwierigkeits-Definitionen
 - [utils.js](utils.js): Mathe-/Hilfsfunktionen fuer Gameplay-Hotpaths
 - [audio.js](audio.js): Sound-Engine und SFX-Presets
+- [world.js](world.js): Chunk-Cache und deterministische Welt-/Hintergrund-Generierung
+- [camera.js](camera.js): Freie 2D-Kamera und World->Screen Projektion
 - [render.js](render.js): Rendering-Pipeline (Schiff, Gegner, Boss, VFX, HUD)
 - [encounters.js](encounters.js): Spawn-System fuer Gegner/Randgefahren und Boss-Verhalten
 - [menus.js](menus.js): Menue-UI fuer Schwierigkeits- und Schiffsauswahl
