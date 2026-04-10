@@ -36,13 +36,14 @@
       for (const obj of bgObjects) {
         let worldX = obj.x;
         let worldY = obj.y;
-        if (obj.type === "orbitalStation") {
+        if (obj.type === "orbitalStation" || obj.type === "beltRock") {
           const angle = (obj.orbitAngle || 0) + state.time * (obj.orbitSpeed || 0);
           worldX = (obj.orbitCx || 0) + Math.cos(angle) * (obj.orbitRadius || 0);
           worldY = (obj.orbitCy || 0) + Math.sin(angle) * (obj.orbitRadius || 0);
         }
 
         const pos = cameraSystem.worldToScreen(worldX, worldY, obj.parallax, WORLD.width, WORLD.height);
+        if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
 
         if (obj.type === "star") {
           if (obj.layer === "deep") {
