@@ -119,13 +119,13 @@
           const core = obj.coreColor || "rgba(255, 224, 164, 0.95)";
           const glow = obj.glowColor || "rgba(255, 178, 102, 0.32)";
 
-          const halo = ctx.createRadialGradient(pos.x, pos.y, sunRadius * 0.16, pos.x, pos.y, sunRadius * 1.9);
+          const halo = ctx.createRadialGradient(pos.x, pos.y, sunRadius * 0.1, pos.x, pos.y, sunRadius * 2.3);
           halo.addColorStop(0, core);
           halo.addColorStop(0.38, glow);
           halo.addColorStop(1, "rgba(0,0,0,0)");
           ctx.fillStyle = halo;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y, sunRadius * 1.9, 0, Math.PI * 2);
+          ctx.arc(pos.x, pos.y, sunRadius * 2.3, 0, Math.PI * 2);
           ctx.fill();
 
           const disk = ctx.createRadialGradient(pos.x - sunRadius * 0.22, pos.y - sunRadius * 0.2, sunRadius * 0.08, pos.x, pos.y, sunRadius);
@@ -177,8 +177,10 @@
           const hue = obj.hue || 210;
           const effectiveParallax = obj.isMoon ? 0.62 : (obj.parallax || 0.33);
           const depth = Math.max(0, Math.min(1, (effectiveParallax - 0.33) / 0.37));
+          const solidPlanet = Boolean(obj.collidablePlane);
+          const bodyAlpha = solidPlanet ? 1 : (obj.isMoon ? 0.78 : 0.62);
           const atmThickness = radius * (0.04 + depth * 0.12);
-          const atmAlpha = 0.16 + depth * 0.34;
+          const atmAlpha = (0.16 + depth * 0.34) * (solidPlanet ? 1 : 0.58);
 
           // Atmosphere makes depth plane readable: thicker/brighter when closer.
           const atmosphere = ctx.createRadialGradient(pos.x, pos.y, Math.max(0, radius - atmThickness), pos.x, pos.y, radius + atmThickness * 1.4);
@@ -191,22 +193,28 @@
           ctx.fill();
 
           const grad = ctx.createRadialGradient(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.1, pos.x, pos.y, radius);
-          grad.addColorStop(0, `hsla(${hue}, 80%, 72%, 0.95)`);
-          grad.addColorStop(0.55, `hsla(${hue}, 58%, 44%, 0.88)`);
-          grad.addColorStop(1, `hsla(${hue}, 45%, 24%, 0.78)`);
+          grad.addColorStop(0, `hsla(${hue}, 80%, 72%, ${0.95 * bodyAlpha})`);
+          grad.addColorStop(0.55, `hsla(${hue}, 58%, 44%, ${0.88 * bodyAlpha})`);
+          grad.addColorStop(1, `hsla(${hue}, 45%, 24%, ${0.78 * bodyAlpha})`);
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
           ctx.fill();
 
-          if (obj.collidablePlane) {
-            ctx.strokeStyle = "rgba(255, 226, 170, 0.35)";
-            ctx.lineWidth = 1.4 + depth * 1.8;
+          if (solidPlanet) {
+            ctx.strokeStyle = "rgba(255, 212, 128, 0.72)";
+            ctx.lineWidth = 2 + depth * 2;
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, radius * 1.05, 0.15, Math.PI * 1.85);
             ctx.stroke();
+
+            ctx.strokeStyle = "rgba(255, 120, 96, 0.48)";
+            ctx.lineWidth = 1.2 + depth * 0.8;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, radius * 1.13, 0, Math.PI * 2);
+            ctx.stroke();
           } else {
-            ctx.strokeStyle = `hsla(${hue}, 70%, 82%, ${0.12 + depth * 0.16})`;
+            ctx.strokeStyle = `hsla(${hue}, 70%, 82%, ${0.08 + depth * 0.1})`;
             ctx.lineWidth = 0.9 + depth * 0.9;
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, radius * 1.02, 0, Math.PI * 2);

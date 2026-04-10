@@ -1871,6 +1871,26 @@ function handleShipStructureCollisions(ship, cameraX, cameraY) {
   return true;
 }
 
+function handleShipSolarHeat(ship, dt) {
+  const heatZones = typeof worldSystem.getSolarHeatZones === "function" ? worldSystem.getSolarHeatZones() : [];
+  if (heatZones.length <= 0) return true;
+
+  for (const zone of heatZones) {
+    const p = cameraSystem.worldToScreen(zone.x, zone.y, zone.parallax || 1, WORLD.width, WORLD.height);
+    const d = Math.hypot(ship.x - p.x, ship.y - p.y);
+    const hitRadius = (zone.heatRadius || 140) + ship.radius * 0.45;
+    if (d > hitRadius) continue;
+
+    applyAcidToShip(0.3, zone.heatDps || 0.5);
+    if (!ship.nextSunHeatFxAt || state.time >= ship.nextSunHeatFxAt) {
+      ship.nextSunHeatFxAt = state.time + 0.22;
+      createExplosion(ship.x, ship.y, "#ffb16a", 3);
+    }
+  }
+
+  return true;
+}
+
 function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
   if (state.bossActive) return;
 
@@ -1912,6 +1932,10 @@ function update(dt, now) {
   const { cameraX, cameraY } = movement;
 
   if (!handleShipStructureCollisions(ship, cameraX, cameraY)) {
+    return;
+  }
+
+  if (!handleShipSolarHeat(ship, dt)) {
     return;
   }
 

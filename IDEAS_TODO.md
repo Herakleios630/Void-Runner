@@ -33,6 +33,13 @@
 
 ## Future Features
 - [ ] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
+- [ ] Discovery pacing: Sonnensysteme klar getrennt platzieren (spuerbare Reise zwischen Systemen)
+- [ ] Discovery pacing: trotzdem keine langen Leerlaeufe (maximale Suchdistanz bis naechstes System begrenzen)
+- [ ] Discovery pacing: Systemabstand adaptiv je Region (Core dichter, aussen weiter auseinander)
+- [ ] Interstellar Space: Zwischenraeume mit random Asteroidenfeldern, Truemmerclustern und Alien-Patrouillen beleben
+- [ ] Interstellar Space: dynamische Ereignisse zwischen Systemen (Ambush, Drift-Feld, Schrottspur)
+- [ ] Giftige Nebelwolken: raeumliche Gefahrenzonen mit DoT/Scanner-Sichtreduktion
+- [ ] Giftige Nebelwolken: klare Telegraphs/Farbcode und Gegenmassnahmen als spaetere Upgrades
 - [ ] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
 - [ ] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
 - [ ] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)

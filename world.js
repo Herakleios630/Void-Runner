@@ -55,11 +55,9 @@
     let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
     const activeRadius = typeof options.activeRadius === "number" ? options.activeRadius : 2;
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
-    const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 180;
-    const maxOrbitShells = 10;
-    const minSunOrbitDistance = 14;
-    const minSunDistanceWorld = orbitUnit * minSunOrbitDistance;
-    const sunCandidateChance = 0.14;
+    const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 260;
+    const maxOrbitShells = 8;
+    const systemCellChunks = 6;
 
     const activeChunks = new Map();
 
@@ -72,40 +70,26 @@
     }
 
     function getSunCandidateForChunk(cx, cy) {
-      const seed = mixSeed(cx, cy, worldSeed ^ 0x5f74a1c3);
+      const cellX = Math.floor(cx / systemCellChunks);
+      const cellY = Math.floor(cy / systemCellChunks);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x5f74a1c3);
       const rand = createRng(seed);
-      if (rand() > sunCandidateChance) return null;
+      const margin = 1;
+      const span = Math.max(1, systemCellChunks - margin * 2);
+      const localCx = margin + Math.floor(rand() * span);
+      const localCy = margin + Math.floor(rand() * span);
+      const anchorCx = cellX * systemCellChunks + localCx;
+      const anchorCy = cellY * systemCellChunks + localCy;
+      if (cx !== anchorCx || cy !== anchorCy) return null;
       return {
-        x: cx * chunkSize + (0.25 + rand() * 0.5) * chunkSize,
-        y: cy * chunkSize + (0.25 + rand() * 0.5) * chunkSize,
+        x: cx * chunkSize + (0.45 + rand() * 0.1) * chunkSize,
+        y: cy * chunkSize + (0.45 + rand() * 0.1) * chunkSize,
         priority: rand(),
       };
     }
 
     function isSunAnchorChunk(cx, cy) {
-      const candidate = getSunCandidateForChunk(cx, cy);
-      if (!candidate) return null;
-
-      const neighborRange = Math.ceil(minSunDistanceWorld / chunkSize) + 1;
-      for (let y = cy - neighborRange; y <= cy + neighborRange; y += 1) {
-        for (let x = cx - neighborRange; x <= cx + neighborRange; x += 1) {
-          if (x === cx && y === cy) continue;
-          const other = getSunCandidateForChunk(x, y);
-          if (!other) continue;
-          const d = Math.hypot(other.x - candidate.x, other.y - candidate.y);
-          if (d >= minSunDistanceWorld) continue;
-
-          if (other.priority > candidate.priority) {
-            return null;
-          }
-
-          if (other.priority === candidate.priority && (x > cx || (x === cx && y > cy))) {
-            return null;
-          }
-        }
-      }
-
-      return candidate;
+      return getSunCandidateForChunk(cx, cy);
     }
 
     function resolveOrbitPosition(obj, atTime = 0) {
@@ -243,10 +227,12 @@
         const sun = {
           type: "sun",
           drawOrder: 0,
-          parallax: 0.08,
+          parallax: 0.18,
           x: sunAnchor.x,
           y: sunAnchor.y,
-          radius: 88 + rand() * 110,
+          radius: chunkSize * (0.34 + rand() * 0.52),
+          heatRadius: chunkSize * (0.22 + rand() * 0.12),
+          heatDps: 0.45 + rand() * 0.25,
           coreColor: sunProfile.core,
           glowColor: sunProfile.glow,
           spectralClass: sunProfile.cls,
@@ -347,15 +333,17 @@
           }
         }
 
-        const orbitSlotCount = 1 + Math.floor(rand() * maxOrbitShells);
-        const shellBase = orbitUnit * 2;
-        const shellSpacing = orbitUnit;
+        const orbitSlotCount = 4 + Math.floor(rand() * (maxOrbitShells - 3));
+        const shellBase = Math.max(orbitUnit * 2.2, sun.radius * 1.35);
+        const shellSpacing = orbitUnit * 1.15;
         let lastPlanetRadius = 0;
         let lastOrbitRadius = shellBase - shellSpacing;
         for (let slot = 0; slot < orbitSlotCount; slot += 1) {
-          const nearPlanePlanet = slot <= 1 || rand() < 0.24;
+          const nearPlanePlanet = slot <= 1 || rand() < 0.2;
           const shellScale = 1 - slot / Math.max(1, orbitSlotCount + 1);
-          const predictedPlanetRadius = (nearPlanePlanet ? 20 + rand() * 18 : 10 + rand() * 13) * (0.8 + shellScale * 0.35);
+          const predictedPlanetRadius = (nearPlanePlanet
+            ? chunkSize * (0.11 + rand() * 0.28)
+            : chunkSize * (0.04 + rand() * 0.11)) * (0.82 + shellScale * 0.35);
           const minimumGap = (lastPlanetRadius + predictedPlanetRadius) * 1.5;
           const shellRadius = shellBase + slot * shellSpacing;
           const orbitRadius = Math.max(shellRadius, lastOrbitRadius + minimumGap);
@@ -389,7 +377,8 @@
             type: "planet",
             drawOrder: nearPlanePlanet ? 6 : 5,
             parallax: nearPlanePlanet ? 0.66 : 0.38,
-            collidablePlane: nearPlanePlanet && rand() < 0.65,
+            // Keep collision rules deterministic and easy to read in gameplay: near-plane planets are solid.
+            collidablePlane: nearPlanePlanet,
             orbitCx: sun.x,
             orbitCy: sun.y,
             orbitRadius,
@@ -486,6 +475,24 @@
       return out;
     }
 
+    function getSolarHeatZones() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "sun") continue;
+          out.push({
+            type: "sun",
+            x: bg.x,
+            y: bg.y,
+            parallax: bg.parallax || 1,
+            heatRadius: bg.heatRadius || Math.max(80, bg.radius * 0.45),
+            heatDps: bg.heatDps || 0.5,
+          });
+        }
+      }
+      return out;
+    }
+
     function setSeed(nextSeed) {
       const numeric = Number.parseInt(nextSeed, 10);
       if (!Number.isFinite(numeric)) return false;
@@ -525,6 +532,7 @@
       getBackgroundObjects,
       getCollidablePlanets,
       getOrbitalStations,
+      getSolarHeatZones,
       resolveOrbitPosition,
       getActiveChunkRects,
       getDebugInfo,
