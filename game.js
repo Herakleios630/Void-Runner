@@ -64,6 +64,7 @@ const { createRenderer } = window.VoidRender;
 const { createEncountersSystem } = window.VoidEncounters;
 const { createMenuSystem } = window.VoidMenus;
 const { createProgressionSystem } = window.VoidProgression;
+const { createScoringSystem } = window.VoidScoring;
 const { createWeaponsSystem } = window.VoidWeapons;
 const { createInputSystem } = window.VoidInput;
 
@@ -994,57 +995,9 @@ function hitShip(damageType = "physical", amount = 1) {
   return true;
 }
 
-function scoreMultiplier() {
-  return 1 + Math.min(2.4, Math.pow(Math.max(0, state.level - 1), 0.92) * 0.08);
-}
-
-function addPoints(base) {
-  const xp = state.shipStats ? state.shipStats.xpBonus : 1;
-  const earlyLevelScale = state.level <= 4 ? (0.62 + state.level * 0.1) : 1;
-  state.score += base * scoreMultiplier() * xp * earlyLevelScale;
-}
-
 function spawnIntensity() {
   // Progression pressure increases only after each defeated boss.
   return 1 + Math.min(1.25, state.bossLevelsCleared * 0.2);
-}
-
-function passiveScoreMultiplier() {
-  const salvage = 1 + (state.upgradesTaken.lootSalvageBoost || 0) * 0.2;
-  const xp = state.shipStats ? state.shipStats.xpBonus : 1;
-  return salvage * xp;
-}
-
-function computeNextLevelCost() {
-  const difficulty = selectedDifficultyMode();
-  const elapsed = Math.max(1, state.time - state.lastLevelTime);
-  const gained = Math.max(1, state.score - state.lastLevelScore);
-  const killsGained = Math.max(0, state.kills - (state.lastLevelKills || 0));
-  const scoreRate = gained / elapsed;
-  const killsPerMinute = (killsGained / elapsed) * 60;
-  const passiveRate = (2.4 + state.level * 0.14) * passiveScoreMultiplier();
-  const combatRate = Math.max(0, scoreRate - passiveRate);
-
-  // Hard mode spawns more score opportunities, easy mode fewer.
-  // Scale required XP so all difficulties stay in a comparable level-time corridor.
-  const difficultyLevelScale = Math.max(0.86, Math.min(1.18, (difficulty.spawnRateMult * 0.7) + (difficulty.edgeSpawnRateMult * 0.3)));
-  const adjustedRate = scoreRate * difficultyLevelScale;
-
-  // Kill-heavy play targets 30-60s; passive/low-kill windows may stretch toward 90s.
-  const killPressure = clamp(killsPerMinute / 7.5, 0, 2.2);
-  const combatPressure = clamp(combatRate / 24, 0, 2.2);
-  const pressure = clamp(killPressure * 0.68 + combatPressure * 0.32, 0, 2.2);
-  const baseTargetSeconds = clamp(90 - pressure * 27, 30, 90);
-  const earlyLevelBoost = state.level <= 4 ? (1.35 - state.level * 0.08) : 1;
-  const targetSeconds = clamp(baseTargetSeconds * earlyLevelBoost, 32, 105);
-
-  const dynamicCost = Math.floor(adjustedRate * targetSeconds);
-  const exponentialBase = Math.floor(state.levelCost * 1.14 + 18);
-  const blended = Math.floor(exponentialBase * 0.44 + dynamicCost * 0.56);
-
-  const minBound = state.level <= 4 ? state.levelCost + 34 : state.levelCost + 14;
-  const maxBound = Math.floor(state.levelCost * 1.5 + 120);
-  return Math.max(minBound, Math.min(maxBound, blended));
 }
 
 const encounters = createEncountersSystem({
@@ -1060,13 +1013,19 @@ const encounters = createEncountersSystem({
   cameraSystem,
 });
 
+const scoring = createScoringSystem({
+  state,
+  selectedDifficultyMode,
+  clamp,
+});
+
 const progression = createProgressionSystem({
   state,
   overlay,
   playSfx,
   refreshHud,
   spawnBoss: encounters.spawnBoss,
-  computeNextLevelCost,
+  computeNextLevelCost: scoring.computeNextLevelCost,
   setPauseIndicatorVisible,
   upgradeDefs: UPGRADE_DEFS,
   upgradeWeights: UPGRADE_WEIGHTS,
@@ -1080,7 +1039,7 @@ function onBossDefeated() {
   if (!state.bossActive || !state.boss) return;
   const guaranteedLoot = state.boss.hasLoot;
   createExplosion(state.boss.x, state.boss.y, "#ff7b4a", 64);
-  addPoints(220 + state.level * 20);
+  scoring.addPoints(220 + state.level * 20);
   state.bossActive = false;
   state.boss = null;
   state.bossProjectiles = [];
@@ -1558,23 +1517,23 @@ function destroyObject(obj, reason) {
 
   if (playerKill && reason === "shot") {
     state.kills += 1;
-    if (obj.type === "miniAlien") addPoints(34);
-    else if (obj.type === "alienShip") addPoints(42);
-    else if (obj.type === "mediumRock") addPoints(38);
-    else if (obj.type === "smallRock") addPoints(30);
-    else if (obj.type === "rockShard") addPoints(22);
-    else addPoints(24);
+    if (obj.type === "miniAlien") scoring.addPoints(34);
+    else if (obj.type === "alienShip") scoring.addPoints(42);
+    else if (obj.type === "mediumRock") scoring.addPoints(38);
+    else if (obj.type === "smallRock") scoring.addPoints(30);
+    else if (obj.type === "rockShard") scoring.addPoints(22);
+    else scoring.addPoints(24);
   }
 
   if (playerKill && reason === "rocket") {
     state.kills += 1;
-    if (obj.type === "boulder") addPoints(88);
-    else if (obj.type === "debris") addPoints(50);
-    else if (obj.type === "alienShip") addPoints(58);
-    else if (obj.type === "miniAlien") addPoints(44);
-    else if (obj.type === "mediumRock") addPoints(46);
-    else if (obj.type === "smallRock") addPoints(34);
-    else addPoints(30);
+    if (obj.type === "boulder") scoring.addPoints(88);
+    else if (obj.type === "debris") scoring.addPoints(50);
+    else if (obj.type === "alienShip") scoring.addPoints(58);
+    else if (obj.type === "miniAlien") scoring.addPoints(44);
+    else if (obj.type === "mediumRock") scoring.addPoints(46);
+    else if (obj.type === "smallRock") scoring.addPoints(34);
+    else scoring.addPoints(30);
   }
 
   if (obj.type === "mediumRock") {
@@ -1834,8 +1793,7 @@ function update(dt, now) {
   const difficulty = selectedDifficultyMode();
 
   state.time += dt;
-  const earlyPassiveScale = state.level <= 4 ? (0.5 + state.level * 0.1) : 1;
-  state.score += dt * (2.4 + state.level * 0.14) * passiveScoreMultiplier() * earlyPassiveScale;
+  scoring.addPassiveScore(dt);
 
   if (state.score >= state.nextLevelScore && !state.levelUpPending && !state.bossActive) {
     progression.showLevelUpChoice();
@@ -2094,7 +2052,7 @@ function update(dt, now) {
       const distPass = Math.hypot(dxPass, dyPass);
       if (distPass > Math.max(WORLD.width, WORLD.height) * 1.05) {
         obj.passed = true;
-        addPoints(obj.destructible ? 1 : 2);
+        scoring.addPoints(obj.destructible ? 1 : 2);
       }
     }
 
