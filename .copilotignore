@@ -1,0 +1,23 @@
+# Keep Copilot indexing focused on game source to reduce unnecessary request load
+.git/
+.vscode/
+
+# Generated/build/dependency folders
+node_modules/
+dist/
+build/
+out/
+coverage/
+
+# Binary-heavy assets (audio/images) do not need semantic indexing for code edits
+assets/music/
+assets/*.png
+assets/*.jpg
+assets/*.jpeg
+assets/*.webp
+assets/*.gif
+
+# Logs and misc
+*.log
+*.tmp
+*.cache

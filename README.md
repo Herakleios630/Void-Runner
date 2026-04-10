@@ -1,3 +1,10 @@
+# Copilot Workflow Notes (Rate-Limit Friendly)
+
+- Keep prompts scoped to one change-set (e.g. audio only, orbit rules only).
+- Prefer sequential changes over very large "everything at once" requests.
+- Avoid opening multiple Copilot-heavy VS Code windows on the same repo at the same time.
+- This repo includes `.copilotignore` to exclude heavy non-code assets from indexing.
+
 # Void Runner
 
 Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit, Maus-Zielen und Schiessen.

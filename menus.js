@@ -6,6 +6,7 @@
       SHIP_MODELS,
       DIFFICULTY_MODES,
       setPauseIndicatorVisible,
+      playMusicCategory,
     } = deps;
 
     function shipStartKitText(model) {
@@ -31,6 +32,9 @@
       state.running = false;
       state.pauseReason = "difficulty-select";
       setPauseIndicatorVisible(false);
+      if (typeof playMusicCategory === "function") {
+        playMusicCategory("menu");
+      }
 
       const seedValue = Number.isFinite(state.worldSeed) ? state.worldSeed : 1;
 
@@ -68,6 +72,9 @@
       state.running = false;
       state.pauseReason = "ship-select";
       setPauseIndicatorVisible(false);
+      if (typeof playMusicCategory === "function") {
+        playMusicCategory("menu");
+      }
       const diff = selectedDifficultyMode();
 
       const shipButtons = Object.values(SHIP_MODELS)

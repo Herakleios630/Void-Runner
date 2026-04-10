@@ -1,7 +1,152 @@
 (function () {
   const audio = {
     ctx: null,
+    music: {
+      enabled: true,
+      category: null,
+      index: -1,
+      active: null,
+      fading: null,
+      gainA: null,
+      gainB: null,
+      transitionMs: 1800,
+      pauseToken: null,
+      tracks: {
+        menu: [
+          "assets/music/Title.mp3",
+          "assets/music/Title 2.mp3",
+        ],
+        game: [
+          "assets/music/Ambient.mp3",
+          "assets/music/Ambient 2.mp3",
+          "assets/music/Void Drift.mp3",
+          "assets/music/Void Drift v2.mp3",
+          "assets/music/Runner of the Void.mp3",
+          "assets/music/Nebula Veil.mp3",
+          "assets/music/Nebula Veil v2.mp3",
+        ],
+      },
+    },
   };
+
+  function ensureMusicNodes() {
+    if (!audio.ctx) return false;
+    if (audio.music.gainA && audio.music.gainB) return true;
+
+    const gA = audio.ctx.createGain();
+    const gB = audio.ctx.createGain();
+    gA.gain.value = 0;
+    gB.gain.value = 0;
+    gA.connect(audio.ctx.destination);
+    gB.connect(audio.ctx.destination);
+    audio.music.gainA = gA;
+    audio.music.gainB = gB;
+    return true;
+  }
+
+  function pickNextTrack(category) {
+    const list = audio.music.tracks[category] || [];
+    if (list.length === 0) return null;
+    if (list.length === 1) {
+      audio.music.index = 0;
+      return list[0];
+    }
+
+    let next = Math.floor(Math.random() * list.length);
+    if (next === audio.music.index) {
+      next = (next + 1) % list.length;
+    }
+    audio.music.index = next;
+    return list[next];
+  }
+
+  function createTrack(path, targetGainNode) {
+    const el = new Audio(path);
+    el.preload = "auto";
+    el.crossOrigin = "anonymous";
+    el.loop = false;
+    const source = audio.ctx.createMediaElementSource(el);
+    source.connect(targetGainNode);
+    return {
+      el,
+      source,
+      gain: targetGainNode,
+      path,
+    };
+  }
+
+  function stopTrack(track) {
+    if (!track) return;
+    try {
+      track.el.pause();
+      track.el.currentTime = 0;
+      track.el.src = "";
+      track.el.load();
+    } catch (_err) {
+      // ignore
+    }
+  }
+
+  function crossfadeTo(path, category) {
+    if (!audio.ctx || !ensureMusicNodes() || !path) return;
+
+    const now = audio.ctx.currentTime;
+    const fadeSeconds = Math.max(0.25, audio.music.transitionMs / 1000);
+    const from = audio.music.active;
+    const toGain = from && from.gain === audio.music.gainA ? audio.music.gainB : audio.music.gainA;
+    const to = createTrack(path, toGain);
+
+    to.gain.gain.cancelScheduledValues(now);
+    to.gain.gain.setValueAtTime(0.0001, now);
+    to.gain.gain.exponentialRampToValueAtTime(0.38, now + fadeSeconds);
+
+    if (from) {
+      from.gain.gain.cancelScheduledValues(now);
+      from.gain.gain.setValueAtTime(Math.max(0.0001, from.gain.gain.value || 0.2), now);
+      from.gain.gain.exponentialRampToValueAtTime(0.0001, now + fadeSeconds);
+      audio.music.fading = from;
+      setTimeout(() => {
+        if (audio.music.fading === from) {
+          stopTrack(from);
+          audio.music.fading = null;
+        }
+      }, Math.ceil((fadeSeconds + 0.06) * 1000));
+    }
+
+    to.el.addEventListener("ended", () => {
+      if (audio.music.active !== to || audio.music.category !== category) return;
+      const nextPath = pickNextTrack(category);
+      crossfadeTo(nextPath, category);
+    });
+
+    to.el.play().catch(() => {
+      // autoplay may still be blocked until user gesture
+    });
+    audio.music.active = to;
+    audio.music.category = category;
+  }
+
+  function playMusicCategory(category) {
+    if (!audio.music.enabled) return;
+    if (!audio.ctx) initAudio();
+    if (!audio.ctx) return;
+    if (audio.ctx.state === "suspended") {
+      audio.ctx.resume();
+    }
+
+    if (audio.music.category === category && audio.music.active) return;
+    const nextPath = pickNextTrack(category);
+    crossfadeTo(nextPath, category);
+  }
+
+  function setMusicEnabled(enabled) {
+    audio.music.enabled = Boolean(enabled);
+    if (!audio.music.enabled && audio.music.active) {
+      stopTrack(audio.music.active);
+      audio.music.active = null;
+      audio.music.category = null;
+    }
+  }
 
   function initAudio() {
     if (audio.ctx) return;
@@ -67,5 +212,7 @@
   window.VoidAudio = {
     initAudio,
     playSfx,
+    playMusicCategory,
+    setMusicEnabled,
   };
 })();

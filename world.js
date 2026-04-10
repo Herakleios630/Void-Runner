@@ -309,7 +309,7 @@
                 type: "planet",
                 drawOrder: 6,
                 parallax: SYSTEM_PARALLAX,
-                collidablePlane: false,
+                collidablePlane: true,
                 parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
                 parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
                 parentOrbitRadius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
@@ -331,7 +331,7 @@
             for (let i = 0; i < stationCount; i += 1) {
               const stationRadius = 11 + rand() * 8;
               const stationHitRadius = 9 + rand() * 6;
-              const collidableStation = stationRadius >= 14;
+              const collidableStation = true;
               const stationOrbitRadius = stationOrbitBase + (rand() - 0.5) * planet.radius * 0.35;
               background.push({
                 type: "orbitalStation",
@@ -379,8 +379,8 @@
 
         const orbitSlotCount = sampleGaussianOrbitCount(systemRand, 1, maxOrbitShells);
         const selectedOrbitSlots = pickOrbitSlotIndices(systemRand, maxOrbitShells, orbitSlotCount);
-        const shellBase = Math.max(orbitUnit * 1.55, sun.radius * 0.92);
-        const shellSpacing = orbitUnit * 1.05;
+        const shellBase = Math.max(orbitUnit * 1.85, sun.radius * 1.05);
+        const shellSpacing = orbitUnit * 1.2;
         const minOrbitLaneGap = chunkSize;
         let lastPlanetRadius = 0;
         let lastOrbitRadius = shellBase - shellSpacing;
@@ -391,9 +391,11 @@
           const predictedPlanetRadius = innerRocky
             ? chunkSize * (0.06 + rand() * 0.14) * (0.9 + shellScale * 0.22)
             : chunkSize * (0.18 + rand() * 0.4) * (0.94 + shellScale * 0.2);
+          const outerSpacingBoost = slotIndex >= 5 ? chunkSize * (0.5 + (slotIndex - 4) * 0.14) : 0;
           const minimumGap = Math.max(
             (lastPlanetRadius + predictedPlanetRadius) * 1.5,
             minOrbitLaneGap + lastPlanetRadius + predictedPlanetRadius,
+            minOrbitLaneGap + outerSpacingBoost,
           );
           const shellRadius = shellBase + slotIndex * shellSpacing;
           const orbitRadius = Math.max(shellRadius, lastOrbitRadius + minimumGap);
@@ -430,7 +432,7 @@
             type: "planet",
             drawOrder: innerRocky ? 6 : 5,
             parallax: SYSTEM_PARALLAX,
-            collidablePlane: innerRocky,
+            collidablePlane: true,
             orbitCx: sun.x,
             orbitCy: sun.y,
             orbitRadius,
@@ -553,6 +555,27 @@
       return out;
     }
 
+    function getCollidableBodies(atTime = 0) {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "planet" && bg.type !== "orbitalStation") continue;
+          if (!bg.collidablePlane) continue;
+          const pos = resolveOrbitPosition(bg, atTime);
+          const radius = bg.hitRadius || bg.radius || 12;
+          out.push({
+            type: bg.type,
+            x: pos.x,
+            y: pos.y,
+            parallax: bg.parallax || 1,
+            radius,
+            hitRadius: radius,
+          });
+        }
+      }
+      return out;
+    }
+
     function getOrbitalStations(atTime = 0) {
       const out = [];
       for (const chunk of activeChunks.values()) {
@@ -628,6 +651,7 @@
       update,
       getBackgroundObjects,
       getCollidablePlanets,
+      getCollidableBodies,
       getOrbitalStations,
       getSolarHeatZones,
       resolveOrbitPosition,
