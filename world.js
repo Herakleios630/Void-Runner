@@ -69,6 +69,8 @@
     const TOXIC_NEBULA_CHANCE = 0.34;
     const WORMHOLE_CHANCE = 0.2;
     const MAX_WORMHOLE_JUMP_CELLS = 12;
+    const COMET_CELL_CHUNKS = 18;
+    const COMET_CELL_CHANCE = 0.5;
 
     const activeChunks = new Map();
     const wormholeOutgoingCache = new Map();
@@ -282,8 +284,60 @@
       };
     }
 
+    function getCometAnchorForChunk(cx, cy) {
+      const cellX = Math.floor(cx / COMET_CELL_CHUNKS);
+      const cellY = Math.floor(cy / COMET_CELL_CHUNKS);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x6c31f22d);
+      const rand = createRng(seed);
+      if (rand() > COMET_CELL_CHANCE) return null;
+
+      const anchorCx = cellX * COMET_CELL_CHUNKS + Math.floor(COMET_CELL_CHUNKS * 0.5);
+      const anchorCy = cellY * COMET_CELL_CHUNKS + Math.floor(COMET_CELL_CHUNKS * 0.5);
+      if (cx !== anchorCx || cy !== anchorCy) return null;
+
+      return {
+        x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.32),
+        y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.32),
+        seed,
+      };
+    }
+
     function resolveOrbitPosition(obj, atTime = 0) {
       const ORBIT_SPEED_SCALE = 0.5;
+      if (obj.type === "comet") {
+        const centerX = Number.isFinite(obj.cometCx) ? obj.cometCx : (Number.isFinite(obj.x) ? obj.x : 0);
+        const centerY = Number.isFinite(obj.cometCy) ? obj.cometCy : (Number.isFinite(obj.y) ? obj.y : 0);
+        const a = Math.max(chunkSize * 2.4, Number(obj.cometA) || chunkSize * 6.5);
+        const b = Math.max(chunkSize * 0.9, Number(obj.cometB) || chunkSize * 2.1);
+        const speed = Number(obj.cometSpeed) || 0.04;
+        const phase = Number(obj.cometPhase) || 0;
+        const angle = Number(obj.cometAngle) || 0;
+        const ux = Math.cos(angle);
+        const uy = Math.sin(angle);
+        const nx = -uy;
+        const ny = ux;
+
+        if (obj.cometPath === "hyperbolic") {
+          const loop = atTime * speed + phase;
+          const cycle = ((loop % 2) + 2) % 2;
+          const u = cycle - 1;
+          const localX = u * a;
+          const localY = (u * u - 0.32) * b + Math.sin(loop * Math.PI * 0.5) * b * 0.08;
+          return {
+            x: centerX + ux * localX + nx * localY,
+            y: centerY + uy * localX + ny * localY,
+          };
+        }
+
+        const t = atTime * speed + phase;
+        const localX = Math.cos(t) * a;
+        const localY = Math.sin(t) * b;
+        return {
+          x: centerX + ux * localX + nx * localY,
+          y: centerY + uy * localX + ny * localY,
+        };
+      }
+
       const hasParent = Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy);
       let centerX = Number.isFinite(obj.orbitCx) ? obj.orbitCx : (Number.isFinite(obj.x) ? obj.x : 0);
       let centerY = Number.isFinite(obj.orbitCy) ? obj.orbitCy : (Number.isFinite(obj.y) ? obj.y : 0);
@@ -825,6 +879,28 @@
           lastPlanetRadius = planetRadius;
           lastOrbitRadius = orbitRadius;
         }
+      }
+
+      const cometAnchor = getCometAnchorForChunk(cx, cy);
+      if (cometAnchor) {
+        const cRand = createRng(cometAnchor.seed ^ 0x1ab7d42f);
+        const hyperbolic = cRand() < 0.52;
+        background.push({
+          type: "comet",
+          drawOrder: 8,
+          parallax: 1,
+          cometCx: cometAnchor.x,
+          cometCy: cometAnchor.y,
+          cometPath: hyperbolic ? "hyperbolic" : "elliptic",
+          cometA: chunkSize * (6 + cRand() * 8),
+          cometB: chunkSize * (hyperbolic ? (1.2 + cRand() * 2.3) : (2.4 + cRand() * 3.1)),
+          cometAngle: cRand() * Math.PI * 2,
+          cometSpeed: 0.028 + cRand() * 0.042,
+          cometPhase: cRand() * Math.PI * 2,
+          radius: chunkSize * (0.009 + cRand() * 0.007),
+          tailLength: chunkSize * (0.52 + cRand() * 0.68),
+          hue: 188 + Math.floor(cRand() * 48),
+        });
       }
 
       // Decorative rear systems: full non-collidable systems for visual depth.

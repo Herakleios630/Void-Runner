@@ -13,13 +13,21 @@
     function passiveScoreMultiplier() {
       const salvage = 1 + (state.upgradesTaken.lootSalvageBoost || 0) * 0.2;
       const xp = state.shipStats ? state.shipStats.xpBonus : 1;
-      return salvage * xp;
+      const missionBuff = state.missionRewardBuff;
+      const missionMult = missionBuff && state.time < missionBuff.until
+        ? Math.max(1, missionBuff.scoreMult || 1)
+        : 1;
+      return salvage * xp * missionMult;
     }
 
     function addPoints(base) {
       const xp = state.shipStats ? state.shipStats.xpBonus : 1;
       const earlyLevelScale = state.level <= 4 ? (0.62 + state.level * 0.1) : 1;
-      state.score += base * scoreMultiplier() * xp * earlyLevelScale;
+      const missionBuff = state.missionRewardBuff;
+      const missionMult = missionBuff && state.time < missionBuff.until
+        ? Math.max(1, missionBuff.scoreMult || 1)
+        : 1;
+      state.score += base * scoreMultiplier() * xp * earlyLevelScale * missionMult;
     }
 
     function addPassiveScore(dt) {

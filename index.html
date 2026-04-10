@@ -11,7 +11,6 @@
     <header class="hud">
       <div class="pill">Punkte: <span id="score">0</span></div>
       <div class="pill">HP: <span id="hpStatus">3/3</span></div>
-      <div class="pill" id="missionStatus">Mission: -</div>
       <div class="pill">I: Schiff-Infos</div>
       <div class="pill">M: Musik an/aus</div>
       <div class="pill hidden" id="pauseIndicator">⏸ Pause</div>
@@ -19,6 +18,10 @@
 
     <section class="stage-wrap">
       <canvas id="gameCanvas" width="1100" height="620" aria-label="Void Runner Spielfeld"></canvas>
+      <aside class="mission-widget" id="missionWidget" aria-live="polite">
+        <h2 id="missionWidgetTitle">Aktive Mission</h2>
+        <p id="missionWidgetProgress">-</p>
+      </aside>
       <aside class="ship-info-panel hidden" id="shipInfoPanel" aria-live="polite">
         <h2>Schiff-Info</h2>
         <p>Level: <span id="level">1</span></p>
@@ -35,6 +38,10 @@
         <p>Waffenlevel: <span id="weaponLevelsStatus">-</span></p>
         <p>Panzerung: <span id="armorStatus">0/0</span></p>
         <p>Gefahren: <span id="hazardStatus">Saeure -0% | Scanner -0%</span></p>
+        <p>Erkundete Chunks: <span id="exploredChunksStat">0</span></p>
+        <p>Gegner-Kills: <span id="enemyKillsByTypeStat">Mini 0 | Schiff 0</span></p>
+        <p>Top-Speed: <span id="topSpeedStat">0 WU/s</span></p>
+        <p>Distanz: <span id="distanceStat">0 WU</span></p>
         <p>Schild: <span id="shieldStatus">Aus</span></p>
         <p>Rakete: <span id="rocketStatus">Nicht freigeschaltet</span></p>
         <p>Musik: <span id="musicStatus">An (M)</span></p>

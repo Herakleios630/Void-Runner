@@ -52,22 +52,22 @@
 - [x] Statusbalken unter Spieler/Gegnern (HP/Panzerung/Schild) mit V-Mode-Cycle (aus, Spieler, Gegner, beide)
 - [x] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
 - [x] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)
-- [ ] Missionstyp: Zerstoere X Objektklassen (smallRock, mediumRock, boulder, debris)
-- [ ] Missionstyp: Lege Y Distanz in Weltkoordinaten zurueck
-- [ ] Missionstyp: Ueberlebe Z Sekunden ohne Tod
-- [ ] Missionstyp: Erreiche Zone/Orbit (annaehern an markierte Koordinate)
-- [ ] Missionstyp: Zerstoere Spezial-Ziel (einmaliger Elite-Gegner)
-- [ ] Spezial-Ziel auf Mini-Map markieren (Icon + Richtung + Distanz)
-- [ ] Missions-Generierung seed-stabil pro Run-Start (deterministische Angebote)
-- [ ] Belohnungen: Score, garantierte Drops, Upgrade-Reroll, seltene Buffs
-- [ ] Missions-Schwierigkeit skaliert mit Boss-Level/Distanz vom Spawn
-- [ ] Kettenmissionen: 2-3 Schritte mit steigender Belohnung
-- [ ] Tagesmissionen/Run-Challenges (optional, ohne Online-Zwang)
-- [ ] UI: kleines Missions-Widget (oben links), minimales Logging bei Fortschritt
-- [ ] Fail-Conditions je Missionstyp (optional): Zeitlimit, Trefferlimit, no-hit Bonus
-- [ ] Missionen nur ausserhalb von Level-Up/Boss-Choice Overlays aktualisieren
-- [ ] I-Bildschirm: erweiterte Run-Statistiken (erkundete Chunks, Kills pro Gegnertyp, Top-Speed, Distanz)
-- [ ] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX
+- [x] Missionstyp: Zerstoere X Objektklassen (smallRock, mediumRock, boulder, debris)
+- [x] Missionstyp: Lege Y Distanz in Weltkoordinaten zurueck
+- [x] Missionstyp: Ueberlebe Z Sekunden ohne Tod
+- [x] Missionstyp: Erreiche Zone/Orbit (annaehern an markierte Koordinate)
+- [x] Missionstyp: Zerstoere Spezial-Ziel (einmaliger Elite-Gegner)
+- [x] Spezial-Ziel auf Mini-Map markieren (Icon + Richtung + Distanz)
+- [x] Missions-Generierung seed-stabil pro Run-Start (deterministische Angebote)
+- [x] Belohnungen: Score, garantierte Drops, Upgrade-Reroll, seltene Buffs
+- [x] Missions-Schwierigkeit skaliert mit Boss-Level/Distanz vom Spawn
+- [x] Kettenmissionen: 2-3 Schritte mit steigender Belohnung
+- [x] Tagesmissionen/Run-Challenges (optional, ohne Online-Zwang)
+- [x] UI: kleines Missions-Widget (oben links), minimales Logging bei Fortschritt
+- [x] Fail-Conditions je Missionstyp (optional): Zeitlimit, Trefferlimit, no-hit Bonus
+- [x] Missionen nur ausserhalb von Level-Up/Boss-Choice Overlays aktualisieren
+- [x] I-Bildschirm: erweiterte Run-Statistiken (erkundete Chunks, Kills pro Gegnertyp, Top-Speed, Distanz)
+- [x] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX
 - [ ] Comets: seltene Stern-Orbits mit sehr grossem Radius (deutlich langsamer fern der Sonne)
 - [ ] Rogue planet / brown dwarf (sehr selten): grosses, dunkles Objekt ohne lokales Planetensystem
 - [ ] Derelict stations / Wracks als erkundbare Background-Makroobjekte (optional mit Loot-Events)
