@@ -16,6 +16,43 @@
     const BURN_VFX_MAX_SPRITES = 80;
     let burnVfxSpriteCount = 0;
 
+    function resolveBgWorldPosition(obj, atTime) {
+      if (worldSystem && typeof worldSystem.resolveOrbitPosition === "function") {
+        return worldSystem.resolveOrbitPosition(obj, atTime);
+      }
+      if (Number.isFinite(obj.orbitCx) && Number.isFinite(obj.orbitCy) && Number.isFinite(obj.orbitRadius)) {
+        const angle = (obj.orbitAngle || 0) + atTime * (obj.orbitSpeed || 0);
+        return {
+          x: (obj.orbitCx || 0) + Math.cos(angle) * (obj.orbitRadius || 0),
+          y: (obj.orbitCy || 0) + Math.sin(angle) * (obj.orbitRadius || 0),
+        };
+      }
+      return {
+        x: obj.x,
+        y: obj.y,
+      };
+    }
+
+    function resolveLocalOrbitCenter(obj, atTime) {
+      if (Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy)) {
+        if (Number.isFinite(obj.parentOrbitRadius)) {
+          const parentAngle = (obj.parentOrbitAngle || 0) + atTime * (obj.parentOrbitSpeed || 0);
+          return {
+            x: obj.parentOrbitCx + Math.cos(parentAngle) * obj.parentOrbitRadius,
+            y: obj.parentOrbitCy + Math.sin(parentAngle) * obj.parentOrbitRadius,
+          };
+        }
+        return {
+          x: obj.parentOrbitCx,
+          y: obj.parentOrbitCy,
+        };
+      }
+      return {
+        x: Number.isFinite(obj.orbitCx) ? obj.orbitCx : 0,
+        y: Number.isFinite(obj.orbitCy) ? obj.orbitCy : 0,
+      };
+    }
+
     function drawParallaxBackground() {
       if (!worldSystem || !cameraSystem) {
         for (const star of state.stars) {
@@ -40,13 +77,9 @@
       let beltRockCount = 0;
 
       for (const obj of bgObjects) {
-        let worldX = obj.x;
-        let worldY = obj.y;
-        if (Number.isFinite(obj.orbitCx) && Number.isFinite(obj.orbitCy) && Number.isFinite(obj.orbitRadius)) {
-          const angle = (obj.orbitAngle || 0) + state.time * (obj.orbitSpeed || 0);
-          worldX = (obj.orbitCx || 0) + Math.cos(angle) * (obj.orbitRadius || 0);
-          worldY = (obj.orbitCy || 0) + Math.sin(angle) * (obj.orbitRadius || 0);
-        }
+        const resolved = resolveBgWorldPosition(obj, state.time);
+        const worldX = resolved.x;
+        const worldY = resolved.y;
 
         const pos = cameraSystem.worldToScreen(worldX, worldY, obj.parallax, WORLD.width, WORLD.height);
         if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
@@ -739,6 +772,40 @@
           if (width <= 0 || height <= 0) continue;
           if (topLeft.x > WORLD.width + 2 || topLeft.y > WORLD.height + 2 || bottomRight.x < -2 || bottomRight.y < -2) continue;
           ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+        }
+      }
+
+      const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
+      if (bgObjects.length > 0) {
+        const orbitKeys = new Set();
+        ctx.strokeStyle = "rgba(42, 86, 148, 0.62)";
+        ctx.lineWidth = 1;
+        for (const obj of bgObjects) {
+          const importantOrbit = obj.type === "planet" || obj.type === "orbitalStation";
+          if (!importantOrbit) continue;
+
+          if (Number.isFinite(obj.parentOrbitRadius) && Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy)) {
+            const parentKey = `p:${obj.parentOrbitCx.toFixed(1)}:${obj.parentOrbitCy.toFixed(1)}:${obj.parentOrbitRadius.toFixed(1)}`;
+            if (!orbitKeys.has(parentKey)) {
+              orbitKeys.add(parentKey);
+              const c = cameraSystem.worldToScreen(obj.parentOrbitCx, obj.parentOrbitCy, 1, WORLD.width, WORLD.height);
+              ctx.beginPath();
+              ctx.arc(c.x, c.y, obj.parentOrbitRadius, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+
+          if (Number.isFinite(obj.orbitRadius)) {
+            const center = resolveLocalOrbitCenter(obj, state.time);
+            const key = `o:${center.x.toFixed(1)}:${center.y.toFixed(1)}:${obj.orbitRadius.toFixed(1)}`;
+            if (!orbitKeys.has(key)) {
+              orbitKeys.add(key);
+              const c = cameraSystem.worldToScreen(center.x, center.y, 1, WORLD.width, WORLD.height);
+              ctx.beginPath();
+              ctx.arc(c.x, c.y, obj.orbitRadius, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
         }
       }
 

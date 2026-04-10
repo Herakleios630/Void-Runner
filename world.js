@@ -71,6 +71,37 @@
       return Math.floor(chunkCoordValue / systemGridSize);
     }
 
+    function resolveOrbitPosition(obj, atTime = 0) {
+      const hasParent = Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy);
+      let centerX = Number.isFinite(obj.orbitCx) ? obj.orbitCx : (Number.isFinite(obj.x) ? obj.x : 0);
+      let centerY = Number.isFinite(obj.orbitCy) ? obj.orbitCy : (Number.isFinite(obj.y) ? obj.y : 0);
+
+      if (hasParent) {
+        const parentHasRadius = Number.isFinite(obj.parentOrbitRadius);
+        if (parentHasRadius) {
+          const parentAngle = (obj.parentOrbitAngle || 0) + atTime * (obj.parentOrbitSpeed || 0);
+          centerX = obj.parentOrbitCx + Math.cos(parentAngle) * obj.parentOrbitRadius;
+          centerY = obj.parentOrbitCy + Math.sin(parentAngle) * obj.parentOrbitRadius;
+        } else {
+          centerX = obj.parentOrbitCx;
+          centerY = obj.parentOrbitCy;
+        }
+      }
+
+      if (Number.isFinite(obj.orbitRadius)) {
+        const angle = (obj.orbitAngle || 0) + atTime * (obj.orbitSpeed || 0);
+        return {
+          x: centerX + Math.cos(angle) * obj.orbitRadius,
+          y: centerY + Math.sin(angle) * obj.orbitRadius,
+        };
+      }
+
+      return {
+        x: centerX,
+        y: centerY,
+      };
+    }
+
     function generateChunk(cx, cy) {
       const seed = mixSeed(cx, cy, worldSeed);
       const rand = createRng(seed);
@@ -216,8 +247,11 @@
                 drawOrder: 6,
                 parallax: planet.parallax,
                 collidablePlane: false,
-                orbitCx: planet.x,
-                orbitCy: planet.y,
+                parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
+                parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
+                parentOrbitRadius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
+                parentOrbitAngle: Number.isFinite(planet.orbitAngle) ? planet.orbitAngle : 0,
+                parentOrbitSpeed: Number.isFinite(planet.orbitSpeed) ? planet.orbitSpeed : 0,
                 orbitRadius: moonOrbitRadius,
                 orbitAngle: rand() * Math.PI * 2,
                 orbitSpeed: satelliteSpeed(moonOrbitRadius, 0.86 + rand() * 0.2),
@@ -241,8 +275,11 @@
                 drawOrder: 7,
                 parallax: planet.parallax,
                 collidablePlane: collidableStation,
-                orbitCx: planet.x,
-                orbitCy: planet.y,
+                parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
+                parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
+                parentOrbitRadius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
+                parentOrbitAngle: Number.isFinite(planet.orbitAngle) ? planet.orbitAngle : 0,
+                parentOrbitSpeed: Number.isFinite(planet.orbitSpeed) ? planet.orbitSpeed : 0,
                 orbitRadius: stationOrbitRadius,
                 orbitAngle: rand() * Math.PI * 2,
                 orbitSpeed: satelliteSpeed(stationOrbitRadius, 0.92 + rand() * 0.14),
@@ -262,8 +299,11 @@
                 type: "beltRock",
                 drawOrder: 6,
                 parallax: planet.parallax,
-                orbitCx: planet.x,
-                orbitCy: planet.y,
+                parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
+                parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
+                parentOrbitRadius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
+                parentOrbitAngle: Number.isFinite(planet.orbitAngle) ? planet.orbitAngle : 0,
+                parentOrbitSpeed: Number.isFinite(planet.orbitSpeed) ? planet.orbitSpeed : 0,
                 orbitRadius,
                 orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.2,
                 orbitSpeed: satelliteSpeed(orbitRadius, 0.86 + rand() * 0.16),
@@ -370,16 +410,12 @@
       for (const chunk of activeChunks.values()) {
         for (const bg of chunk.background) {
           if (bg.type === "planet" && bg.collidablePlane) {
-            if (Number.isFinite(bg.orbitCx) && Number.isFinite(bg.orbitCy) && Number.isFinite(bg.orbitRadius)) {
-              const angle = (bg.orbitAngle || 0) + atTime * (bg.orbitSpeed || 0);
-              out.push({
-                ...bg,
-                x: bg.orbitCx + Math.cos(angle) * bg.orbitRadius,
-                y: bg.orbitCy + Math.sin(angle) * bg.orbitRadius,
-              });
-            } else {
-              out.push(bg);
-            }
+            const pos = resolveOrbitPosition(bg, atTime);
+            out.push({
+              ...bg,
+              x: pos.x,
+              y: pos.y,
+            });
           }
         }
       }
@@ -391,11 +427,11 @@
       for (const chunk of activeChunks.values()) {
         for (const bg of chunk.background) {
           if (bg.type !== "orbitalStation" || !bg.collidablePlane) continue;
-          const angle = (bg.orbitAngle || 0) + atTime * (bg.orbitSpeed || 0);
+          const pos = resolveOrbitPosition(bg, atTime);
           out.push({
             type: "orbitalStation",
-            x: (bg.orbitCx || 0) + Math.cos(angle) * (bg.orbitRadius || 0),
-            y: (bg.orbitCy || 0) + Math.sin(angle) * (bg.orbitRadius || 0),
+            x: pos.x,
+            y: pos.y,
             parallax: bg.parallax || 1,
             radius: bg.radius || 12,
             hitRadius: bg.hitRadius || bg.radius || 12,
@@ -444,6 +480,7 @@
       getBackgroundObjects,
       getCollidablePlanets,
       getOrbitalStations,
+      resolveOrbitPosition,
       getActiveChunkRects,
       getDebugInfo,
       setSeed,
