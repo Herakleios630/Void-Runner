@@ -1460,9 +1460,13 @@
 
       ctx.strokeStyle = "rgba(142, 188, 236, 0.48)";
       ctx.lineWidth = 1;
-      const orbitRingBudget = Math.max(10, Math.floor(miniMapOrbitRings.length * (1 - scannerJam * 0.7)));
+      const orbitRingBudget = Math.min(
+        miniMapOrbitRings.length,
+        Math.max(10, Math.floor(miniMapOrbitRings.length * (1 - scannerJam * 0.7)))
+      );
       for (let i = 0; i < orbitRingBudget; i += 1) {
         const ring = miniMapOrbitRings[i];
+        if (!ring) continue;
         const center = project(ring.x, ring.y);
         const radiusPx = (ring.radius / worldSpan) * mapSize;
         if (radiusPx < 2 || radiusPx > mapSize * 1.2) continue;
@@ -1476,9 +1480,13 @@
 
       ctx.strokeStyle = "rgba(132, 170, 214, 0.35)";
       ctx.lineWidth = 1;
-      const beltRingBudget = Math.max(4, Math.floor(miniMapBeltRings.length * (1 - scannerJam * 0.78)));
+      const beltRingBudget = Math.min(
+        miniMapBeltRings.length,
+        Math.max(4, Math.floor(miniMapBeltRings.length * (1 - scannerJam * 0.78)))
+      );
       for (let i = 0; i < beltRingBudget; i += 1) {
         const ring = miniMapBeltRings[i];
+        if (!ring) continue;
         const center = project(ring.x, ring.y);
         const radiusPx = (ring.radius / worldSpan) * mapSize;
         if (radiusPx < 2 || radiusPx > mapSize * 1.2) continue;
@@ -1490,9 +1498,13 @@
         ctx.stroke();
       }
 
-      const planetBudget = Math.max(12, Math.floor(miniMapPlanetPoints.length * (1 - scannerJam * 0.84)));
+      const planetBudget = Math.min(
+        miniMapPlanetPoints.length,
+        Math.max(12, Math.floor(miniMapPlanetPoints.length * (1 - scannerJam * 0.84)))
+      );
       for (let i = 0; i < planetBudget; i += 1) {
         const planet = miniMapPlanetPoints[i];
+        if (!planet) continue;
         const p = project(planet.x, planet.y);
         if (!p.visible) continue;
         const r = planet.isMoon ? 1.5 : 2.2;
