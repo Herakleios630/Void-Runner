@@ -217,6 +217,8 @@
       const {
         x,
         y,
+        worldX,
+        worldY,
         vx,
         vy,
         life = 1.25,
@@ -229,6 +231,8 @@
       state.bullets.push({
         x,
         y,
+        worldX: Number.isFinite(worldX) ? worldX : state.ship.worldX,
+        worldY: Number.isFinite(worldY) ? worldY : state.ship.worldY,
         vx,
         vy,
         life,
@@ -258,10 +262,14 @@
             const offset = indexOffset * state.weapon.laserSpread * spreadMult;
             const sx = state.ship.x + perpX * offset;
             const sy = state.ship.y + perpY * offset;
+            const swx = (state.ship.worldX || 0) + perpX * offset;
+            const swy = (state.ship.worldY || 0) + perpY * offset;
 
             spawnCannonBullet({
               x: sx,
               y: sy,
+              worldX: swx,
+              worldY: swy,
               vx: ux * 820 * speedMult,
               vy: uy * 820 * speedMult,
               life: 1.25,
@@ -282,6 +290,8 @@
             spawnCannonBullet({
               x: state.ship.x,
               y: state.ship.y,
+              worldX: state.ship.worldX || 0,
+              worldY: state.ship.worldY || 0,
               vx: Math.cos(a) * 680,
               vy: Math.sin(a) * 680,
               life: 0.85,
@@ -316,6 +326,8 @@
         state.missiles.push({
           x: state.ship.x,
           y: state.ship.y,
+          worldX: state.ship.worldX || 0,
+          worldY: state.ship.worldY || 0,
           vx: Math.cos(a) * 380,
           vy: Math.sin(a) * 380,
           speed: 380,
