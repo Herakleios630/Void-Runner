@@ -190,128 +190,136 @@
         background.push(sun);
 
         const orbitDirection = rand() < 0.5 ? -1 : 1;
-        const primaryAngle = rand() * Math.PI * 2;
-        const primaryDistance = sun.radius * (2.2 + rand() * 1.2);
-        const primaryPlanet = {
-          type: "planet",
-          drawOrder: 6,
-          parallax: 0.7,
-          collidablePlane: true,
-          x: sun.x + Math.cos(primaryAngle) * primaryDistance,
-          y: sun.y + Math.sin(primaryAngle) * primaryDistance,
-          radius: 34 + rand() * 26,
-          hue: Math.floor(rand() * 360),
-        };
-        background.push(primaryPlanet);
+        const orbitalSpeedNearSun = 0.1 + rand() * 0.06;
+        const referenceSunOrbit = Math.max(120, sun.radius * 2.1);
+        function sunOrbitAngularSpeed(orbitRadius, localScale = 1) {
+          const safeRadius = Math.max(1, orbitRadius);
+          const ratio = safeRadius / referenceSunOrbit;
+          return orbitalSpeedNearSun * Math.pow(ratio, -1.5) * localScale * orbitDirection;
+        }
 
-        const outerPlanetCount = 1 + Math.floor(rand() * 2);
-        const orbitalSpeedNearSun = 0.12 + rand() * 0.06;
-        const referenceSunOrbit = Math.max(120, sun.radius * 2.2);
-        for (let i = 0; i < outerPlanetCount; i += 1) {
-          const orbitRadius = sun.radius * (3.6 + i * 1.45 + rand() * 0.95);
-          const ratio = orbitRadius / referenceSunOrbit;
-          const orbitSpeed = orbitalSpeedNearSun * Math.pow(ratio, -1.5) * orbitDirection;
-          const nearFlyby = rand() < 0.32;
-          background.push({
+        function addPlanetSubOrbits(planet) {
+          const satelliteBase = 0.22 + rand() * 0.1;
+          const satelliteRef = Math.max(18, planet.radius * 1.6);
+          function satelliteSpeed(orbitRadius, scale = 1) {
+            const safeRadius = Math.max(1, orbitRadius);
+            const ratio = safeRadius / satelliteRef;
+            return satelliteBase * Math.pow(ratio, -1.5) * scale * orbitDirection;
+          }
+
+          if (rand() < 0.72) {
+            const moonCount = rand() < 0.24 ? 2 : 1;
+            for (let i = 0; i < moonCount; i += 1) {
+              const moonOrbitRadius = planet.radius * (2.4 + i * 0.85 + rand() * 0.9);
+              background.push({
+                type: "planet",
+                drawOrder: 6,
+                parallax: planet.parallax,
+                collidablePlane: false,
+                orbitCx: planet.x,
+                orbitCy: planet.y,
+                orbitRadius: moonOrbitRadius,
+                orbitAngle: rand() * Math.PI * 2,
+                orbitSpeed: satelliteSpeed(moonOrbitRadius, 0.86 + rand() * 0.2),
+                radius: Math.max(8, planet.radius * (0.18 + rand() * 0.14)),
+                hue: Math.floor(rand() * 360),
+                isMoon: true,
+              });
+            }
+          }
+
+          if (rand() < 0.66) {
+            const stationCount = rand() < 0.22 ? 2 : 1;
+            const stationOrbitBase = planet.radius * (1.45 + rand() * 0.5);
+            for (let i = 0; i < stationCount; i += 1) {
+              const stationRadius = 11 + rand() * 8;
+              const stationHitRadius = 9 + rand() * 6;
+              const collidableStation = stationRadius >= 14;
+              const stationOrbitRadius = stationOrbitBase + (rand() - 0.5) * planet.radius * 0.35;
+              background.push({
+                type: "orbitalStation",
+                drawOrder: 7,
+                parallax: planet.parallax,
+                collidablePlane: collidableStation,
+                orbitCx: planet.x,
+                orbitCy: planet.y,
+                orbitRadius: stationOrbitRadius,
+                orbitAngle: rand() * Math.PI * 2,
+                orbitSpeed: satelliteSpeed(stationOrbitRadius, 0.92 + rand() * 0.14),
+                radius: stationRadius,
+                hitRadius: collidableStation ? stationHitRadius : 0,
+              });
+            }
+          }
+
+          if (rand() < 0.54) {
+            const beltCount = 14 + Math.floor(rand() * 16);
+            const beltRadiusBase = planet.radius * (3.2 + rand() * 1.3);
+            for (let i = 0; i < beltCount; i += 1) {
+              const jitter = (rand() - 0.5) * planet.radius * 0.95;
+              const orbitRadius = Math.max(planet.radius * 2.2, beltRadiusBase + jitter);
+              background.push({
+                type: "beltRock",
+                drawOrder: 6,
+                parallax: planet.parallax,
+                orbitCx: planet.x,
+                orbitCy: planet.y,
+                orbitRadius,
+                orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.2,
+                orbitSpeed: satelliteSpeed(orbitRadius, 0.86 + rand() * 0.16),
+                radius: 2.4 + rand() * 4,
+                alpha: 0.42 + rand() * 0.34,
+              });
+            }
+          }
+        }
+
+        const orbitSlotCount = 3 + Math.floor(rand() * 3);
+        for (let slot = 0; slot < orbitSlotCount; slot += 1) {
+          const orbitRadius = sun.radius * (2.1 + slot * 1.15 + rand() * 0.8);
+          const slotAngle = rand() * Math.PI * 2;
+          const beltInsteadOfPlanet = rand() < (slot === 0 ? 0.12 : 0.28);
+
+          if (beltInsteadOfPlanet) {
+            const beltCount = 20 + Math.floor(rand() * 22);
+            for (let i = 0; i < beltCount; i += 1) {
+              const jitter = (rand() - 0.5) * sun.radius * 0.85;
+              const localOrbit = Math.max(sun.radius * 1.9, orbitRadius + jitter);
+              background.push({
+                type: "beltRock",
+                drawOrder: 5,
+                parallax: 0.5,
+                orbitCx: sun.x,
+                orbitCy: sun.y,
+                orbitRadius: localOrbit,
+                orbitAngle: slotAngle + (i / beltCount) * Math.PI * 2,
+                orbitSpeed: sunOrbitAngularSpeed(localOrbit, 0.9 + rand() * 0.16),
+                radius: 2.6 + rand() * 4.4,
+                alpha: 0.4 + rand() * 0.3,
+              });
+            }
+            continue;
+          }
+
+          const nearPlanePlanet = slot === 0 || rand() < 0.28;
+          const planet = {
             type: "planet",
-            drawOrder: nearFlyby ? 6 : 5,
-            parallax: nearFlyby ? 0.56 : 0.36,
-            collidablePlane: false,
+            drawOrder: nearPlanePlanet ? 6 : 5,
+            parallax: nearPlanePlanet ? 0.66 : 0.38,
+            collidablePlane: nearPlanePlanet && rand() < 0.65,
             orbitCx: sun.x,
             orbitCy: sun.y,
             orbitRadius,
-            orbitAngle: rand() * Math.PI * 2,
-            orbitSpeed,
-            radius: nearFlyby ? 14 + rand() * 16 : 10 + rand() * 13,
+            orbitAngle: slotAngle,
+            orbitSpeed: sunOrbitAngularSpeed(orbitRadius, nearPlanePlanet ? 1 : 0.92 + rand() * 0.14),
+            radius: nearPlanePlanet ? 22 + rand() * 22 : 11 + rand() * 15,
             hue: Math.floor(rand() * 360),
-          });
+          };
+          planet.x = planet.orbitCx + Math.cos(planet.orbitAngle) * planet.orbitRadius;
+          planet.y = planet.orbitCy + Math.sin(planet.orbitAngle) * planet.orbitRadius;
+          background.push(planet);
+          addPlanetSubOrbits(planet);
         }
-
-        const orbitalSpeedNear = 0.22 + rand() * 0.1;
-        const referenceOrbitRadius = primaryPlanet.radius * 1.5;
-        function orbitalAngularSpeed(orbitRadius, localScale = 1) {
-          const safeRadius = Math.max(1, orbitRadius);
-          const ratio = safeRadius / Math.max(1, referenceOrbitRadius);
-          const angular = orbitalSpeedNear * Math.pow(ratio, -1.5) * localScale;
-          return angular * orbitDirection;
-        }
-
-        let moonOrbitRadius = null;
-        if (rand() < 0.78) {
-          const moonRadius = Math.max(11, primaryPlanet.radius * (0.2 + rand() * 0.12));
-          moonOrbitRadius = primaryPlanet.radius * (2.65 + rand() * 1.1);
-          background.push({
-            type: "planet",
-            drawOrder: 6,
-            parallax: primaryPlanet.parallax,
-            collidablePlane: false,
-            orbitCx: primaryPlanet.x,
-            orbitCy: primaryPlanet.y,
-            orbitRadius: moonOrbitRadius,
-            orbitAngle: rand() * Math.PI * 2,
-            orbitSpeed: orbitalAngularSpeed(moonOrbitRadius, 0.92 + rand() * 0.14),
-            radius: moonRadius,
-            hue: Math.floor(rand() * 360),
-            isMoon: true,
-          });
-        }
-
-        if (rand() < 0.72) {
-          const stationCount = rand() < 0.22 ? 2 : 1;
-          const stationOrbitBase = primaryPlanet.radius * (1.5 + rand() * 0.45);
-          for (let i = 0; i < stationCount; i += 1) {
-            const stationRadius = 11 + rand() * 8;
-            const stationHitRadius = 9 + rand() * 6;
-            const collidableStation = stationRadius >= 14;
-            const stationOrbitRadius = stationOrbitBase + (rand() - 0.5) * primaryPlanet.radius * 0.25;
-            background.push({
-              type: "orbitalStation",
-              drawOrder: 7,
-              parallax: primaryPlanet.parallax,
-              collidablePlane: collidableStation,
-              orbitCx: primaryPlanet.x,
-              orbitCy: primaryPlanet.y,
-              orbitRadius: stationOrbitRadius,
-              orbitAngle: rand() * Math.PI * 2,
-              orbitSpeed: orbitalAngularSpeed(stationOrbitRadius, 0.95 + rand() * 0.12),
-              radius: stationRadius,
-              hitRadius: collidableStation ? stationHitRadius : 0,
-            });
-          }
-        }
-
-        if (rand() < 0.76) {
-          const beltCount = 16 + Math.floor(rand() * 18);
-          const outerBaseMultiplier = moonOrbitRadius ? (moonOrbitRadius / primaryPlanet.radius) + 0.9 : 3.8 + rand() * 0.7;
-          const beltRadiusBase = primaryPlanet.radius * outerBaseMultiplier;
-          for (let i = 0; i < beltCount; i += 1) {
-            const beltJitter = (rand() - 0.5) * primaryPlanet.radius * 0.95;
-            const orbitRadius = Math.max(primaryPlanet.radius * 2.4, beltRadiusBase + beltJitter);
-            background.push({
-              type: "beltRock",
-              drawOrder: 6,
-              parallax: primaryPlanet.parallax,
-              orbitCx: primaryPlanet.x,
-              orbitCy: primaryPlanet.y,
-              orbitRadius,
-              orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.25,
-              orbitSpeed: orbitalAngularSpeed(orbitRadius, 0.9 + rand() * 0.12),
-              radius: 2.4 + rand() * 4,
-              alpha: 0.42 + rand() * 0.34,
-            });
-          }
-        }
-      } else if (rand() < 0.02) {
-        background.push({
-          type: "planet",
-          drawOrder: 5,
-          parallax: 0.3,
-          collidablePlane: false,
-          x: originX + rand() * chunkSize,
-          y: originY + rand() * chunkSize,
-          radius: 22 + rand() * 26,
-          hue: Math.floor(rand() * 360),
-        });
       }
 
       background.sort((a, b) => a.drawOrder - b.drawOrder);
@@ -357,12 +365,21 @@
       return out;
     }
 
-    function getCollidablePlanets() {
+    function getCollidablePlanets(atTime = 0) {
       const out = [];
       for (const chunk of activeChunks.values()) {
         for (const bg of chunk.background) {
           if (bg.type === "planet" && bg.collidablePlane) {
-            out.push(bg);
+            if (Number.isFinite(bg.orbitCx) && Number.isFinite(bg.orbitCy) && Number.isFinite(bg.orbitRadius)) {
+              const angle = (bg.orbitAngle || 0) + atTime * (bg.orbitSpeed || 0);
+              out.push({
+                ...bg,
+                x: bg.orbitCx + Math.cos(angle) * bg.orbitRadius,
+                y: bg.orbitCy + Math.sin(angle) * bg.orbitRadius,
+              });
+            } else {
+              out.push(bg);
+            }
           }
         }
       }
