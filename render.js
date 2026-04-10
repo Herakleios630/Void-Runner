@@ -47,6 +47,32 @@
           continue;
         }
 
+        if (obj.type === "sun") {
+          const sunRadius = obj.radius || 0;
+          const core = obj.coreColor || "rgba(255, 224, 164, 0.95)";
+          const glow = obj.glowColor || "rgba(255, 178, 102, 0.32)";
+
+          const halo = ctx.createRadialGradient(pos.x, pos.y, sunRadius * 0.16, pos.x, pos.y, sunRadius * 1.9);
+          halo.addColorStop(0, core);
+          halo.addColorStop(0.38, glow);
+          halo.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, sunRadius * 1.9, 0, Math.PI * 2);
+          ctx.fill();
+
+          const disk = ctx.createRadialGradient(pos.x - sunRadius * 0.22, pos.y - sunRadius * 0.2, sunRadius * 0.08, pos.x, pos.y, sunRadius);
+          disk.addColorStop(0, "rgba(255, 252, 238, 0.96)");
+          disk.addColorStop(0.55, core);
+          disk.addColorStop(1, glow);
+          ctx.fillStyle = disk;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, sunRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          continue;
+        }
+
         const radius = obj.radius || 0;
         if (radius > 0 && (pos.x < -radius * 1.2 || pos.x > WORLD.width + radius * 1.2 || pos.y < -radius * 1.2 || pos.y > WORLD.height + radius * 1.2)) {
           continue;

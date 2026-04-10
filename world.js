@@ -26,6 +26,30 @@
     };
   }
 
+  function chooseSunProfile(rand) {
+    const roll = rand();
+    // Rough stellar distribution and color impression (OBAFGKM classes).
+    if (roll < 0.0002) {
+      return { cls: "O", core: "rgba(165, 205, 255, 0.96)", glow: "rgba(120, 170, 255, 0.45)" };
+    }
+    if (roll < 0.003) {
+      return { cls: "B", core: "rgba(196, 224, 255, 0.96)", glow: "rgba(148, 192, 255, 0.42)" };
+    }
+    if (roll < 0.016) {
+      return { cls: "A", core: "rgba(236, 244, 255, 0.96)", glow: "rgba(198, 218, 248, 0.38)" };
+    }
+    if (roll < 0.046) {
+      return { cls: "F", core: "rgba(253, 244, 224, 0.95)", glow: "rgba(240, 220, 170, 0.36)" };
+    }
+    if (roll < 0.122) {
+      return { cls: "G", core: "rgba(255, 233, 168, 0.95)", glow: "rgba(255, 196, 128, 0.34)" };
+    }
+    if (roll < 0.242) {
+      return { cls: "K", core: "rgba(255, 204, 142, 0.95)", glow: "rgba(248, 158, 102, 0.33)" };
+    }
+    return { cls: "M", core: "rgba(255, 173, 138, 0.95)", glow: "rgba(228, 122, 96, 0.32)" };
+  }
+
   function createWorldSystem(options = {}) {
     const chunkSize = typeof options.chunkSize === "number" ? options.chunkSize : 960;
     let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
@@ -49,6 +73,21 @@
       const originY = cy * chunkSize;
 
       const background = [];
+
+      if (rand() < 0.26) {
+        const sun = chooseSunProfile(rand);
+        background.push({
+          type: "sun",
+          drawOrder: 0,
+          parallax: 0.05,
+          x: originX + rand() * chunkSize,
+          y: originY + rand() * chunkSize,
+          radius: 72 + rand() * 120,
+          coreColor: sun.core,
+          glowColor: sun.glow,
+          spectralClass: sun.cls,
+        });
+      }
 
       const deepStars = 22 + Math.floor(rand() * 18);
       for (let i = 0; i < deepStars; i += 1) {
