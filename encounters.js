@@ -236,35 +236,6 @@
       });
     }
 
-    function spawnEdgeHazard(options = {}) {
-      const rand = typeof options.rand === "function" ? options.rand : Math.random;
-      const difficulty = selectedDifficultyMode();
-      const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
-      const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
-      const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
-      const side = Math.sin(angle) < 0 ? "top" : "bottom";
-
-      const radius = 44 + rand() * 18;
-      const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
-      const x = focusX + Math.cos(angle) * spawnRing;
-      const y = focusY + Math.sin(angle) * spawnRing;
-      const spawnWorld = screenToWorld(x, y);
-      state.edgeHazards.push({
-        kind: "blackHole",
-        side,
-        x,
-        y,
-        worldX: spawnWorld.x,
-        worldY: spawnWorld.y,
-        radius,
-        hitRadius: radius * 0.6,
-        vx: 0,
-        vy: 0,
-        angle: rand() * Math.PI * 2,
-        spin: (rand() - 0.5) * 0.8,
-      });
-    }
-
     function spawnChunkEncounter(cx, cy) {
       const key = chunkKey(cx, cy);
       if (spawnedChunkEncounters.has(key)) return false;
@@ -508,7 +479,7 @@
           playSfx("warning");
         }
 
-        const arenaClear = state.objects.length === 0 && state.edgeHazards.length === 0;
+        const arenaClear = state.objects.length === 0;
         if (arenaClear || state.time >= boss.introMaxUntil) {
           boss.intro = false;
           boss.lastFire = state.time;
@@ -592,7 +563,6 @@
 
     return {
       spawnObject,
-      spawnEdgeHazard,
       spawnChunksAround,
       resetChunkSpawns,
       spawnBoss,
