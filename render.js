@@ -640,14 +640,25 @@
         ctx.fillRect(-hazard.radius * 0.95, -8, hazard.radius * 1.9, 16);
         ctx.fillRect(-8, -hazard.radius * 0.95, 16, hazard.radius * 1.9);
       } else {
-        const glow = ctx.createRadialGradient(0, 0, hazard.radius * 0.15, 0, 0, hazard.radius);
-        glow.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-        glow.addColorStop(0.3, "rgba(106, 102, 255, 0.85)");
-        glow.addColorStop(0.7, "rgba(43, 39, 96, 0.65)");
-        glow.addColorStop(1, "rgba(0, 0, 0, 0.2)");
-        ctx.fillStyle = glow;
+        const rim = ctx.createRadialGradient(0, 0, hazard.radius * 0.25, 0, 0, hazard.radius);
+        rim.addColorStop(0, "rgba(10, 12, 22, 0.98)");
+        rim.addColorStop(0.45, "rgba(26, 28, 52, 0.95)");
+        rim.addColorStop(0.72, "rgba(86, 70, 168, 0.62)");
+        rim.addColorStop(1, "rgba(10, 8, 24, 0)");
+        ctx.fillStyle = rim;
         ctx.beginPath();
         ctx.arc(0, 0, hazard.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(138, 120, 226, 0.45)";
+        ctx.lineWidth = Math.max(2, hazard.radius * 0.08);
+        ctx.beginPath();
+        ctx.arc(0, 0, hazard.radius * 0.62, 0.18, Math.PI * 1.88);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(4, 6, 14, 0.96)";
+        ctx.beginPath();
+        ctx.arc(0, 0, hazard.radius * 0.3, 0, Math.PI * 2);
         ctx.fill();
       }
 

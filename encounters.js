@@ -243,30 +243,6 @@
       const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
       const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
       const side = Math.sin(angle) < 0 ? "top" : "bottom";
-      const r = rand();
-
-      if (r < 0.46) {
-        const radius = 270 + rand() * 150;
-        const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
-        const x = focusX + Math.cos(angle) * spawnRing;
-        const y = focusY + Math.sin(angle) * spawnRing;
-        const spawnWorld = screenToWorld(x, y);
-        state.edgeHazards.push({
-          kind: "planet",
-          side,
-          x,
-          y,
-          worldX: spawnWorld.x,
-          worldY: spawnWorld.y,
-          radius,
-          hitRadius: radius * 0.93,
-          vx: 0,
-          vy: 0,
-          angle: rand() * Math.PI * 2,
-          spin: (rand() - 0.5) * 0.12,
-        });
-        return;
-      }
 
       const radius = 44 + rand() * 18;
       const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
@@ -326,14 +302,6 @@
             });
           }
         }
-      }
-
-      const hazardChance = Math.min(0.88, (difficulty.id === "hard" ? 0.72 : 0.55) + distancePressure * 0.12);
-      if (rand() < hazardChance) {
-        spawnEdgeHazard({
-          rand,
-          spawnPadding: 20 + rand() * 70,
-        });
       }
 
       return true;
