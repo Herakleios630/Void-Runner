@@ -164,18 +164,21 @@
         if (nearPlane && rand() < 0.58) {
           const stationCount = rand() < 0.35 ? 2 : 1;
           for (let i = 0; i < stationCount; i += 1) {
+            const stationRadius = 10 + rand() * 7;
+            const stationHitRadius = 8 + rand() * 6;
+            const collidableStation = stationRadius >= 14;
             background.push({
               type: "orbitalStation",
               drawOrder: 7,
               parallax: planet.parallax,
-              collidablePlane: true,
+              collidablePlane: collidableStation,
               orbitCx: planet.x,
               orbitCy: planet.y,
               orbitRadius: planet.radius * (1.45 + rand() * 1.25),
               orbitAngle: rand() * Math.PI * 2,
               orbitSpeed: (0.08 + rand() * 0.18) * (rand() < 0.5 ? -1 : 1),
-              radius: 10 + rand() * 7,
-              hitRadius: 8 + rand() * 6,
+              radius: stationRadius,
+              hitRadius: collidableStation ? stationHitRadius : 0,
             });
           }
         }
