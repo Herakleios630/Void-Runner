@@ -55,7 +55,11 @@
     let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
     const activeRadius = typeof options.activeRadius === "number" ? options.activeRadius : 2;
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
-    const systemGridSize = 4;
+    const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 180;
+    const maxOrbitShells = 10;
+    const minSunOrbitDistance = 22;
+    const minSunDistanceWorld = orbitUnit * minSunOrbitDistance;
+    const sunCandidateChance = 0.06;
 
     const activeChunks = new Map();
 
@@ -67,8 +71,41 @@
       return Math.floor(value / chunkSize);
     }
 
-    function systemCellCoord(chunkCoordValue) {
-      return Math.floor(chunkCoordValue / systemGridSize);
+    function getSunCandidateForChunk(cx, cy) {
+      const seed = mixSeed(cx, cy, worldSeed ^ 0x5f74a1c3);
+      const rand = createRng(seed);
+      if (rand() > sunCandidateChance) return null;
+      return {
+        x: cx * chunkSize + (0.25 + rand() * 0.5) * chunkSize,
+        y: cy * chunkSize + (0.25 + rand() * 0.5) * chunkSize,
+        priority: rand(),
+      };
+    }
+
+    function isSunAnchorChunk(cx, cy) {
+      const candidate = getSunCandidateForChunk(cx, cy);
+      if (!candidate) return null;
+
+      const neighborRange = Math.ceil(minSunDistanceWorld / chunkSize) + 1;
+      for (let y = cy - neighborRange; y <= cy + neighborRange; y += 1) {
+        for (let x = cx - neighborRange; x <= cx + neighborRange; x += 1) {
+          if (x === cx && y === cy) continue;
+          const other = getSunCandidateForChunk(x, y);
+          if (!other) continue;
+          const d = Math.hypot(other.x - candidate.x, other.y - candidate.y);
+          if (d >= minSunDistanceWorld) continue;
+
+          if (other.priority > candidate.priority) {
+            return null;
+          }
+
+          if (other.priority === candidate.priority && (x > cx || (x === cx && y > cy))) {
+            return null;
+          }
+        }
+      }
+
+      return candidate;
     }
 
     function resolveOrbitPosition(obj, atTime = 0) {
@@ -196,23 +233,19 @@
         });
       }
 
-      const systemCellX = systemCellCoord(cx);
-      const systemCellY = systemCellCoord(cy);
-      const systemSeed = mixSeed(systemCellX, systemCellY, worldSeed ^ 0x51e9a3d7);
-      const systemRand = createRng(systemSeed);
-      const hasSystemInCell = systemRand() < 0.34;
-      const anchorCx = systemCellX * systemGridSize + Math.floor(systemRand() * systemGridSize);
-      const anchorCy = systemCellY * systemGridSize + Math.floor(systemRand() * systemGridSize);
-      const hasPlanetarySystem = hasSystemInCell && cx === anchorCx && cy === anchorCy;
+      const sunAnchor = isSunAnchorChunk(cx, cy);
+      const hasPlanetarySystem = Boolean(sunAnchor);
 
       if (hasPlanetarySystem) {
+        const systemSeed = mixSeed(cx, cy, worldSeed ^ 0x51e9a3d7);
+        const systemRand = createRng(systemSeed);
         const sunProfile = chooseSunProfile(systemRand);
         const sun = {
           type: "sun",
           drawOrder: 0,
           parallax: 0.16,
-          x: originX + chunkSize * 0.5,
-          y: originY + chunkSize * 0.5,
+          x: sunAnchor.x,
+          y: sunAnchor.y,
           radius: 88 + rand() * 110,
           coreColor: sunProfile.core,
           glowColor: sunProfile.glow,
@@ -314,9 +347,9 @@
           }
         }
 
-        const orbitSlotCount = 1 + Math.floor(rand() * 10);
-        const shellBase = sun.radius * (2.3 + rand() * 0.2);
-        const shellSpacing = sun.radius * (1.55 + rand() * 0.25);
+        const orbitSlotCount = 1 + Math.floor(rand() * maxOrbitShells);
+        const shellBase = orbitUnit * 2;
+        const shellSpacing = orbitUnit;
         let lastPlanetRadius = 0;
         let lastOrbitRadius = shellBase - shellSpacing;
         for (let slot = 0; slot < orbitSlotCount; slot += 1) {
