@@ -43,7 +43,8 @@
         return true;
       }
 
-      ship.acidTickCarry = (ship.acidTickCarry || 0) + (ship.acidDps || 0) * dt;
+      const acidResist = Math.max(0, Math.min(0.85, ship.acidResist || 0));
+      ship.acidTickCarry = (ship.acidTickCarry || 0) + (ship.acidDps || 0) * (1 - acidResist) * dt;
       while (ship.acidTickCarry >= 1) {
         ship.acidTickCarry -= 1;
         if (ship.armor > 0) {

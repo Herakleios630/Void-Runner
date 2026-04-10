@@ -21,6 +21,7 @@ const reloadStatusEl = document.getElementById("reloadStatus");
 const xpStatusEl = document.getElementById("xpStatus");
 const weaponLevelsStatusEl = document.getElementById("weaponLevelsStatus");
 const armorStatusEl = document.getElementById("armorStatus");
+const hazardStatusEl = document.getElementById("hazardStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
 const musicStatusEl = document.getElementById("musicStatus");
@@ -316,6 +317,8 @@ const UPGRADE_WEIGHTS = {
   stat_explosive_damage: 5,
   stat_heat_damage: 5,
   stat_armor_core: 6,
+  stat_toxic_filter: 4,
+  stat_scanner_hardening: 4,
 };
 
 const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
@@ -805,6 +808,32 @@ const UPGRADE_DEFS = [
       playSfx("upgrade");
     },
   },
+  {
+    id: "stat_toxic_filter",
+    title: "Toxic Filter",
+    description: "Spaetes Gegenmassnahmen-Upgrade: reduziert Saeure-DoT um 10%.",
+    maxStacks: 6,
+    canOffer: () => state.level >= 8,
+    apply: () => {
+      if (!state.ship) return;
+      state.ship.acidResist = Math.min(0.65, (state.ship.acidResist || 0) + 0.1);
+      state.ship.acidDps = Math.max(0, (state.ship.acidDps || 0) * 0.85);
+      playSfx("upgrade");
+    },
+  },
+  {
+    id: "stat_scanner_hardening",
+    title: "Scanner Hardening",
+    description: "Spaetes Gegenmassnahmen-Upgrade: reduziert Scanner-Stoerung um 12%.",
+    maxStacks: 6,
+    canOffer: () => state.level >= 12,
+    apply: () => {
+      if (!state.ship) return;
+      state.ship.scannerHarden = Math.min(0.72, (state.ship.scannerHarden || 0) + 0.12);
+      state.ship.scannerJam = Math.max(0, (state.ship.scannerJam || 0) * 0.72);
+      playSfx("upgrade");
+    },
+  },
 ];
 
 function getSprite(key) {
@@ -1225,6 +1254,8 @@ function resetGame() {
     maxArmor: state.shipStats ? state.shipStats.maxArmor : 2,
     invulnUntil: 0,
     scannerJam: 0,
+    scannerHarden: 0,
+    acidResist: 0,
     radius: 17,
     thrust: 420 * model.speed,
     maxSpeed: 560 * model.speed,
@@ -1275,6 +1306,11 @@ function refreshHud() {
     hpStatusEl.textContent = `${Math.max(0, state.ship.hp)}/${state.ship.maxHp}`;
     if (armorStatusEl) {
       armorStatusEl.textContent = `${Math.max(0, Math.floor(state.ship.armor))}/${state.ship.maxArmor}`;
+    }
+    if (hazardStatusEl) {
+      const acidResistPct = Math.round(Math.max(0, Math.min(0.9, state.ship.acidResist || 0)) * 100);
+      const scannerResistPct = Math.round(Math.max(0, Math.min(0.9, state.ship.scannerHarden || 0)) * 100);
+      hazardStatusEl.textContent = `Saeure -${acidResistPct}% | Scanner -${scannerResistPct}%`;
     }
   }
   critStatusEl.textContent = `${Math.round((state.shipStats ? state.shipStats.critChance : 0.1) * 100)}%`;
