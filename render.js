@@ -7,6 +7,7 @@
       WORLD,
       worldSystem,
       cameraSystem,
+      encountersSystem,
       IS_COARSE_POINTER,
       selectedShipModel,
       getRocketCooldownLeft,
@@ -19,6 +20,14 @@
     let miniMapPlanetPoints = [];
     let miniMapOrbitRings = [];
     let miniMapBeltRings = [];
+    const visualTuning = (window.VoidTuning && window.VoidTuning.VISUAL) || {};
+    const STAR_VISIBILITY = Number.isFinite(visualTuning.starVisibility)
+      ? Math.max(0.45, Math.min(2.5, visualTuning.starVisibility))
+      : 1;
+    const NEBULA_DENSITY = Number.isFinite(visualTuning.nebulaDensity)
+      ? Math.max(0.5, Math.min(2.2, visualTuning.nebulaDensity))
+      : 1;
+    const nebulaDitherPattern = createNebulaDitherPattern();
 
     function resolveBgWorldPosition(obj, atTime) {
       if (worldSystem && typeof worldSystem.resolveOrbitPosition === "function") {
@@ -38,9 +47,10 @@
     }
 
     function resolveLocalOrbitCenter(obj, atTime) {
+      const ORBIT_SPEED_SCALE = 0.5; // must match world.js resolveOrbitPosition
       if (Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy)) {
         if (Number.isFinite(obj.parentOrbitRadius)) {
-          const parentAngle = (obj.parentOrbitAngle || 0) + atTime * (obj.parentOrbitSpeed || 0);
+          const parentAngle = (obj.parentOrbitAngle || 0) + atTime * (obj.parentOrbitSpeed || 0) * ORBIT_SPEED_SCALE;
           return {
             x: obj.parentOrbitCx + Math.cos(parentAngle) * obj.parentOrbitRadius,
             y: obj.parentOrbitCy + Math.sin(parentAngle) * obj.parentOrbitRadius,
@@ -60,6 +70,40 @@
     function stableUnitFrom2(x, y, salt = 0) {
       const v = Math.sin((x || 0) * 12.9898 + (y || 0) * 78.233 + salt * 37.719) * 43758.5453;
       return v - Math.floor(v);
+    }
+
+    // Simple layered noise for organic nebula texturing
+    function perlinishNoise(x, y, scale) {
+      let sum = 0;
+      let amp = 1;
+      let freq = 1;
+      for (let i = 0; i < 3; i++) {
+        sum += amp * stableUnitFrom2(Math.floor(x * freq) / scale, Math.floor(y * freq) / scale);
+        amp *= 0.5;
+        freq *= 2;
+      }
+      return Math.min(1, Math.max(0, sum / 1.75));
+    }
+
+    function createNebulaDitherPattern() {
+      if (typeof document === "undefined") return null;
+      const tile = document.createElement("canvas");
+      tile.width = 64;
+      tile.height = 64;
+      const tctx = tile.getContext("2d");
+      if (!tctx) return null;
+
+      for (let y = 0; y < tile.height; y += 1) {
+        for (let x = 0; x < tile.width; x += 1) {
+          const n = stableUnitFrom2(x * 0.31, y * 0.47, 13.7);
+          if (n < 0.55) continue;
+          const a = (n - 0.55) * 0.12;
+          tctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(4)})`;
+          tctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      return ctx.createPattern(tile, "repeat");
     }
 
     function drawParallaxBackground() {
@@ -115,14 +159,82 @@
             if (nearStarCount > nearStarCap) continue;
           }
           if (pos.x < -6 || pos.x > WORLD.width + 6 || pos.y < -6 || pos.y > WORLD.height + 6) continue;
+
+          // Per-star unique seeds for deterministic variation
           const starSeed = stableUnitFrom2(worldX, worldY, obj.size || 1);
-          const twinkle = 0.82 + (0.18 + starSeed * 0.12) * (0.5 + 0.5 * Math.sin(state.time * (0.6 + starSeed * 1.6) + starSeed * Math.PI * 2));
-          const starAlpha = Math.min(1, Math.max(0.05, (obj.alpha || 0.5) * twinkle));
-          const coolBias = 188 + Math.floor(starSeed * 28);
-          const warmShift = Math.floor((1 - starSeed) * 10);
-          ctx.fillStyle = `rgba(${coolBias + warmShift}, ${216 + Math.floor(starSeed * 20)}, 255, ${starAlpha})`;
-          const size = obj.size || 1.5;
-          ctx.fillRect(pos.x, pos.y, size, size);
+          const colorSeed = stableUnitFrom2(worldX * 1.7, worldY * 1.7, obj.size || 1);
+          const brightSeed = stableUnitFrom2(worldX * 0.3, worldY * 0.3, obj.size || 1);
+
+          // Enhanced twinkle with per-star variance
+          const twinkelRate = 0.45 + colorSeed * 1.35;
+          const twinkelPhase = state.time * twinkelRate + starSeed * Math.PI * 2;
+          const twinkelAmplitude = 0.15 + starSeed * 0.22;
+          const twinkle = (1 - twinkelAmplitude) + twinkelAmplitude * (0.5 + 0.5 * Math.sin(twinkelPhase));
+
+          // Layer-dependent size and alpha falloff
+          let size = 0.8;
+          let baseAlpha = 0.4;
+          if (obj.layer === "far") {
+            size = 0.5 + starSeed * 0.4;
+            baseAlpha = 0.25;
+          } else if (obj.layer === "deep") {
+            size = 0.6 + starSeed * 0.55;
+            baseAlpha = 0.35;
+          } else if (obj.layer === "mid") {
+            size = 0.8 + starSeed * 0.7;
+            baseAlpha = 0.5;
+          } else if (obj.layer === "near") {
+            size = 1.1 + starSeed * 0.9;
+            baseAlpha = 0.65;
+          }
+          const layerAlphaFloor = (obj.layer === "far" ? 0.08 : obj.layer === "deep" ? 0.1 : 0.12) * STAR_VISIBILITY;
+          const starAlpha = Math.min(
+            1,
+            Math.max(layerAlphaFloor, (obj.alpha !== undefined ? obj.alpha : baseAlpha) * twinkle * STAR_VISIBILITY)
+          );
+
+          // Enhanced color temperature: red/yellow (hot) to blue/white (cool)
+          let r, g, b;
+          if (colorSeed < 0.25) {
+            // Red/orange stars (hot)
+            r = 255;
+            g = 140 + Math.floor(colorSeed * 80);
+            b = 80 + Math.floor(brightSeed * 60);
+          } else if (colorSeed < 0.55) {
+            // Yellow/white stars (very hot)
+            r = 255;
+            g = 220 + Math.floor((colorSeed - 0.25) * 120);
+            b = 150 + Math.floor(brightSeed * 100);
+          } else if (colorSeed < 0.80) {
+            // Cool white stars
+            r = 200 + Math.floor((colorSeed - 0.55) * 160);
+            g = 220 + Math.floor((colorSeed - 0.55) * 80);
+            b = 250 + Math.floor(brightSeed * 5);
+          } else {
+            // Blue stars (hottest)
+            r = 150 + Math.floor((colorSeed - 0.8) * 100);
+            g = 200 + Math.floor((colorSeed - 0.8) * 100);
+            b = 255;
+          }
+
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${starAlpha})`;
+          if (size < 1.05) {
+            // Snap tiny stars to a full pixel so they remain visible on bright/hi-DPI displays.
+            const px = Math.round(pos.x);
+            const py = Math.round(pos.y);
+            ctx.fillRect(px, py, 1, 1);
+          } else {
+            ctx.fillRect(pos.x - size * 0.5, pos.y - size * 0.5, size, size);
+          }
+
+          // Optional: subtle glow for brighter stars
+          if (brightSeed > 0.7 && baseAlpha > 0.4) {
+            const glowAlpha = starAlpha * 0.3 * (brightSeed - 0.7);
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${glowAlpha})`;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, size * 1.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
           continue;
         }
 
@@ -161,31 +273,95 @@
         }
 
         if (obj.type === "nebula") {
-          const g = ctx.createRadialGradient(pos.x, pos.y, radius * 0.08, pos.x, pos.y, radius);
-          g.addColorStop(0, obj.colorA || "rgba(108,172,255,0.24)");
-          g.addColorStop(1, obj.colorB || "rgba(38,58,112,0.08)");
-          ctx.fillStyle = g;
+          const nebulaSeed = stableUnitFrom2(worldX, worldY, radius || 1);
+          const colorSeed = stableUnitFrom2(worldX * 1.3, worldY * 1.3, radius || 1);
+          const nebulaDepth = Math.max(0, Math.min(1, ((obj.parallax || 0.22) - 0.14) / 0.16));
+
+          // Enhanced nebula color palettes (blue, pink, cyan, purple)
+          let colorA, colorB, wispColor;
+          if (colorSeed < 0.33) {
+            // Blue nebula
+            colorA = obj.colorA || `rgba(100, 160, 255, ${0.16 + nebulaDepth * 0.18})`;
+            colorB = obj.colorB || `rgba(30, 50, 120, ${0.03 + nebulaDepth * 0.05})`;
+            wispColor = `rgba(180, 210, 255, ${0.06 + nebulaDepth * 0.08})`;
+          } else if (colorSeed < 0.66) {
+            // Pink/magenta nebula
+            colorA = `rgba(255, 120, 200, ${0.14 + nebulaDepth * 0.18})`;
+            colorB = `rgba(100, 30, 80, ${0.025 + nebulaDepth * 0.045})`;
+            wispColor = `rgba(255, 170, 220, ${0.055 + nebulaDepth * 0.075})`;
+          } else {
+            // Cyan/purple nebula
+            colorA = `rgba(100, 220, 255, ${0.15 + nebulaDepth * 0.17})`;
+            colorB = `rgba(40, 80, 140, ${0.03 + nebulaDepth * 0.05})`;
+            wispColor = `rgba(150, 240, 255, ${0.065 + nebulaDepth * 0.085})`;
+          }
+
+          // Multi-layer gradient for depth
+          const radiusScale = (1.15 + nebulaDepth * 0.25) * (0.9 + NEBULA_DENSITY * 0.12);
+          const grad = ctx.createRadialGradient(pos.x, pos.y, radius * 0.05, pos.x, pos.y, radius * radiusScale);
+          grad.addColorStop(0, colorA);
+          grad.addColorStop(0.5, colorB);
+          grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+          ctx.arc(pos.x, pos.y, radius * radiusScale, 0, Math.PI * 2);
           ctx.fill();
 
-          const nebulaSeed = stableUnitFrom2(worldX, worldY, radius || 1);
-          const drift = state.time * (0.02 + nebulaSeed * 0.015);
-          const wispCount = 2 + Math.floor(nebulaSeed * 2);
-          for (let i = 0; i < wispCount; i += 1) {
-            const t = i / Math.max(1, wispCount - 1);
-            const ang = drift + nebulaSeed * Math.PI * 2 + i * 2.11;
-            const wispX = pos.x + Math.cos(ang) * radius * (0.16 + t * 0.18);
-            const wispY = pos.y + Math.sin(ang * 1.3) * radius * (0.12 + t * 0.16);
+          // Dither overlay helps reduce visible color banding on smooth gradients.
+          if (nebulaDitherPattern) {
+            const ditherRadius = radius * radiusScale;
+            const ditherOffsetX = ((worldX * 0.037) % 64 + 64) % 64;
+            const ditherOffsetY = ((worldY * 0.041) % 64 + 64) % 64;
             ctx.save();
-            ctx.translate(wispX, wispY);
-            ctx.rotate(ang * 0.4);
-            ctx.fillStyle = "rgba(198, 226, 255, 0.08)";
             ctx.beginPath();
-            ctx.ellipse(0, 0, radius * (0.16 + t * 0.08), radius * (0.06 + t * 0.04), 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.arc(pos.x, pos.y, ditherRadius * 0.98, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.translate(ditherOffsetX, ditherOffsetY);
+            ctx.globalAlpha = (0.018 + nebulaDepth * 0.016) * (0.85 + NEBULA_DENSITY * 0.15);
+            ctx.fillStyle = nebulaDitherPattern;
+            ctx.fillRect(
+              pos.x - ditherRadius * 1.2,
+              pos.y - ditherRadius * 1.2,
+              ditherRadius * 2.4,
+              ditherRadius * 2.4
+            );
             ctx.restore();
           }
+
+          // Layered wisps with organic motion
+          const drift = state.time * (0.01 + nebulaSeed * 0.008);
+          const wispLayers = Math.max(2, Math.min(8, Math.round((3 + Math.floor(nebulaSeed * 2)) * NEBULA_DENSITY)));
+          for (let layer = 0; layer < wispLayers; layer += 1) {
+            const layerSpeed = drift * (1 + layer * 0.4);
+            const layerAmp = 1 - layer / wispLayers;
+            const wispCountLayer = Math.max(2, Math.min(9, Math.round((2 + layer) * (0.85 + NEBULA_DENSITY * 0.2))));
+
+            for (let i = 0; i < wispCountLayer; i += 1) {
+              const baseSeed = stableUnitFrom2(worldX + i * 21.7, worldY + layer * 37.1, radius + layer * 3.3);
+              const noiseFactor = stableUnitFrom2(worldX - i * 34.9, worldY + layer * 19.7, radius + 11.5);
+              const ang = nebulaSeed * Math.PI * 2
+                + i * (Math.PI * 2 / wispCountLayer)
+                + layerSpeed * (0.4 + baseSeed * 0.5);
+
+              const wispX = pos.x + Math.cos(ang) * radius * (0.2 + noiseFactor * 0.25 + layer * 0.12);
+              const wispY = pos.y + Math.sin(ang * 1.3) * radius * (0.15 + noiseFactor * 0.18 + layer * 0.08);
+              const wispScale = radius * (0.15 + noiseFactor * 0.12 + layer * 0.06);
+
+              ctx.save();
+              ctx.translate(wispX, wispY);
+              ctx.rotate(ang + noiseFactor * Math.PI * 0.5);
+              ctx.globalAlpha = (0.08 + noiseFactor * 0.08 + nebulaDepth * 0.08)
+                * (0.8 + NEBULA_DENSITY * 0.2)
+                * layerAmp
+                * (1 - layer / wispLayers * 0.5);
+              ctx.fillStyle = wispColor;
+              ctx.beginPath();
+              ctx.ellipse(0, 0, wispScale * (0.8 + noiseFactor * 0.4), wispScale * (0.3 + noiseFactor * 0.2), 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+          }
+          ctx.globalAlpha = 1;
           continue;
         }
 
@@ -216,15 +392,29 @@
           const atmThickness = radius * (0.04 + depth * 0.12);
           const atmAlpha = (0.16 + depth * 0.34) * (solidPlanet ? 1 : 0.58);
 
-          // Atmosphere makes depth plane readable: thicker/brighter when closer.
-          const atmosphere = ctx.createRadialGradient(pos.x, pos.y, Math.max(0, radius - atmThickness), pos.x, pos.y, radius + atmThickness * 1.4);
+          // Enhanced Atmosphere with multiple layers for atmospheric scattering
+          const atmosphere = ctx.createRadialGradient(pos.x, pos.y, Math.max(0, radius - atmThickness), pos.x, pos.y, radius + atmThickness * 2.2);
           atmosphere.addColorStop(0, `hsla(${hue}, 78%, 70%, 0)`);
-          atmosphere.addColorStop(0.7, `hsla(${hue}, 85%, 76%, ${atmAlpha * 0.9})`);
+          atmosphere.addColorStop(0.45, `hsla(${hue}, 82%, 74%, ${atmAlpha * 0.7})`);
+          atmosphere.addColorStop(0.75, `hsla(${hue}, 88%, 80%, ${atmAlpha * 0.4})`);
           atmosphere.addColorStop(1, `hsla(${hue}, 92%, 85%, 0)`);
           ctx.fillStyle = atmosphere;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y, radius + atmThickness * 1.5, 0, Math.PI * 2);
+          ctx.arc(pos.x, pos.y, radius + atmThickness * 2.2, 0, Math.PI * 2);
           ctx.fill();
+
+          // Secondary atmosphere layer (ozone haze) for depth
+          if (depth > 0.3) {
+            const secondaryAtm = ctx.createRadialGradient(pos.x, pos.y, radius * 0.95, pos.x, pos.y, radius + atmThickness * 3);
+            const secondaryHue = (hue + 180) % 360;
+            secondaryAtm.addColorStop(0, `hsla(${secondaryHue}, 60%, 60%, 0)`);
+            secondaryAtm.addColorStop(0.5, `hsla(${secondaryHue}, 70%, 68%, ${atmAlpha * 0.2})`);
+            secondaryAtm.addColorStop(1, "rgba(255, 255, 255, 0)");
+            ctx.fillStyle = secondaryAtm;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, radius + atmThickness * 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
 
           const grad = ctx.createRadialGradient(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.1, pos.x, pos.y, radius);
           if (isGasGiant) {
@@ -265,16 +455,80 @@
           ctx.fillRect(pos.x - radius, pos.y - radius, radius * 2, radius * 2);
 
           if (!isGasGiant) {
-            const planetSeed = stableUnitFrom2(obj.orbitCx || worldX, obj.orbitCy || worldY, radius || 1);
-            const patchCount = 3;
+            const seedX = Number.isFinite(obj.orbitCx)
+              ? obj.orbitCx
+              : (Number.isFinite(obj.parentOrbitCx) ? obj.parentOrbitCx : worldX);
+            const seedY = Number.isFinite(obj.orbitCy)
+              ? obj.orbitCy
+              : (Number.isFinite(obj.parentOrbitCy) ? obj.parentOrbitCy : worldY);
+            const planetSeed = stableUnitFrom2(seedX, seedY, (radius || 1) + (obj.hue || 0));
+            
+            // Surface details: spread craters across sectors to avoid visual clustering.
+            const craterCount = 5 + Math.floor(planetSeed * 5);
+            for (let i = 0; i < craterCount; i += 1) {
+              const angleSeed = stableUnitFrom2(seedX + i * 31.7, seedY - i * 19.9, radius + 3.1);
+              const radialSeed = stableUnitFrom2(seedX - i * 23.4, seedY + i * 29.6, radius + 7.3);
+              const sizeSeed = stableUnitFrom2(seedX + i * 13.9, seedY + i * 9.7, radius + 11.1);
+              const sector = (i + 0.5) / craterCount;
+              const ang = (sector + (angleSeed - 0.5) * 0.32) * Math.PI * 2;
+              const radial = 0.14 + Math.sqrt(radialSeed) * 0.52;
+              const craterR = radius * (0.09 + sizeSeed * 0.2);
+              const cx = pos.x + Math.cos(ang) * radius * radial;
+              const cy = pos.y + Math.sin(ang) * radius * radial * 0.92;
+              
+              // Crater shadow
+              ctx.fillStyle = `hsla(${hue}, 45%, 18%, ${0.18 * bodyAlpha})`;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, craterR * 0.9, craterR * 0.6, ang * 0.5, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Crater rim highlight
+              ctx.strokeStyle = `hsla(${hue}, 55%, 52%, ${0.12 * bodyAlpha})`;
+              ctx.lineWidth = Math.max(1, craterR * 0.15);
+              ctx.beginPath();
+              ctx.ellipse(cx - craterR * 0.2, cy - craterR * 0.12, craterR * 0.85, craterR * 0.55, ang * 0.5, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+
+            // Regional variation patches
+            const patchCount = 4;
             for (let i = 0; i < patchCount; i += 1) {
-              const t = i / patchCount;
-              const ang = planetSeed * Math.PI * 2 + i * 2.2 + state.time * 0.01;
-              const px = pos.x + Math.cos(ang) * radius * (0.18 + t * 0.22);
-              const py = pos.y + Math.sin(ang * 1.4) * radius * (0.12 + t * 0.2);
+              const angleSeed = stableUnitFrom2(seedX + i * 41.1, seedY - i * 27.3, radius + 5.7);
+              const radialSeed = stableUnitFrom2(seedX - i * 15.8, seedY + i * 33.2, radius + 2.9);
+              const sizeSeed = stableUnitFrom2(seedX + i * 21.4, seedY + i * 17.6, radius + 8.2);
+              const sector = (i + 0.35) / patchCount;
+              const ang = (sector + (angleSeed - 0.5) * 0.22) * Math.PI * 2;
+              const radial = 0.18 + Math.sqrt(radialSeed) * 0.34;
+              const px = pos.x + Math.cos(ang) * radius * radial;
+              const py = pos.y + Math.sin(ang) * radius * radial * 0.9;
               ctx.fillStyle = `hsla(${hue + 14}, 58%, 36%, ${0.14 * bodyAlpha})`;
               ctx.beginPath();
-              ctx.ellipse(px, py, radius * (0.14 - t * 0.02), radius * (0.08 - t * 0.01), ang * 0.4, 0, Math.PI * 2);
+              ctx.ellipse(
+                px,
+                py,
+                radius * (0.09 + sizeSeed * 0.07),
+                radius * (0.05 + sizeSeed * 0.04),
+                ang * 0.4,
+                0,
+                Math.PI * 2
+              );
+              ctx.fill();
+            }
+
+            // Subtle terrain lanes add a second-frequency detail layer without heavy per-frame cost.
+            const laneCount = 5 + Math.floor(planetSeed * 3);
+            for (let i = 0; i < laneCount; i += 1) {
+              const laneSeed = stableUnitFrom2(seedX + i * 53.3, seedY - i * 47.1, radius + 19.7);
+              const laneAngle = laneSeed * Math.PI * 2;
+              const laneDist = radius * (0.08 + laneSeed * 0.52);
+              const laneX = pos.x + Math.cos(laneAngle) * laneDist;
+              const laneY = pos.y + Math.sin(laneAngle) * laneDist * 0.9;
+              const laneW = radius * (0.18 + laneSeed * 0.16);
+              const laneH = radius * (0.045 + laneSeed * 0.03);
+
+              ctx.fillStyle = `hsla(${hue - 8}, 46%, 30%, ${0.07 * bodyAlpha})`;
+              ctx.beginPath();
+              ctx.ellipse(laneX, laneY, laneW, laneH, laneAngle * 0.55, 0, Math.PI * 2);
               ctx.fill();
             }
           }
@@ -287,22 +541,54 @@
             ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
             ctx.clip();
 
-            const bands = 8;
+            // Enhanced banded structure with storms and rotation
+            const gasSeed = stableUnitFrom2(worldX * 0.7, worldY * 0.7, radius * 0.5);
+            const rotationPhase = state.time * (0.015 + gasSeed * 0.005);
+            const bands = 10;
             for (let i = 0; i < bands; i += 1) {
               const t = i / (bands - 1);
-              const yOff = (t - 0.5) * radius * 1.7;
-              const bandH = radius * (0.11 + (i % 2 === 0 ? 0.01 : 0.03));
-              const bandHue = hue + (i % 2 === 0 ? 8 : -10);
-              const alpha = 0.1 + (i % 2 === 0 ? 0.06 : 0.03);
-              ctx.fillStyle = `hsla(${bandHue}, 70%, ${44 + (i % 2) * 8}%, ${alpha * bodyAlpha})`;
-              ctx.fillRect(pos.x - radius * 1.05, pos.y + yOff - bandH * 0.5, radius * 2.1, bandH);
+              const yOff = (t - 0.5) * radius * 1.8 + Math.sin(rotationPhase + t * Math.PI * 4) * radius * 0.08;
+              const bandH = radius * (0.09 + (i % 2 === 0 ? 0.02 : 0.05));
+              const bandHue = hue + (i % 3) * 12 - 8;
+              const bandLightness = 42 + (i % 3) * 10;
+              const alpha = (0.08 + (i % 2 === 0 ? 0.08 : 0.04)) * bodyAlpha;
+              ctx.fillStyle = `hsla(${bandHue}, 72%, ${bandLightness}%, ${alpha})`;
+              ctx.fillRect(pos.x - radius * 1.1, pos.y + yOff - bandH * 0.5, radius * 2.2, bandH);
+              
+              // Band striations (texture)
+              if (i % 2 === 1) {
+                const stripeCount = 5;
+                for (let s = 0; s < stripeCount; s++) {
+                  const sx = pos.x - radius * 1.05 + (s / stripeCount) * radius * 2.1;
+                  ctx.strokeStyle = `hsla(${bandHue + 4}, 80%, 55%, ${0.06 * bodyAlpha})`;
+                  ctx.lineWidth = 1;
+                  ctx.beginPath();
+                  ctx.moveTo(sx, pos.y + yOff - bandH * 0.5);
+                  ctx.lineTo(sx + 12, pos.y + yOff + bandH * 0.5);
+                  ctx.stroke();
+                }
+              }
+            }
+
+            // Great Red Spot-like storm feature (rare)
+            if (gasSeed < 0.3) {
+              const stormSize = radius * (0.08 + gasSeed * 0.12);
+              const stormX = pos.x + Math.cos(rotationPhase * 0.5) * radius * 0.25;
+              const stormY = pos.y + Math.sin(rotationPhase * 0.5 + 0.8) * radius * 0.35;
+              ctx.fillStyle = `hsla(${hue + 8}, 65%, 35%, ${0.22 * bodyAlpha})`;
+              ctx.beginPath();
+              ctx.ellipse(stormX, stormY, stormSize, stormSize * 0.6, rotationPhase * 0.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = `hsla(${hue + 12}, 55%, 48%, ${0.14 * bodyAlpha})`;
+              ctx.lineWidth = Math.max(1, stormSize * 0.12);
+              ctx.stroke();
             }
 
             ctx.restore();
-            ctx.strokeStyle = `hsla(${hue}, 80%, 78%, ${0.3 * bodyAlpha})`;
-            ctx.lineWidth = Math.max(1, radius * 0.03);
+            ctx.strokeStyle = `hsla(${hue}, 85%, 80%, ${0.35 * bodyAlpha})`;
+            ctx.lineWidth = Math.max(1, radius * 0.04);
             ctx.beginPath();
-            ctx.ellipse(pos.x, pos.y, radius * 1.18, radius * 0.22, 0.18, 0.15, Math.PI * 1.86);
+            ctx.ellipse(pos.x, pos.y, radius * 1.22, radius * 0.26, 0.2, 0.1, Math.PI * 1.88);
             ctx.stroke();
           }
 
@@ -872,6 +1158,51 @@
           if (topLeft.x > WORLD.width + 2 || topLeft.y > WORLD.height + 2 || bottomRight.x < -2 || bottomRight.y < -2) continue;
           ctx.strokeRect(topLeft.x, topLeft.y, width, height);
         }
+
+        // Color-coded chunk zone/event labels for interstellar debugging.
+        const chunkEventMap = typeof encountersSystem !== "undefined" && typeof encountersSystem.getChunkEventMap === "function"
+          ? encountersSystem.getChunkEventMap() : null;
+        if (chunkEventMap) {
+          const ZONE_COLORS = {
+            system:       "rgba(100, 210, 255, 0.72)",
+            edge:         "rgba(200, 180, 100, 0.72)",
+            interstellar: "rgba(140, 140, 160, 0.72)",
+            ambush:       "rgba(255,  72,  72, 0.92)",
+            drift:        "rgba( 80, 200, 255, 0.92)",
+            trail:        "rgba(255, 200,  80, 0.92)",
+          };
+          const ZONE_LABEL = {
+            system: "SYS", edge: "EDGE", interstellar: "VOID",
+            ambush: "AMBUSH", drift: "DRIFT-FELD", trail: "SCHROTTSPUR",
+          };
+          ctx.font = "bold 10px monospace";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          for (const chunk of chunks) {
+            const cx = Math.floor(chunk.x / chunk.size);
+            const cy = Math.floor(chunk.y / chunk.size);
+            const eventKey = `${cx},${cy}`;
+            const zone = chunkEventMap.get(eventKey);
+            if (!zone) continue;
+            const topLeft = cameraSystem.worldToScreen(chunk.x, chunk.y, 1, WORLD.width, WORLD.height);
+            const bottomRight = cameraSystem.worldToScreen(chunk.x + chunk.size, chunk.y + chunk.size, 1, WORLD.width, WORLD.height);
+            const midX = (topLeft.x + bottomRight.x) * 0.5;
+            const midY = (topLeft.y + bottomRight.y) * 0.5;
+            if (midX < -20 || midX > WORLD.width + 20 || midY < -20 || midY > WORLD.height + 20) continue;
+            const color = ZONE_COLORS[zone] || "rgba(255, 255, 255, 0.6)";
+            const label = ZONE_LABEL[zone] || zone.toUpperCase();
+            // Tinted fill band
+            ctx.fillStyle = color.replace("0.72", "0.08").replace("0.92", "0.12");
+            ctx.fillRect(topLeft.x + 1, topLeft.y + 1, bottomRight.x - topLeft.x - 2, bottomRight.y - topLeft.y - 2);
+            // Label text with shadow
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillText(label, midX + 1, midY + 1);
+            ctx.fillStyle = color;
+            ctx.fillText(label, midX, midY);
+          }
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
+        }
       }
 
       const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
@@ -972,7 +1303,7 @@
 
       for (const obj of bgObjects) {
         if (obj.type === "planet") {
-          if ((obj.parallax || 1) < 0.95) continue;
+          if (!obj.collidablePlane) continue;
           const pos = resolveBgWorldPosition(obj, state.time);
           planetPoints.push({
             x: pos.x,
@@ -980,7 +1311,7 @@
             isMoon: Boolean(obj.isMoon),
           });
 
-          if (!obj.isMoon && Number.isFinite(obj.orbitRadius)) {
+          if (Number.isFinite(obj.orbitRadius)) {
             const center = resolveLocalOrbitCenter(obj, state.time);
             const key = `o:${Math.round(center.x / 16)}:${Math.round(center.y / 16)}:${Math.round(obj.orbitRadius / 8)}`;
             if (!orbitRings.has(key)) {
@@ -990,6 +1321,20 @@
                 radius: obj.orbitRadius,
               });
             }
+          }
+          continue;
+        }
+
+        if (obj.type === "orbitalStation") {
+          if (!obj.collidablePlane || !Number.isFinite(obj.orbitRadius)) continue;
+          const center = resolveLocalOrbitCenter(obj, state.time);
+          const key = `s:${Math.round(center.x / 16)}:${Math.round(center.y / 16)}:${Math.round(obj.orbitRadius / 8)}`;
+          if (!orbitRings.has(key)) {
+            orbitRings.set(key, {
+              x: center.x,
+              y: center.y,
+              radius: obj.orbitRadius,
+            });
           }
           continue;
         }
@@ -1267,7 +1612,20 @@
 
         let core = "rgba(255, 245, 200, 0.95)";
         let mid = "rgba(255, 188, 96, 0.65)";
-        if (t > 0.28 && t <= 0.6) {
+        const isEnemyAcid = burst.enemyOwned && burst.damageType === "acid";
+
+        if (isEnemyAcid) {
+          core = "rgba(202, 255, 170, 0.96)";
+          mid = "rgba(86, 232, 95, 0.64)";
+          if (t > 0.52) {
+            core = "rgba(126, 235, 110, 0.88)";
+            mid = "rgba(46, 146, 62, 0.52)";
+          }
+          if (t > 0.82) {
+            core = "rgba(62, 118, 56, 0.72)";
+            mid = "rgba(24, 52, 24, 0.5)";
+          }
+        } else if (t > 0.28 && t <= 0.6) {
           core = "rgba(255, 196, 108, 0.92)";
           mid = "rgba(255, 124, 62, 0.58)";
         } else if (t > 0.6 && t <= 0.82) {

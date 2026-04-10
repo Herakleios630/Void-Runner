@@ -22,29 +22,29 @@
 - [x] Full QA pass for balancing and edge cases
 
 ## Architecture Cleanup Backlog (Core-Adjacent)
-- [ ] Extract status-effects module (burn, acid, shield-break side effects)
-- [ ] Extract enemy AI steering module (aggro acquire, chase, disengage memory)
-- [ ] Extract ship damage + mitigation module (armor/shield/type scaling)
-- [ ] Extract projectile-vs-target resolver (bullet/missile/plasma/boss projectile)
-- [ ] Extract hazard interaction module (planet/black-hole/station/hazard collision outcomes)
-- [ ] Extract object lifecycle module (destroy reasons, fragment spawn, pickup drops)
-- [ ] Extract world-space sync helpers into separate movement-utils file
-- [ ] Extract entity culling filters into dedicated culling module
-- [ ] Extract pickup simulation + collection module
-- [ ] Extract boss combat loop (DoT ticks, body collision, death transition)
-- [ ] Extract input-to-ship thrust integration into flight-control module
-- [ ] Extract debug toggles and debug-data formatting module
-- [ ] Move gameplay constants (distances, timers, damping) into tuned config file
-- [ ] Replace string-based destroy reasons with enum-like constants map
-- [ ] Add lightweight perf counters per update phase (movement/combat/cleanup)
+- [x] Extract status-effects module (burn, acid, shield-break side effects)
+- [x] Extract enemy AI steering module (aggro acquire, chase, disengage memory)
+- [x] Extract ship damage + mitigation module (armor/shield/type scaling)
+- [x] Extract projectile-vs-target resolver (bullet/missile/plasma/boss projectile)
+- [x] Extract hazard interaction module (planet/black-hole/station/hazard collision outcomes)
+- [x] Extract object lifecycle module (destroy reasons, fragment spawn, pickup drops)
+- [x] Extract world-space sync helpers into separate movement-utils file
+- [x] Extract entity culling filters into dedicated culling module
+- [x] Extract pickup simulation + collection module
+- [x] Extract boss combat loop (DoT ticks, body collision, death transition)
+- [x] Extract input-to-ship thrust integration into flight-control module
+- [x] Extract debug toggles and debug-data formatting module
+- [x] Move gameplay constants (distances, timers, damping) into tuned config file
+- [x] Replace string-based destroy reasons with enum-like constants map
+- [x] Add lightweight perf counters per update phase (movement/combat/cleanup)
 
 ## Future Features
-- [ ] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
-- [ ] Discovery pacing: Sonnensysteme klar getrennt platzieren (spuerbare Reise zwischen Systemen)
-- [ ] Discovery pacing: trotzdem keine langen Leerlaeufe (maximale Suchdistanz bis naechstes System begrenzen)
-- [ ] Discovery pacing: Systemabstand adaptiv je Region (Core dichter, aussen weiter auseinander)
-- [ ] Interstellar Space: Zwischenraeume mit random Asteroidenfeldern, Truemmerclustern und Alien-Patrouillen beleben
-- [ ] Interstellar Space: dynamische Ereignisse zwischen Systemen (Ambush, Drift-Feld, Schrottspur)
+- [x] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
+- [x] Discovery pacing: Sonnensysteme klar getrennt platzieren (spuerbare Reise zwischen Systemen)
+- [x] Discovery pacing: trotzdem keine langen Leerlaeufe (maximale Suchdistanz bis naechstes System begrenzen)
+- [x] Discovery pacing: Systemabstand adaptiv je Region (Core dichter, aussen weiter auseinander)
+- [x] Interstellar Space: Zwischenraeume mit random Asteroidenfeldern, Truemmerclustern und Alien-Patrouillen beleben
+- [x] Interstellar Space: dynamische Ereignisse zwischen Systemen (Ambush, Drift-Feld, Schrottspur)
 - [ ] Giftige Nebelwolken: raeumliche Gefahrenzonen mit DoT/Scanner-Sichtreduktion
 - [ ] Giftige Nebelwolken: klare Telegraphs/Farbcode und Gegenmassnahmen als spaetere Upgrades
 - [ ] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
@@ -70,12 +70,15 @@
 - [ ] Derelict stations / Wracks als erkundbare Background-Makroobjekte (optional mit Loot-Events)
 - [ ] Ion storms / plasma clouds als raeumliche Wetterzonen (Sicht + Projektilverhalten beeinflussen)
 - [ ] Debris streams / meteor showers als gerichtete, temporale Flow-Objekte
+- [ ] Mutterschiffe/Traegerschiffe: grosse Schiffe als seltene Elite-Begegnung
+- [ ] Mutterschiffe/Traegerschiffe: Eskorte aus 3-5 normalen Schiffen beim Spawn
+- [ ] Mutterschiffe/Traegerschiffe: spawnen neue Schiffe bis das Mutterschiff zerstoert ist
 - [ ] Spezial-Asteroiden: Gold-Asteroid (Bonus-Punkte)
 - [ ] Spezial-Asteroiden: Eisen-Asteroid (garantierter Panzerungs-Drop)
-- [ ] High-detail procedural planets (bands, craters, rim light, atmospheric scattering)
-- [ ] Rich nebula rendering (layered noise, color palettes, wisps, depth fade)
-- [ ] Improved starfield quality (twinkle variance, color temperature, density falloff)
-- [ ] Cinematic background composition rules per chunk (avoid flat empty scenes)
+- [x] High-detail procedural planets (bands, craters, rim light, atmospheric scattering)
+- [x] Rich nebula rendering (layered noise, color palettes, wisps, depth fade)
+- [x] Improved starfield quality (twinkle variance, color temperature, density falloff)
+- [x] Cinematic background composition rules per chunk (avoid flat empty scenes)
 - [ ] Larger playable area / viewport fill (use much more of browser window)
 - [ ] Multiplayer co-op mode (online)
 - [ ] Multiplayer PvP / versus arena mode

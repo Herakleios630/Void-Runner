@@ -59,6 +59,13 @@
     const maxOrbitShells = 10;
     const systemCellChunks = 13;
     const SYSTEM_PARALLAX = 1;
+    const visualTuning = (window.VoidTuning && window.VoidTuning.VISUAL) || {};
+    const STAR_VISIBILITY = Number.isFinite(visualTuning.starVisibility)
+      ? Math.max(0.45, Math.min(2.5, visualTuning.starVisibility))
+      : 1;
+    const NEBULA_DENSITY = Number.isFinite(visualTuning.nebulaDensity)
+      ? Math.max(0.5, Math.min(2.2, visualTuning.nebulaDensity))
+      : 1;
 
     const activeChunks = new Map();
 
@@ -70,18 +77,46 @@
       return Math.floor(value / chunkSize);
     }
 
-    function getSunCandidateForChunk(cx, cy) {
-      const cellX = Math.floor(cx / systemCellChunks);
-      const cellY = Math.floor(cy / systemCellChunks);
+    function systemPresenceChanceForCell(cellX, cellY) {
+      const cellDistance = Math.hypot(cellX, cellY);
+      if (cellDistance < 3) return 0.95;
+      if (cellDistance < 7) return 0.82;
+      if (cellDistance < 12) return 0.68;
+      return 0.56;
+    }
+
+    function cellHasGameplaySystem(cellX, cellY) {
+      const chance = systemPresenceChanceForCell(cellX, cellY);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x1e35b11f);
+      const rand = createRng(seed);
+      return rand() < chance;
+    }
+
+    function getSystemAnchorForCell(cellX, cellY) {
+      if (!cellHasGameplaySystem(cellX, cellY)) return null;
       const seed = mixSeed(cellX, cellY, worldSeed ^ 0x5f74a1c3);
       const rand = createRng(seed);
       const anchorCx = cellX * systemCellChunks + Math.floor(systemCellChunks * 0.5);
       const anchorCy = cellY * systemCellChunks + Math.floor(systemCellChunks * 0.5);
-      if (cx !== anchorCx || cy !== anchorCy) return null;
       return {
-        x: cx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.36),
-        y: cy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.36),
+        cx: anchorCx,
+        cy: anchorCy,
+        x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.36),
+        y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.36),
         priority: rand(),
+      };
+    }
+
+    function getSunCandidateForChunk(cx, cy) {
+      const cellX = Math.floor(cx / systemCellChunks);
+      const cellY = Math.floor(cy / systemCellChunks);
+      const anchor = getSystemAnchorForCell(cellX, cellY);
+      if (!anchor) return null;
+      if (cx !== anchor.cx || cy !== anchor.cy) return null;
+      return {
+        x: anchor.x,
+        y: anchor.y,
+        priority: anchor.priority,
       };
     }
 
@@ -210,6 +245,43 @@
         });
       }
 
+      // Multi-layer focal clusters create a clear composition anchor in each chunk.
+      const clusterCount = 1 + Math.floor(rand() * (1 + STAR_VISIBILITY * 0.9));
+      for (let c = 0; c < clusterCount; c += 1) {
+        const clusterX = originX + (0.2 + rand() * 0.6) * chunkSize;
+        const clusterY = originY + (0.2 + rand() * 0.6) * chunkSize;
+        const starsPerCluster = Math.max(6, Math.round((7 + rand() * 8) * (0.85 + STAR_VISIBILITY * 0.2)));
+        for (let i = 0; i < starsPerCluster; i += 1) {
+          const angle = rand() * Math.PI * 2;
+          const distance = 14 + rand() * 110;
+          const ringT = distance / 124;
+          const nearLayer = ringT < 0.3 && rand() < 0.7;
+          const midLayer = !nearLayer && rand() < 0.62;
+          const layer = nearLayer ? "near" : (midLayer ? "mid" : "deep");
+          const parallax = layer === "near" ? 0.24 : (layer === "mid" ? 0.16 : 0.075);
+          const size = layer === "near"
+            ? (1.3 + rand() * 2.4)
+            : layer === "mid"
+              ? (1 + rand() * 2)
+              : (0.85 + rand() * 1.5);
+          const alpha = layer === "near"
+            ? (0.4 + rand() * 0.46)
+            : layer === "mid"
+              ? (0.34 + rand() * 0.44)
+              : (0.28 + rand() * 0.32);
+          background.push({
+            type: "star",
+            layer,
+            drawOrder: layer === "near" ? 3 : 2,
+            parallax,
+            x: clusterX + Math.cos(angle) * distance,
+            y: clusterY + Math.sin(angle) * distance,
+            size,
+            alpha,
+          });
+        }
+      }
+
       const nearStars = 7 + Math.floor(rand() * 7);
       for (let i = 0; i < nearStars; i += 1) {
         background.push({
@@ -224,24 +296,48 @@
         });
       }
 
-      const nebulaCount = rand() < 0.7 ? 1 : 2;
+      const baseNebulaCount = rand() < 0.85 ? (rand() < 0.6 ? 1 : 2) : (rand() < 0.4 ? 3 : 0);
+      const nebulaCount = Math.max(0, Math.min(4, Math.round(baseNebulaCount * NEBULA_DENSITY)));
       for (let i = 0; i < nebulaCount; i += 1) {
         const palette = rand() < 0.5
           ? ["rgba(96,162,255,0.24)", "rgba(56,86,168,0.12)"]
           : ["rgba(194,104,255,0.2)", "rgba(78,40,132,0.12)"];
+        
+        // Cinematic placement: position nebulae in thirds/clusters for visual interest
+        const placementBias = rand();
+        let x, y;
+        if (nebulaCount > 1 && i > 0) {
+          // Second/third nebulae offset from first for composition
+          const offsetAngle = Math.PI * (i - 0.5) + placementBias * Math.PI * 0.5;
+          const offsetDist = 200 + rand() * 300;
+          const baseX = originX + chunkSize * 0.5;
+          const baseY = originY + chunkSize * 0.5;
+          x = baseX + Math.cos(offsetAngle) * offsetDist;
+          y = baseY + Math.sin(offsetAngle) * offsetDist;
+        } else {
+          // First nebula, slightly offset from center for composition depth
+          const quadrant = Math.floor(placementBias * 4);
+          const offset = 150 + rand() * 200;
+          const angle = (quadrant * Math.PI * 0.5) + rand() * Math.PI * 0.3;
+          x = originX + chunkSize * 0.5 + Math.cos(angle) * offset;
+          y = originY + chunkSize * 0.5 + Math.sin(angle) * offset;
+        }
+        
+        const nebulaParallax = 0.14 + rand() * 0.16;
         background.push({
           type: "nebula",
-          drawOrder: 3,
-          parallax: 0.22,
-          x: originX + rand() * chunkSize,
-          y: originY + rand() * chunkSize,
+          drawOrder: nebulaParallax < 0.2 ? 2 : 3,
+          parallax: nebulaParallax,
+          x: x,
+          y: y,
           radius: 160 + rand() * 210,
           colorA: palette[0],
           colorB: palette[1],
         });
       }
 
-      if (rand() < 0.2) {
+      // Increased galaxy frequency for visual depth
+      if (rand() < 0.35) {
         background.push({
           type: "galaxy",
           drawOrder: 4,
@@ -276,7 +372,8 @@
         };
         background.push(sun);
 
-        const maxSystemRadius = chunkSize * 5.8;
+        // Keep a clear interstellar gap between neighboring anchor cells.
+        const maxSystemRadius = Math.min(chunkSize * 5.8, chunkSize * systemCellChunks * 0.32);
 
         const orbitDirection = rand() < 0.5 ? -1 : 1;
         const orbitalSpeedNearSun = 0.095 + rand() * 0.05;
@@ -765,6 +862,30 @@
       return out;
     }
 
+    function estimateSystemInfluence(worldX, worldY) {
+      if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return 0;
+
+      const worldChunkX = Math.floor(worldX / chunkSize);
+      const worldChunkY = Math.floor(worldY / chunkSize);
+      const baseCellX = Math.floor(worldChunkX / systemCellChunks);
+      const baseCellY = Math.floor(worldChunkY / systemCellChunks);
+
+      let influence = 0;
+      const influenceRadius = chunkSize * 7.8;
+
+      for (let cy = baseCellY - 1; cy <= baseCellY + 1; cy += 1) {
+        for (let cx = baseCellX - 1; cx <= baseCellX + 1; cx += 1) {
+          const anchor = getSystemAnchorForCell(cx, cy);
+          if (!anchor) continue;
+          const d = Math.hypot(worldX - anchor.x, worldY - anchor.y);
+          const t = Math.max(0, 1 - d / influenceRadius);
+          if (t > influence) influence = t;
+        }
+      }
+
+      return influence;
+    }
+
     return {
       update,
       getBackgroundObjects,
@@ -773,6 +894,7 @@
       getOrbitalStations,
       getSolarHeatZones,
       resolveOrbitPosition,
+      estimateSystemInfluence,
       getActiveChunkRects,
       getDebugInfo,
       setSeed,

@@ -76,10 +76,57 @@ const { createScoringSystem } = window.VoidScoring;
 const { getKillReward } = window.VoidCombatData;
 const { createWeaponsSystem } = window.VoidWeapons;
 const { createInputSystem } = window.VoidInput;
+const { createStatusEffectsSystem } = window.VoidStatusEffects;
+const { createEnemyAISteeringSystem } = window.VoidEnemyAI;
+const { createShipDamageSystem } = window.VoidShipDamage;
+const { createProjectileResolverSystem } = window.VoidProjectileResolver;
+const { createHazardInteractionsSystem } = window.VoidHazardInteractions;
+const { createObjectLifecycleSystem } = window.VoidObjectLifecycle;
+const { createEnemyCombatSystem } = window.VoidEnemyCombat;
+const { createMovementUtils } = window.VoidMovementUtils;
+const { createCullingFiltersSystem } = window.VoidCullingFilters;
+const { createPickupSimulationSystem } = window.VoidPickupSimulation;
+const { createBossCombatSystem } = window.VoidBossCombat;
+const { createFlightControlSystem } = window.VoidFlightControl;
+const { createDebugToolsSystem } = window.VoidDebugTools;
+
+const GAMEPLAY_TUNING = (window.VoidTuning && window.VoidTuning.GAMEPLAY) || {
+  world: {
+    chunkSize: 960,
+  },
+  spawn: {
+    targetObjects: { easy: 46, medium: 58, hard: 70 },
+    targetEnemies: { easy: 14, medium: 20, hard: 26 },
+    minLastSpawnCarry: 0.28,
+    minDynamicSpawnInterval: 0.44,
+  },
+  enemyCombat: {
+    miniFireMaxDistViewportMult: 0.95,
+    shipFireMaxDistViewportMult: 1.05,
+    miniOutOfRangeDelayMin: 0.6,
+    miniOutOfRangeDelayRand: 0.9,
+    shipOutOfRangeDelayMin: 0.55,
+    shipOutOfRangeDelayRand: 0.8,
+  },
+  shield: {
+    novaInterval: 30,
+  },
+  progression: {
+    spawnIntensityPerBoss: 0.2,
+    spawnIntensityCap: 1.25,
+  },
+};
+
+const DESTROY_REASONS = (window.VoidTuning && window.VoidTuning.DESTROY_REASONS) || {
+  SHOT: "shot",
+  ROCKET: "rocket",
+  COLLISION: "collision",
+  ACID: "acid",
+};
 
 const BALANCE_PROFILE_ID = "medium"; // safe | medium | chaos
 const BALANCE_TUNING_TRACKS = ["cannon", "laser", "rocket", "drill", "plasma", "shield"];
-const WORLD_CHUNK_SIZE = 960;
+const WORLD_CHUNK_SIZE = GAMEPLAY_TUNING.world.chunkSize;
 
 function generateWorldSeed() {
   return 100000 + Math.floor(Math.random() * 900000000);
@@ -227,17 +274,13 @@ const state = {
     playerX: 0,
     playerY: 0,
   },
+  perfCounters: {
+    movement: 0,
+    combat: 0,
+    cleanup: 0,
+    frameTotal: 0,
+  },
 };
-
-const balanceDebug = {
-  visible: false,
-  selectedTrackIndex: 0,
-  tuneStep: 0.05,
-};
-
-const balanceDebugPanelEl = document.createElement("aside");
-balanceDebugPanelEl.className = "balance-debug hidden";
-stageWrapEl.appendChild(balanceDebugPanelEl);
 
 const UPGRADE_WEIGHTS = {
   shield_core: 7,
@@ -434,7 +477,7 @@ const UPGRADE_DEFS = [
     canOffer: () => state.shield.unlocked,
     apply: () => {
       state.shield.nova = true;
-      state.shield.nextNova = state.time + 30;
+      state.shield.nextNova = state.time + GAMEPLAY_TUNING.shield.novaInterval;
       playSfx("upgrade");
     },
   },
@@ -946,13 +989,6 @@ function computeDamage(baseDamage, damageType = "physical") {
   };
 }
 
-function computeBurnTickDamage() {
-  const crit = rollCrit();
-  if (!crit) return 1;
-  const critMult = state.shipStats ? state.shipStats.critDamage : 1.5;
-  return Math.max(1, Math.round(critMult * 0.8));
-}
-
 function addDamageText(x, y, amount, crit = false) {
   if (!state.debugHitboxes) return;
   const life = crit ? 0.82 : 0.62;
@@ -968,44 +1004,16 @@ function addDamageText(x, y, amount, crit = false) {
   });
 }
 
-function applyAcidToShip(duration = 3.8, dps = 0.8) {
-  if (!state.ship) return;
-  state.ship.acidUntil = Math.max(state.ship.acidUntil || 0, state.time + duration);
-  state.ship.acidDps = Math.max(state.ship.acidDps || 0, dps);
-  state.ship.acidTickCarry = state.ship.acidTickCarry || 0;
-}
-
 function hitShip(damageType = "physical", amount = 1) {
-  if (!state.ship) return false;
-  if (state.time < state.ship.invulnUntil) return true;
-
-  if (consumeShield(damageType, amount)) {
-    state.ship.invulnUntil = state.time + 0.5;
-    return true;
-  }
-
-  let remaining = Math.max(0, amount);
-  if (state.ship.armor > 0) {
-    // One armor point is consumed per hit and mitigates damage by source type.
-    state.ship.armor = Math.max(0, state.ship.armor - 1);
-    const reduction = damageType === "physical" ? 1 : damageType === "explosive" ? 1 : damageType === "acid" ? 0.2 : 0.5;
-    remaining = Math.max(0, remaining - reduction);
-  }
-
-  if (remaining > 0) {
-    state.ship.hp -= Math.max(1, Math.ceil(remaining));
-  }
-  state.ship.invulnUntil = state.time + 0.5;
-  createExplosion(state.ship.x, state.ship.y, "#ff7f8a", 20);
-  if (state.ship.hp <= 0) {
-    return false;
-  }
-  return true;
+  return shipDamage.hitShip(damageType, amount);
 }
 
 function spawnIntensity() {
   // Progression pressure increases only after each defeated boss.
-  return 1 + Math.min(1.25, state.bossLevelsCleared * 0.2);
+  return 1 + Math.min(
+    GAMEPLAY_TUNING.progression.spawnIntensityCap,
+    state.bossLevelsCleared * GAMEPLAY_TUNING.progression.spawnIntensityPerBoss,
+  );
 }
 
 const encounters = createEncountersSystem({
@@ -1041,6 +1049,14 @@ const progression = createProgressionSystem({
   weaponUpgradeTrack: WEAPON_UPGRADE_TRACK,
   weaponLevelMilestones: WEAPON_LEVEL_MILESTONES,
   balanceProfileId: BALANCE_PROFILE_ID,
+});
+
+const debugTools = createDebugToolsSystem({
+  state,
+  stageWrapEl,
+  shipInfoPanelEl,
+  progression,
+  balanceTuningTracks: BALANCE_TUNING_TRACKS,
 });
 
 function onBossDefeated() {
@@ -1315,41 +1331,7 @@ function refreshHud() {
     rocketStatusEl.textContent = left > 0.05 ? `${left.toFixed(1)}s` : "Bereit";
   }
 
-  updateBalanceDebugPanel();
-}
-
-function selectedBalanceTrack() {
-  return BALANCE_TUNING_TRACKS[Math.max(0, Math.min(BALANCE_TUNING_TRACKS.length - 1, balanceDebug.selectedTrackIndex))] || "cannon";
-}
-
-function cycleBalanceTrack(dir) {
-  const len = BALANCE_TUNING_TRACKS.length;
-  if (len <= 0) return;
-  balanceDebug.selectedTrackIndex = (balanceDebug.selectedTrackIndex + dir + len) % len;
-}
-
-function updateBalanceDebugPanel() {
-  if (!balanceDebug.visible) {
-    balanceDebugPanelEl.classList.add("hidden");
-    return;
-  }
-
-  const snapshot = progression.getLevelTuningSnapshot();
-  const selected = selectedBalanceTrack();
-  const rows = BALANCE_TUNING_TRACKS
-    .map((track) => {
-      const marker = track === selected ? ">" : " ";
-      const value = snapshot.tracks[track] || 1;
-      return `<div>${marker} ${track.padEnd(6, " ")}: x${value.toFixed(2)}</div>`;
-    })
-    .join("");
-
-  balanceDebugPanelEl.classList.remove("hidden");
-  balanceDebugPanelEl.innerHTML = `
-    <div><strong>Balance Debug</strong> (${snapshot.profileId})</div>
-    <div class="balance-debug-hint">B: Panel | [ ]: Waffe | - / +: Faktor | 0: Reset</div>
-    <div class="balance-debug-rows">${rows}</div>
-  `;
+  debugTools.updateBalanceDebugPanel();
 }
 
 function setGameOver() {
@@ -1420,35 +1402,18 @@ function projectWorldToScreen(worldX, worldY, cameraX, cameraY) {
   };
 }
 
-function ensureEntityWorldPosition(entity) {
-  if (Number.isFinite(entity.worldX) && Number.isFinite(entity.worldY)) {
-    return;
-  }
-  const worldPos = screenToWorld(entity.x, entity.y);
-  entity.worldX = worldPos.x;
-  entity.worldY = worldPos.y;
-}
+const movementUtils = createMovementUtils({
+  screenToWorld,
+  projectWorldToScreen,
+});
 
-function syncEntityScreenPosition(entity, cameraX, cameraY) {
-  if (!Number.isFinite(entity.worldX) || !Number.isFinite(entity.worldY)) return;
-  const screenPos = projectWorldToScreen(entity.worldX, entity.worldY, cameraX, cameraY);
-  entity.x = screenPos.x;
-  entity.y = screenPos.y;
-}
-
-function entityWorldX(entity) {
-  return Number.isFinite(entity.worldX) ? entity.worldX : entity.x;
-}
-
-function entityWorldY(entity) {
-  return Number.isFinite(entity.worldY) ? entity.worldY : entity.y;
-}
-
-function circlesOverlapWorldEntities(a, radiusA, b, radiusB) {
-  const dx = entityWorldX(a) - entityWorldX(b);
-  const dy = entityWorldY(a) - entityWorldY(b);
-  return dx * dx + dy * dy < Math.pow(radiusA + radiusB, 2);
-}
+const {
+  ensureEntityWorldPosition,
+  syncEntityScreenPosition,
+  entityWorldX,
+  entityWorldY,
+  circlesOverlapWorldEntities,
+} = movementUtils;
 
 
 function createExplosion(x, y, color, amount = 18) {
@@ -1467,117 +1432,17 @@ function createExplosion(x, y, color, amount = 18) {
   }
 }
 
-function spawnAlienDeathFx(obj, variant = "mini") {
-  const worldX = Number.isFinite(obj.worldX) ? obj.worldX : undefined;
-  const worldY = Number.isFinite(obj.worldY) ? obj.worldY : undefined;
-  const burstCount = variant === "ship" ? 18 : 12;
-
-  for (let i = 0; i < burstCount; i += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = (variant === "ship" ? 90 : 70) + Math.random() * (variant === "ship" ? 170 : 120);
-    const life = 0.28 + Math.random() * 0.5;
-    const size = (variant === "ship" ? 1.8 : 1.4) + Math.random() * (variant === "ship" ? 3.4 : 2.6);
-    const isShard = Math.random() < (variant === "ship" ? 0.55 : 0.35);
-
-    state.particles.push({
-      x: obj.x,
-      y: obj.y,
-      worldX,
-      worldY,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life,
-      size,
-      color: isShard ? "#d8ffe6" : "#86ff6c",
-      kind: isShard ? "alienShard" : "alienGoo",
-    });
-  }
-}
-
-function spawnRockFragments(parent) {
-  const pieces = 3 + Math.floor(Math.random() * 3);
-  for (let i = 0; i < pieces; i += 1) {
-    const angle = (i / pieces) * Math.PI * 2 + Math.random() * 0.8;
-    const speed = 120 + Math.random() * 120;
-    const size = 9 + Math.random() * 6;
-    const corners = 7;
-
-    state.objects.push({
-      id: nextObjectId(),
-      type: "rockShard",
-      x: parent.x + Math.cos(angle) * 4,
-      y: parent.y + Math.sin(angle) * 4,
-      worldX: Number.isFinite(parent.worldX) ? parent.worldX + Math.cos(angle) * 4 : undefined,
-      worldY: Number.isFinite(parent.worldY) ? parent.worldY + Math.sin(angle) * 4 : undefined,
-      vx: parent.vx + Math.cos(angle) * speed,
-      vy: parent.vy + Math.sin(angle) * speed,
-      size,
-      hp: 1,
-      destroyed: false,
-      destructible: true,
-      collisionRadius: size * 0.77,
-      corners,
-      rockProfile: Array.from({ length: corners }, () => 0.72 + Math.random() * 0.26),
-      spin: (Math.random() - 0.5) * 3,
-      angle: Math.random() * Math.PI * 2,
-      passed: true,
-    });
-  }
-}
-
-function maybeSpawnArmorPickup(obj) {
-  const asteroidTypes = ["smallRock", "mediumRock", "rockShard", "boulder"];
-  if (!asteroidTypes.includes(obj.type)) return;
-
-  const dropChance = obj.type === "mediumRock" ? 0.18 : obj.type === "boulder" ? 0.22 : 0.1;
-  if (Math.random() > dropChance) return;
-
-  state.pickups.push({
-    type: "armor",
-    x: obj.x,
-    y: obj.y,
-    worldX: Number.isFinite(obj.worldX) ? obj.worldX : undefined,
-    worldY: Number.isFinite(obj.worldY) ? obj.worldY : undefined,
-    vx: obj.vx * 0.35,
-    vy: obj.vy * 0.35,
-    radius: 10,
-    life: 10,
-  });
-}
+const objectLifecycle = createObjectLifecycleSystem({
+  state,
+  nextObjectId,
+  createExplosion,
+  playSfx,
+  getKillReward,
+  scoring,
+});
 
 function destroyObject(obj, reason) {
-  if (obj.destroyed) return;
-
-  obj.destroyed = true;
-  obj.hp = 0;
-
-  const playerKill = reason === "shot" || reason === "rocket";
-  if (playerKill) {
-    state.kills += 1;
-    const reward = getKillReward(reason, obj.type);
-    if (reward > 0) {
-      scoring.addPoints(reward);
-    }
-  }
-
-  if (obj.type === "mediumRock") {
-    spawnRockFragments(obj);
-  }
-
-  maybeSpawnArmorPickup(obj);
-
-  if (obj.type === "alienShip") {
-    createExplosion(obj.x, obj.y, "#9eff7f", 28);
-    createExplosion(obj.x, obj.y, "#ffb36a", 16);
-    spawnAlienDeathFx(obj, "ship");
-  } else if (obj.type === "miniAlien") {
-    createExplosion(obj.x, obj.y, "#94ff74", 18);
-    spawnAlienDeathFx(obj, "mini");
-  } else {
-    const color = obj.type === "miniAlien" ? "#94ff74" : "#ffb36a";
-    createExplosion(obj.x, obj.y, color, obj.type === "mediumRock" ? 24 : 14);
-  }
-  playSfx("explosion");
+  objectLifecycle.destroyObject(obj, reason);
 }
 
 function damageNearbyFromShieldPulse(radius, allowHeavyTargets) {
@@ -1587,132 +1452,32 @@ function damageNearbyFromShieldPulse(radius, allowHeavyTargets) {
     if (d > radius + obj.collisionRadius) continue;
 
     if (obj.destructible || allowHeavyTargets || obj.type === "boulder" || obj.type === "debris") {
-      destroyObject(obj, "rocket");
+      destroyObject(obj, DESTROY_REASONS.ROCKET);
     }
   }
 
   createExplosion(state.ship.x, state.ship.y, "#84e7ff", 28);
 }
 
-function consumeShield(damageType = "physical", amount = 1) {
-  if (!state.shield.unlocked || state.shield.charges < 1) return false;
+const statusEffects = createStatusEffectsSystem({
+  state,
+  rollCrit,
+  computeDamage,
+  addDamageText,
+  reloadRate,
+  createExplosion,
+  playSfx,
+  damageNearbyFromShieldPulse,
+  destroyObject,
+  onBossDefeated,
+});
 
-  if (state.shield.integrity <= 0) {
-    state.shield.integrity = state.shield.charges;
-  }
-
-  // Energy hits drain only half shield integrity: shield is extra effective vs energy.
-  const shieldCost = damageType === "energy" ? amount * 0.5 : amount;
-  state.shield.integrity -= shieldCost;
-
-  if (state.shield.integrity > 0) {
-    if (state.weaponSpecials.shieldThornPulse && state.time - (state.shield.lastThornPulseAt || -999) >= 1.6) {
-      state.shield.lastThornPulseAt = state.time;
-      damageNearbyFromShieldPulse(state.shield.thornPulseRadius || 78, false);
-    }
-    playSfx("shieldHit");
-    createExplosion(state.ship.x, state.ship.y, "#71f4ff", 18);
-    return true;
-  }
-
-  state.shield.charges = 0;
-  state.shield.integrity = 0;
-  state.shield.cooldownUntil = state.time + state.shield.rechargeDelay / reloadRate();
-  playSfx("shieldHit");
-  createExplosion(state.ship.x, state.ship.y, "#71f4ff", 24);
-
-  if (state.shield.thorns) {
-    damageNearbyFromShieldPulse(state.shield.thornBreakRadius || 105, false);
-  }
-
-  // This hit is still fully consumed by the shield break.
-  return true;
-}
-
-function getShipAimUnit() {
-  const dx = input.mouseX - state.ship.x;
-  const dy = input.mouseY - state.ship.y;
-  const len = Math.hypot(dx, dy) || 1;
-  return {
-    ux: dx / len,
-    uy: dy / len,
-  };
-}
-
-function tryUseDrillOnObject(obj) {
-  if (!state.weapon.drillUnlocked) return false;
-  if (state.weapon.drillCharges < 1) return false;
-  if (state.time < state.weapon.drillCooldownUntil) return false;
-  if (obj.hp <= 0) return false;
-
-  const { ux, uy } = getShipAimUnit();
-  const tipX = state.ship.x + ux * (state.ship.radius + state.weapon.drillReach);
-  const tipY = state.ship.y + uy * (state.ship.radius + state.weapon.drillReach);
-  const tipWorld = {
-    x: entityWorldX(state.ship) + ux * (state.ship.radius + state.weapon.drillReach),
-    y: entityWorldY(state.ship) + uy * (state.ship.radius + state.weapon.drillReach),
-  };
-  const d = Math.hypot(entityWorldX(obj) - tipWorld.x, entityWorldY(obj) - tipWorld.y);
-
-  if (d > obj.collisionRadius + state.weapon.drillRadius) return false;
-
-  state.weapon.drillCharges = 0;
-  state.weapon.drillCooldownUntil = state.time + state.weapon.drillRechargeDelay / reloadRate();
-  destroyObject(obj, "rocket");
-
-  if (state.weaponSpecials.drillPulse) {
-    let cleared = 0;
-    for (const other of state.objects) {
-      if (other === obj || other.hp <= 0 || !other.destructible) continue;
-      const d2 = Math.hypot(entityWorldX(other) - entityWorldX(obj), entityWorldY(other) - entityWorldY(obj));
-      if (d2 <= 86 + other.collisionRadius) {
-        destroyObject(other, "shot");
-        cleared += 1;
-        if (cleared >= 4) break;
-      }
-    }
-  }
-
-  createExplosion(tipX, tipY, "#8ef7ff", 16);
-  playSfx("shieldHit");
-  return true;
-}
-
-function getRocketCooldownLeft() {
-  return weapons.getRocketCooldownLeft();
-}
-
-function applyHeatHit(target, damage, hitX, hitY) {
-  if (target.heatHitUntil && target.heatHitUntil > state.time) return;
-  target.heatHitUntil = state.time + 0.18;
-
-  const stackCap = 5;
-  if (!target.burnStacks) target.burnStacks = 0;
-  if (!target.nextBurnStackAt || state.time >= target.nextBurnStackAt) {
-    target.burnStacks = Math.min(stackCap, target.burnStacks + 1);
-    target.nextBurnStackAt = state.time + 1;
-  }
-
-  // Plasma direct hit is intentionally near-zero; damage comes from burning ticks.
-  if (damage > 0) {
-    const dmg = computeDamage(damage, "heat");
-    target.hp -= dmg.damage;
-    addDamageText(hitX, hitY - 6, dmg.damage, dmg.crit);
-  }
-
-  target.burnUntil = Math.max(target.burnUntil || 0, state.time + state.weapon.plasmaBurnDuration);
-  target.burnDps = Math.max(target.burnDps || 0, state.weapon.plasmaBurnDps * (state.shipStats ? state.shipStats.heatDamage : 1));
-  target.burnTickCarry = target.burnTickCarry || 0;
-  createExplosion(hitX, hitY, "#ff944d", 4);
-
-  if (target.hp <= 0) {
-    if (target === state.boss) {
-      onBossDefeated();
-    } else {
-      destroyObject(target, "shot");
-    }
-  }
-}
+const {
+  computeBurnTickDamage,
+  applyAcidToShip,
+  consumeShield,
+  applyHeatHit,
+} = statusEffects;
 
 function reflectVector(vx, vy, nx, ny) {
   const dot = vx * nx + vy * ny;
@@ -1749,34 +1514,13 @@ function tryRicochetBullet(bullet, normalX, normalY, hitX, hitY) {
   bullet.vy = (reflected.vy / reflectedLen) * speed;
   bullet.ricochetLeft = ricochetLeft - 1;
   bullet.ricochetCount = (bullet.ricochetCount || 0) + 1;
-  bullet.life = Math.max(0.1, bullet.life - 0.08);
-  bullet.x = hitX + nx * (bullet.radius + 1.5);
-  bullet.y = hitY + ny * (bullet.radius + 1.5);
 
-  const shouldSplit = state.weaponSpecials.cannonRicochetSplit
-    && bullet.ricochetLeft > 0
-    && bullet.ricochetCount <= 3
-    && bullet.ricochetCount % 2 === 1;
-
-  if (shouldSplit) {
-    const baseAngle = Math.atan2(bullet.vy, bullet.vx);
-    const speedNow = Math.hypot(bullet.vx, bullet.vy) || 1;
-    const splitOff = 0.14;
-
-    bullet.vx = Math.cos(baseAngle + splitOff) * speedNow;
-    bullet.vy = Math.sin(baseAngle + splitOff) * speedNow;
-
-    weapons.spawnCannonBullet({
-      x: bullet.x,
-      y: bullet.y,
-      vx: Math.cos(baseAngle - splitOff) * speedNow,
-      vy: Math.sin(baseAngle - splitOff) * speedNow,
-      life: Math.max(0.18, bullet.life * 0.9),
-      radius: Math.max(2.7, bullet.radius * 0.92),
-      damageBase: Math.max(0.55, (bullet.damageBase || state.weapon.cannonEffectiveness) * 0.9),
-      ricochetLeft: Math.max(0, bullet.ricochetLeft - 1),
-      ricochetCount: bullet.ricochetCount,
-    });
+  const pushOut = 2 + bullet.radius;
+  bullet.x = hitX + nx * pushOut;
+  bullet.y = hitY + ny * pushOut;
+  if (Number.isFinite(bullet.worldX) && Number.isFinite(bullet.worldY)) {
+    bullet.worldX += nx * pushOut;
+    bullet.worldY += ny * pushOut;
   }
 
   const shouldNova = state.weaponSpecials.cannonRicochetNova
@@ -1819,35 +1563,142 @@ const weapons = createWeaponsSystem({
   playSfx,
 });
 
-function runMovementPhase(dt, ship) {
-  if (ship.acidUntil && ship.acidUntil > state.time) {
-    ship.acidTickCarry = (ship.acidTickCarry || 0) + (ship.acidDps || 0) * dt;
-    while (ship.acidTickCarry >= 1) {
-      ship.acidTickCarry -= 1;
-      if (ship.armor > 0) {
-        ship.armor = Math.max(0, ship.armor - 1);
-      } else {
-        ship.hp -= 1;
-      }
-      if (ship.hp <= 0) {
-        setGameOver();
-        return null;
+function getRocketCooldownLeft() {
+  return weapons.getRocketCooldownLeft();
+}
+
+const enemyAI = createEnemyAISteeringSystem({
+  state,
+  WORLD,
+});
+
+const enemyCombat = createEnemyCombatSystem({
+  encounters,
+});
+
+const shipDamage = createShipDamageSystem({
+  state,
+  consumeShield,
+  createExplosion,
+});
+
+const projectileResolver = createProjectileResolverSystem({
+  state,
+  WORLD,
+  worldSystem,
+  cameraSystem,
+  ensureEntityWorldPosition,
+  syncEntityScreenPosition,
+  entityWorldX,
+  entityWorldY,
+  circlesOverlapWorldEntities,
+  computeDamage,
+  addDamageText,
+  destroyObject,
+  onBossDefeated,
+  weapons,
+  tryRicochetBullet,
+  hitShip,
+  setGameOver,
+  applyAcidToShip,
+  createExplosion,
+  applyHeatHit,
+});
+
+const hazardInteractions = createHazardInteractionsSystem({
+  state,
+  WORLD,
+  worldSystem,
+  cameraSystem,
+  projectWorldToScreen,
+  hitShip,
+  setGameOver,
+  applyAcidToShip,
+  createExplosion,
+});
+
+const cullingFilters = createCullingFiltersSystem({
+  state,
+  WORLD,
+});
+
+const pickupSimulation = createPickupSimulationSystem({
+  state,
+  screenToWorld,
+  projectWorldToScreen,
+  createExplosion,
+  playSfx,
+});
+
+const bossCombat = createBossCombatSystem({
+  state,
+  computeBurnTickDamage,
+  addDamageText,
+  onBossDefeated,
+  hitShip,
+  setGameOver,
+});
+
+const flightControl = createFlightControlSystem({
+  input,
+});
+
+function getShipAimUnit() {
+  const dx = input.mouseX - state.ship.x;
+  const dy = input.mouseY - state.ship.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return {
+    ux: dx / len,
+    uy: dy / len,
+  };
+}
+
+function tryUseDrillOnObject(obj) {
+  if (!state.weapon.drillUnlocked) return false;
+  if (state.weapon.drillCharges < 1) return false;
+  if (state.time < state.weapon.drillCooldownUntil) return false;
+  if (obj.hp <= 0) return false;
+
+  const { ux, uy } = getShipAimUnit();
+  const tipX = state.ship.x + ux * (state.ship.radius + state.weapon.drillReach);
+  const tipY = state.ship.y + uy * (state.ship.radius + state.weapon.drillReach);
+  const tipWorld = {
+    x: entityWorldX(state.ship) + ux * (state.ship.radius + state.weapon.drillReach),
+    y: entityWorldY(state.ship) + uy * (state.ship.radius + state.weapon.drillReach),
+  };
+  const d = Math.hypot(entityWorldX(obj) - tipWorld.x, entityWorldY(obj) - tipWorld.y);
+
+  if (d > obj.collisionRadius + state.weapon.drillRadius) return false;
+
+  state.weapon.drillCharges = 0;
+  state.weapon.drillCooldownUntil = state.time + state.weapon.drillRechargeDelay / reloadRate();
+  destroyObject(obj, DESTROY_REASONS.ROCKET);
+
+  if (state.weaponSpecials.drillPulse) {
+    let cleared = 0;
+    for (const other of state.objects) {
+      if (other === obj || other.hp <= 0 || !other.destructible) continue;
+      const d2 = Math.hypot(entityWorldX(other) - entityWorldX(obj), entityWorldY(other) - entityWorldY(obj));
+      if (d2 <= 86 + other.collisionRadius) {
+        destroyObject(other, DESTROY_REASONS.SHOT);
+        cleared += 1;
+        if (cleared >= 4) break;
       }
     }
   }
 
-  ship.vx += input.axisX * ship.thrust * dt;
-  ship.vy += input.axisY * ship.thrust * dt;
-  if (input.up) ship.vy -= ship.thrust * dt;
-  if (input.down) ship.vy += ship.thrust * dt;
-  if (input.left) ship.vx -= ship.thrust * dt;
-  if (input.right) ship.vx += ship.thrust * dt;
+  createExplosion(tipX, tipY, "#8ef7ff", 16);
+  playSfx("shieldHit");
+  return true;
+}
 
-  const speed = Math.hypot(ship.vx, ship.vy);
-  if (speed > ship.maxSpeed) {
-    ship.vx = (ship.vx / speed) * ship.maxSpeed;
-    ship.vy = (ship.vy / speed) * ship.maxSpeed;
+function runMovementPhase(dt, ship) {
+  if (!shipDamage.tickAcidDamageToShip(ship, dt)) {
+    setGameOver();
+    return null;
   }
+
+  flightControl.applyInputThrust(ship, dt);
 
   if (!Number.isFinite(ship.worldX) || !Number.isFinite(ship.worldY)) {
     const initialWorld = screenToWorld(ship.x, ship.y);
@@ -1875,69 +1726,6 @@ function runMovementPhase(dt, ship) {
   };
 }
 
-function resolveShipOrbitCollision(ship, collider, cameraX, cameraY, hitDamage, pushVelocity) {
-  const p = cameraSystem.worldToScreen(collider.x, collider.y, collider.parallax || 1, WORLD.width, WORLD.height);
-  const d = Math.hypot(ship.x - p.x, ship.y - p.y);
-  const hitR = (collider.hitRadius || collider.radius || 12) + ship.radius - 2;
-  if (d >= hitR) return true;
-
-  if (!hitShip("physical", hitDamage)) {
-    setGameOver();
-    return false;
-  }
-
-  const nx = d > 0 ? (ship.x - p.x) / d : 1;
-  const ny = d > 0 ? (ship.y - p.y) / d : 0;
-  const pushOut = Math.max(0, hitR - d) + 1;
-  ship.worldX += nx * pushOut;
-  ship.worldY += ny * pushOut;
-  ship.vx += nx * pushVelocity;
-  ship.vy += ny * pushVelocity;
-
-  const pushedScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
-  ship.x = pushedScreen.x;
-  ship.y = pushedScreen.y;
-  return true;
-}
-
-function handleShipStructureCollisions(ship, cameraX, cameraY) {
-  const collidableBodies = typeof worldSystem.getCollidableBodies === "function"
-    ? worldSystem.getCollidableBodies(state.time)
-    : worldSystem.getCollidablePlanets(state.time);
-
-  if (collidableBodies.length > 0) {
-    for (const body of collidableBodies) {
-      const hitDamage = body.type === "orbitalStation" ? 1 : 2;
-      const pushVelocity = body.type === "orbitalStation" ? 60 : 80;
-      if (!resolveShipOrbitCollision(ship, body, cameraX, cameraY, hitDamage, pushVelocity)) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
-function handleShipSolarHeat(ship, dt) {
-  const heatZones = typeof worldSystem.getSolarHeatZones === "function" ? worldSystem.getSolarHeatZones() : [];
-  if (heatZones.length <= 0) return true;
-
-  for (const zone of heatZones) {
-    const p = cameraSystem.worldToScreen(zone.x, zone.y, zone.parallax || 1, WORLD.width, WORLD.height);
-    const d = Math.hypot(ship.x - p.x, ship.y - p.y);
-    const hitRadius = (zone.heatRadius || 140) + ship.radius * 0.45;
-    if (d > hitRadius) continue;
-
-    applyAcidToShip(0.3, zone.heatDps || 0.5);
-    if (!ship.nextSunHeatFxAt || state.time >= ship.nextSunHeatFxAt) {
-      ship.nextSunHeatFxAt = state.time + 0.22;
-      createExplosion(ship.x, ship.y, "#ffb16a", 3);
-    }
-  }
-
-  return true;
-}
-
 function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
   if (state.bossActive) return;
 
@@ -1949,15 +1737,26 @@ function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
 
   const activeObjects = state.objects.length;
   const enemyCount = state.objects.reduce((count, obj) => count + (obj.enemy ? 1 : 0), 0);
-  const targetObjects = difficulty.id === "hard" ? 70 : difficulty.id === "easy" ? 46 : 58;
-  const targetEnemies = difficulty.id === "hard" ? 26 : difficulty.id === "easy" ? 14 : 20;
+  const targetObjects = difficulty.id === "hard"
+    ? GAMEPLAY_TUNING.spawn.targetObjects.hard
+    : difficulty.id === "easy"
+      ? GAMEPLAY_TUNING.spawn.targetObjects.easy
+      : GAMEPLAY_TUNING.spawn.targetObjects.medium;
+  const targetEnemies = difficulty.id === "hard"
+    ? GAMEPLAY_TUNING.spawn.targetEnemies.hard
+    : difficulty.id === "easy"
+      ? GAMEPLAY_TUNING.spawn.targetEnemies.easy
+      : GAMEPLAY_TUNING.spawn.targetEnemies.medium;
   if (activeObjects >= targetObjects || enemyCount >= targetEnemies) {
-    state.lastSpawn = Math.min(state.lastSpawn, 0.28);
+    state.lastSpawn = Math.min(state.lastSpawn, GAMEPLAY_TUNING.spawn.minLastSpawnCarry);
     return;
   }
 
   state.lastSpawn += dt;
-  const dynamicSpawn = Math.max(0.44, state.spawnInterval / (intensity * difficulty.spawnRateMult));
+  const dynamicSpawn = Math.max(
+    GAMEPLAY_TUNING.spawn.minDynamicSpawnInterval,
+    state.spawnInterval / (intensity * difficulty.spawnRateMult),
+  );
   let spawnedThisFrame = 0;
   const pressureGap = Math.max(0, targetObjects - activeObjects);
   const maxSpawnsPerFrame = Math.max(2, Math.min(5, Math.floor(pressureGap / 10) + 1));
@@ -1976,6 +1775,7 @@ function update(dt, now) {
   if (!state.running) return;
 
   const difficulty = selectedDifficultyMode();
+  const perfStart = performance.now();
 
   state.time += dt;
   scoring.addPassiveScore(dt);
@@ -1986,15 +1786,18 @@ function update(dt, now) {
   }
 
   const ship = state.ship;
+  
+  // === MOVEMENT PHASE ===
+  const perfMovementStart = performance.now();
   const movement = runMovementPhase(dt, ship);
   if (!movement) return;
   const { cameraX, cameraY } = movement;
 
-  if (!handleShipStructureCollisions(ship, cameraX, cameraY)) {
+  if (!hazardInteractions.handleShipStructureCollisions(ship, cameraX, cameraY)) {
     return;
   }
 
-  if (!handleShipSolarHeat(ship, dt)) {
+  if (!hazardInteractions.handleShipSolarHeat(ship, dt)) {
     return;
   }
 
@@ -2018,12 +1821,16 @@ function update(dt, now) {
   }
 
   if (state.shield.unlocked && state.shield.nova && state.time >= state.shield.nextNova) {
-    state.shield.nextNova = state.time + 30;
+    state.shield.nextNova = state.time + GAMEPLAY_TUNING.shield.novaInterval;
     damageNearbyFromShieldPulse(220, true);
     createExplosion(ship.x, ship.y, "#71f4ff", 42);
     playSfx("shieldHit");
   }
+  const perfMovementEnd = performance.now();
+  state.perfCounters.movement = perfMovementEnd - perfMovementStart;
 
+  // === COMBAT PHASE ===
+  const perfCombatStart = performance.now();
   runSpawnPhase(dt, difficulty, cameraX, cameraY);
 
   encounters.updateBoss(dt);
@@ -2035,55 +1842,7 @@ function update(dt, now) {
       obj.worldY = worldPos.y;
     }
 
-    if (obj.type === "miniAlien" || obj.type === "alienShip") {
-      const dxToShip = (ship.worldX || 0) - obj.worldX;
-      const dyToShip = (ship.worldY || 0) - obj.worldY;
-      const distToShip = Math.hypot(dxToShip, dyToShip) || 1;
-      const engageRange = obj.aggroRange || 700;
-      const disengageRange = obj.disengageRange || engageRange * 1.7;
-      const memoryWindow = 2.8;
-      const targetRange = obj.preferredRange || 190;
-      const visibleAggroMargin = 90;
-      const inVisibleAggroBand =
-        obj.x >= -visibleAggroMargin &&
-        obj.x <= WORLD.width + visibleAggroMargin &&
-        obj.y >= -visibleAggroMargin &&
-        obj.y <= WORLD.height + visibleAggroMargin;
-
-      if (!obj.aggroLocked && inVisibleAggroBand && distToShip <= engageRange) {
-        obj.aggroLocked = true;
-        obj.aggroUntil = state.time + memoryWindow;
-      }
-
-      if (obj.aggroLocked && distToShip <= disengageRange) {
-        obj.aggroUntil = state.time + memoryWindow;
-      }
-
-      if (obj.aggroLocked && state.time > (obj.aggroUntil || 0)) {
-        obj.aggroLocked = false;
-      }
-
-      if (obj.aggroLocked) {
-        const chaseSpeed = obj.chaseSpeed || 540;
-        const steer = obj.steering || 1.5;
-        const chaseAccel = obj.chaseAccel || 320;
-        const chaseDir = distToShip > targetRange ? 1 : -0.5;
-        const desiredVx = (dxToShip / distToShip) * chaseSpeed * chaseDir;
-        const desiredVy = (dyToShip / distToShip) * chaseSpeed * chaseDir;
-        const maxDelta = chaseAccel * dt;
-        const deltaVx = (desiredVx - obj.vx) * Math.min(1, steer * dt);
-        const deltaVy = (desiredVy - obj.vy) * Math.min(1, steer * dt);
-        const deltaLen = Math.hypot(deltaVx, deltaVy) || 1;
-        const scale = deltaLen > maxDelta ? maxDelta / deltaLen : 1;
-        obj.vx += deltaVx * scale;
-        obj.vy += deltaVy * scale;
-      } else {
-        // Outside aggro, enemies should not actively home toward the player.
-        const cruiseDamp = Math.max(0.94, 1 - dt * 0.18);
-        obj.vx *= cruiseDamp;
-        obj.vy *= cruiseDamp;
-      }
-    }
+    enemyAI.updateEnemySteering(obj, ship, dt);
 
     obj.worldX += obj.vx * dt;
     obj.worldY += obj.vy * dt;
@@ -2102,7 +1861,7 @@ function update(dt, now) {
         obj.hp -= burnDmg;
         addDamageText(obj.x, obj.y - obj.size * 0.35, burnDmg, burnDmg > 1);
         if (obj.hp <= 0) {
-          destroyObject(obj, "shot");
+          destroyObject(obj, DESTROY_REASONS.SHOT);
         }
       }
     }
@@ -2121,16 +1880,13 @@ function update(dt, now) {
       const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
       const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
       const distShip = Math.hypot(dxShip, dyShip);
-      if (distShip > Math.max(WORLD.width, WORLD.height) * 0.95) {
-        obj.nextShotAt = state.time + 0.6 + Math.random() * 0.9;
+      if (distShip > Math.max(WORLD.width, WORLD.height) * GAMEPLAY_TUNING.enemyCombat.miniFireMaxDistViewportMult) {
+        obj.nextShotAt = state.time
+          + GAMEPLAY_TUNING.enemyCombat.miniOutOfRangeDelayMin
+          + Math.random() * GAMEPLAY_TUNING.enemyCombat.miniOutOfRangeDelayRand;
       } else {
-      const spread = (Math.random() - 0.5) * 18;
-      if (Math.random() < 0.62) {
-        encounters.spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4, 235, "acid", 1);
-      } else {
-        encounters.spawnEnemyFlameBurst(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.4);
-      }
-      obj.nextShotAt = state.time + 1.7 + Math.random() * 1.8;
+      enemyCombat.fireEnemyWeapon(obj, ship);
+      obj.nextShotAt = enemyCombat.nextEnemyShotAt(obj, state.time);
       }
     }
 
@@ -2138,16 +1894,13 @@ function update(dt, now) {
       const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
       const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
       const distShip = Math.hypot(dxShip, dyShip);
-      if (distShip > Math.max(WORLD.width, WORLD.height) * 1.05) {
-        obj.nextShotAt = state.time + 0.55 + Math.random() * 0.8;
+      if (distShip > Math.max(WORLD.width, WORLD.height) * GAMEPLAY_TUNING.enemyCombat.shipFireMaxDistViewportMult) {
+        obj.nextShotAt = state.time
+          + GAMEPLAY_TUNING.enemyCombat.shipOutOfRangeDelayMin
+          + Math.random() * GAMEPLAY_TUNING.enemyCombat.shipOutOfRangeDelayRand;
       } else {
-      const spread = (Math.random() - 0.5) * 22;
-      if (Math.random() < 0.66) {
-        encounters.spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.5, 280, "energy", 1);
-      } else {
-        encounters.spawnEnemyProjectile(obj.x, obj.y, ship.x + spread, ship.y + spread * 0.5, 220, "explosive", 2);
-      }
-      obj.nextShotAt = state.time + 1.35 + Math.random() * 1.45;
+      enemyCombat.fireEnemyWeapon(obj, ship);
+      obj.nextShotAt = enemyCombat.nextEnemyShotAt(obj, state.time);
       }
     }
 
@@ -2164,210 +1917,26 @@ function update(dt, now) {
         return;
       }
       if (obj.destructible) {
-        destroyObject(obj, "collision");
+        destroyObject(obj, DESTROY_REASONS.COLLISION);
       }
     }
   }
 
-  if (state.bossActive && state.boss) {
-    if (state.boss.burnUntil && state.boss.burnUntil > state.time && state.boss.hp > 0) {
-      const burnStacks = Math.max(1, state.boss.burnStacks || 1);
-      state.boss.burnTickCarry = (state.boss.burnTickCarry || 0) + (state.boss.burnDps || 0) * burnStacks * dt;
-      while (state.boss.burnTickCarry >= 1 && state.boss.hp > 0) {
-        state.boss.burnTickCarry -= 1;
-        const burnDmg = computeBurnTickDamage();
-        state.boss.hp -= burnDmg;
-        addDamageText(state.boss.x, state.boss.y - state.boss.size * 0.4, burnDmg, burnDmg > 1);
-        if (state.boss.hp <= 0) {
-          onBossDefeated();
-          break;
-        }
-      }
-    }
-
-    const dBoss = Math.hypot((state.boss.worldX || state.boss.x) - (ship.worldX || ship.x), (state.boss.worldY || state.boss.y) - (ship.worldY || ship.y));
-    if (dBoss < state.boss.collisionRadius + ship.radius - 3) {
-      if (!hitShip("physical", 2)) {
-        setGameOver();
-        return;
-      }
-    }
+  if (!bossCombat.updateBossCombat(dt, ship)) {
+    return;
   }
 
-  for (const bullet of state.bullets) {
-    ensureEntityWorldPosition(bullet);
-    bullet.worldX += bullet.vx * dt;
-    bullet.worldY += bullet.vy * dt;
-    syncEntityScreenPosition(bullet, cameraX, cameraY);
-    bullet.life -= dt;
-
-    if (bullet.life <= 0) continue;
+  projectileResolver.resolveBulletsMovement(dt, cameraX, cameraY);
+  projectileResolver.resolveBulletTargets();
+  projectileResolver.resolveMissiles(dt, cameraX, cameraY);
+  if (!projectileResolver.resolveBossProjectiles(dt, cameraX, cameraY, ship)) {
+    return;
   }
+  const perfCombatEnd = performance.now();
+  state.perfCounters.combat = perfCombatEnd - perfCombatStart;
 
-  for (const bullet of state.bullets) {
-    if (bullet.life <= 0) continue;
-    const bulletW = { worldX: entityWorldX(bullet), worldY: entityWorldY(bullet) };
-
-    const worldBodies = typeof worldSystem.getCollidableBodies === "function" ? worldSystem.getCollidableBodies(state.time) : [];
-    let blockedByWorldBody = false;
-    for (const body of worldBodies) {
-      if (circlesOverlapWorldEntities(body, body.hitRadius || body.radius || 12, bulletW, bullet.radius)) {
-        tryRicochetBullet(
-          bullet,
-          entityWorldX(bullet) - entityWorldX(body),
-          entityWorldY(bullet) - entityWorldY(body),
-          bullet.x,
-          bullet.y,
-        );
-        blockedByWorldBody = true;
-        break;
-      }
-    }
-    if (blockedByWorldBody) continue;
-
-    if (state.bossActive && state.boss && circlesOverlapWorldEntities(state.boss, state.boss.collisionRadius, bulletW, bullet.radius)) {
-      const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
-      state.boss.hp -= dmg.damage;
-      addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
-      createExplosion(bullet.x, bullet.y, "#ffe188", 6);
-      tryRicochetBullet(bullet, entityWorldX(bullet) - entityWorldX(state.boss), entityWorldY(bullet) - entityWorldY(state.boss), bullet.x, bullet.y);
-      if (state.boss.hp <= 0) {
-        onBossDefeated();
-      }
-      continue;
-    }
-
-    for (const obj of state.objects) {
-      if (obj.hp <= 0) continue;
-      if (!circlesOverlapWorldEntities(obj, obj.collisionRadius, bulletW, bullet.radius)) continue;
-      if (obj.destructible) {
-        const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
-        obj.hp -= dmg.damage;
-        addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
-        if (obj.hp <= 0) {
-          destroyObject(obj, "shot");
-        }
-      }
-      tryRicochetBullet(bullet, entityWorldX(bullet) - entityWorldX(obj), entityWorldY(bullet) - entityWorldY(obj), bullet.x, bullet.y);
-      break;
-    }
-  }
-
-  for (const missile of state.missiles) {
-    ensureEntityWorldPosition(missile);
-    if (state.weapon.rocketHoming) {
-      missile.acquireIn = (missile.acquireIn || 0) - dt;
-      let target = missile.targetRef;
-      if (!target || target.hp <= 0 || missile.acquireIn <= 0) {
-        target = weapons.findNearestObject(missile.worldX, missile.worldY);
-        missile.targetRef = target || null;
-        missile.acquireIn = 0.12 + Math.random() * 0.08;
-      }
-      if (target) {
-        const targetX = Number.isFinite(target.worldX) ? target.worldX : target.x;
-        const targetY = Number.isFinite(target.worldY) ? target.worldY : target.y;
-        const dx = targetX - missile.worldX;
-        const dy = targetY - missile.worldY;
-        const dist = Math.hypot(dx, dy) || 1;
-        const desiredVx = (dx / dist) * missile.speed;
-        const desiredVy = (dy / dist) * missile.speed;
-        missile.vx += (desiredVx - missile.vx) * Math.min(1, missile.turnRate * dt);
-        missile.vy += (desiredVy - missile.vy) * Math.min(1, missile.turnRate * dt);
-      }
-    }
-
-    missile.worldX += missile.vx * dt;
-    missile.worldY += missile.vy * dt;
-    syncEntityScreenPosition(missile, cameraX, cameraY);
-    missile.life -= dt;
-    const missileW = { worldX: missile.worldX, worldY: missile.worldY };
-
-    if (state.bossActive && state.boss) {
-      if (circlesOverlapWorldEntities(state.boss, state.boss.collisionRadius, missileW, missile.radius)) {
-        const blastScale = missile.blastScale || 1;
-        weapons.explodeRocketAt(missile.x, missile.y, blastScale);
-        const dmg = computeDamage(missile.damageBase || 18, "explosive");
-        state.boss.hp -= dmg.damage;
-        addDamageText(missile.x, missile.y - 8, dmg.damage, dmg.crit);
-        missile.life = 0;
-        if (state.boss.hp <= 0) {
-          onBossDefeated();
-        }
-        continue;
-      }
-    }
-
-    let exploded = false;
-    const worldBodies = typeof worldSystem.getCollidableBodies === "function" ? worldSystem.getCollidableBodies(state.time) : [];
-    for (const body of worldBodies) {
-      if (circlesOverlapWorldEntities(body, body.hitRadius || body.radius || 12, missileW, missile.radius)) {
-        weapons.explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
-        missile.life = 0;
-        exploded = true;
-        break;
-      }
-    }
-
-    if (exploded) continue;
-
-    for (const obj of state.objects) {
-      if (obj.hp <= 0) continue;
-      if (circlesOverlapWorldEntities(obj, obj.collisionRadius, missileW, missile.radius)) {
-        weapons.explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
-        missile.life = 0;
-        exploded = true;
-        break;
-      }
-    }
-
-    if (exploded) continue;
-  }
-
-  for (const proj of state.bossProjectiles) {
-    ensureEntityWorldPosition(proj);
-    proj.worldX += proj.vx * dt;
-    proj.worldY += proj.vy * dt;
-    syncEntityScreenPosition(proj, cameraX, cameraY);
-    proj.life -= dt;
-
-    if (proj.damageType === "explosive") {
-      const splashR = proj.radius + 30;
-      const dSplash = Math.hypot(entityWorldX(proj) - entityWorldX(ship), entityWorldY(proj) - entityWorldY(ship));
-      if (dSplash < splashR + ship.radius) {
-        proj.life = 0;
-        const splashDamage = dSplash < proj.radius + ship.radius ? 2 : 1;
-        if (!hitShip("explosive", splashDamage)) {
-          setGameOver();
-          return;
-        }
-        createExplosion(proj.x, proj.y, "#ff8f64", 12);
-      }
-    }
-
-    const dShip = Math.hypot(entityWorldX(proj) - entityWorldX(ship), entityWorldY(proj) - entityWorldY(ship));
-    if (dShip < proj.radius + ship.radius) {
-      proj.life = 0;
-      if (!hitShip(proj.damageType || "physical", proj.damageAmount || 1)) {
-        setGameOver();
-        return;
-      }
-      if (proj.damageType === "acid") {
-        applyAcidToShip(4, 0.9);
-        createExplosion(proj.x, proj.y, "#7eff6f", 9);
-      }
-    }
-
-    for (const bullet of state.bullets) {
-      if (bullet.life <= 0) continue;
-      const d = Math.hypot(entityWorldX(proj) - entityWorldX(bullet), entityWorldY(proj) - entityWorldY(bullet));
-      if (d < proj.radius + bullet.radius) {
-        proj.life = 0;
-        bullet.life = 0;
-        break;
-      }
-    }
-  }
-
+  // === CLEANUP PHASE ===
+  const perfCleanupStart = performance.now();
   for (const p of state.particles) {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -2385,153 +1954,23 @@ function update(dt, now) {
     }
   }
 
-  for (const pickup of state.pickups) {
-    if (!Number.isFinite(pickup.worldX) || !Number.isFinite(pickup.worldY)) {
-      const worldPos = screenToWorld(pickup.x, pickup.y);
-      pickup.worldX = worldPos.x;
-      pickup.worldY = worldPos.y;
-    }
-
-    pickup.worldX += pickup.vx * dt;
-    pickup.worldY += pickup.vy * dt;
-
-    const pickupScreen = projectWorldToScreen(pickup.worldX, pickup.worldY, cameraX, cameraY);
-    pickup.x = pickupScreen.x;
-    pickup.y = pickupScreen.y;
-    pickup.vx *= 0.985;
-    pickup.vy *= 0.985;
-    pickup.life -= dt;
-
-    const dShip = Math.hypot(pickup.x - ship.x, pickup.y - ship.y);
-    if (dShip < pickup.radius + ship.radius) {
-      if (pickup.type === "armor") {
-        ship.armor = Math.min(ship.maxArmor, ship.armor + 1);
-        createExplosion(pickup.x, pickup.y, "#a5d8ff", 9);
-        playSfx("shieldReady");
-      }
-      pickup.life = 0;
-    }
-  }
+  pickupSimulation.updatePickups(dt, cameraX, cameraY, ship);
 
   for (const beam of state.laserBeams) {
     beam.life -= dt;
   }
 
-  for (const burst of state.plasmaBursts) {
-    ensureEntityWorldPosition(burst);
-    burst.worldX += burst.vx * dt;
-    burst.worldY += burst.vy * dt;
-    syncEntityScreenPosition(burst, cameraX, cameraY);
-    burst.life -= dt;
-    burst.radius += burst.growth * dt;
-    burst.vx *= 0.975;
-    burst.vy *= 0.975;
-    burst.rangeLeft -= Math.hypot(burst.vx, burst.vy) * dt;
-
-    if (burst.hitDone || burst.life <= 0 || burst.rangeLeft <= 0) continue;
-
-    if (burst.enemyOwned) {
-      const dShip = Math.hypot(ship.x - burst.x, ship.y - burst.y);
-      if (dShip < ship.radius + burst.radius) {
-        if (!hitShip("heat", 1)) {
-          setGameOver();
-          return;
-        }
-        burst.hitDone = true;
-        burst.life = Math.min(burst.life, 0.04);
-      }
-    } else {
-      for (const obj of state.objects) {
-        if (obj.hp <= 0 || !obj.destructible) continue;
-        const d = Math.hypot(obj.x - burst.x, obj.y - burst.y);
-        if (d < obj.collisionRadius + burst.radius) {
-          applyHeatHit(obj, burst.damage, burst.x, burst.y);
-          burst.hitDone = true;
-          burst.life = Math.min(burst.life, 0.05);
-          break;
-        }
-      }
-
-      if (!burst.hitDone && state.bossActive && state.boss) {
-        const dBoss = Math.hypot(state.boss.x - burst.x, state.boss.y - burst.y);
-        if (dBoss < state.boss.collisionRadius + burst.radius) {
-          applyHeatHit(state.boss, burst.damage, burst.x, burst.y);
-          burst.hitDone = true;
-          burst.life = Math.min(burst.life, 0.05);
-        }
-      }
-
-      if (!burst.hitDone) {
-        const worldBodies = typeof worldSystem.getCollidableBodies === "function" ? worldSystem.getCollidableBodies(state.time) : [];
-        for (const body of worldBodies) {
-          const bodyPos = cameraSystem.worldToScreen(body.x, body.y, body.parallax || 1, WORLD.width, WORLD.height);
-          const dBody = Math.hypot(bodyPos.x - burst.x, bodyPos.y - burst.y);
-          const bodyR = body.hitRadius || body.radius || 12;
-          if (dBody < bodyR + burst.radius) {
-            burst.hitDone = true;
-            burst.life = 0;
-            break;
-          }
-        }
-      }
-
-    }
+  if (!projectileResolver.resolvePlasmaBursts(dt, cameraX, cameraY, ship)) {
+    return;
   }
 
-  const worldCullBase = Math.max(WORLD.width, WORLD.height) * 2.8;
-  state.objects = state.objects.filter((o) => {
-    if (o.hp <= 0) return false;
-    if (!Number.isFinite(o.worldX) || !Number.isFinite(o.worldY)) {
-      return o.x > -o.size * 2 && o.x < WORLD.width + o.size * 2 && o.y > -o.size * 2 && o.y < WORLD.height + o.size * 2;
-    }
-    const d = Math.hypot(o.worldX - cameraX, o.worldY - cameraY);
-    return d < worldCullBase + o.size * 2;
-  });
-  state.bullets = state.bullets.filter((b) => {
-    if (b.life <= 0) return false;
-    if (!Number.isFinite(b.worldX) || !Number.isFinite(b.worldY)) {
-      return b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30;
-    }
-    const d = Math.hypot(b.worldX - cameraX, b.worldY - cameraY);
-    return d < worldCullBase + 120;
-  });
-  state.laserBeams = state.laserBeams.filter((b) => b.life > 0);
-  state.plasmaBursts = state.plasmaBursts.filter((b) => {
-    if (b.life <= 0 || b.rangeLeft <= 0) return false;
-    if (!Number.isFinite(b.worldX) || !Number.isFinite(b.worldY)) {
-      return b.x > -80 && b.x < WORLD.width + 80 && b.y > -80 && b.y < WORLD.height + 80;
-    }
-    const d = Math.hypot(b.worldX - cameraX, b.worldY - cameraY);
-    return d < worldCullBase + 220;
-  });
-  state.missiles = state.missiles.filter((m) => {
-    if (m.life <= 0) return false;
-    if (!Number.isFinite(m.worldX) || !Number.isFinite(m.worldY)) {
-      return m.x > -60 && m.x < WORLD.width + 60 && m.y > -60 && m.y < WORLD.height + 60;
-    }
-    const d = Math.hypot(m.worldX - cameraX, m.worldY - cameraY);
-    return d < worldCullBase + 180;
-  });
-  state.pickups = state.pickups.filter((p) => {
-    if (p.life <= 0) return false;
-    if (!Number.isFinite(p.worldX) || !Number.isFinite(p.worldY)) {
-      return p.x > -60 && p.x < WORLD.width + 60 && p.y > -60 && p.y < WORLD.height + 60;
-    }
-    const d = Math.hypot(p.worldX - cameraX, p.worldY - cameraY);
-    return d < worldCullBase + 120;
-  });
-  state.bossProjectiles = state.bossProjectiles.filter((p) => {
-    if (p.life <= 0) return false;
-    if (!Number.isFinite(p.worldX) || !Number.isFinite(p.worldY)) {
-      return p.x > -80 && p.x < WORLD.width + 80 && p.y > -80 && p.y < WORLD.height + 80;
-    }
-    const d = Math.hypot(p.worldX - cameraX, p.worldY - cameraY);
-    return d < worldCullBase + 240;
-  });
-  state.particles = state.particles.filter((p) => p.life > 0);
-  state.damageTexts = state.damageTexts.filter((t) => t.life > 0);
+  cullingFilters.applyEntityCulling(cameraX, cameraY);
 
   refreshHud();
+  const perfCleanupEnd = performance.now();
+  state.perfCounters.cleanup = perfCleanupEnd - perfCleanupStart;
+
+  state.perfCounters.frameTotal = perfCleanupEnd - perfStart;
 }
 
 const renderer = createRenderer({
@@ -2541,6 +1980,7 @@ const renderer = createRenderer({
   WORLD,
   worldSystem,
   cameraSystem,
+  encountersSystem: encounters,
   IS_COARSE_POINTER,
   selectedShipModel,
   getRocketCooldownLeft,
@@ -2692,44 +2132,38 @@ const inputSystem = createInputSystem({
     refreshHud();
   },
   onToggleHitboxes: () => {
-    state.debugHitboxes = !state.debugHitboxes;
-    if (!state.debugHitboxes) {
-      state.damageTexts = [];
-    }
+    debugTools.toggleHitboxes();
   },
   onDebugBoostWeapons: () => {
-    progression.debugBoostCurrentWeapons(5);
+    debugTools.debugBoostWeapons();
   },
   onToggleBalancePanel: () => {
-    balanceDebug.visible = !balanceDebug.visible;
+    debugTools.toggleBalancePanel();
     refreshHud();
   },
-  isBalancePanelVisible: () => balanceDebug.visible,
+  isBalancePanelVisible: () => debugTools.isBalancePanelVisible(),
   onBalanceTrackPrev: () => {
-    cycleBalanceTrack(-1);
+    debugTools.balanceTrackPrev();
     refreshHud();
   },
   onBalanceTrackNext: () => {
-    cycleBalanceTrack(1);
+    debugTools.balanceTrackNext();
     refreshHud();
   },
   onBalanceTuneDown: () => {
-    progression.adjustTrackLevelTuning(selectedBalanceTrack(), -balanceDebug.tuneStep);
+    debugTools.balanceTuneDown();
     refreshHud();
   },
   onBalanceTuneUp: () => {
-    progression.adjustTrackLevelTuning(selectedBalanceTrack(), balanceDebug.tuneStep);
+    debugTools.balanceTuneUp();
     refreshHud();
   },
   onBalanceTuneReset: () => {
-    progression.setTrackLevelTuning(selectedBalanceTrack(), 1);
+    debugTools.balanceTuneReset();
     refreshHud();
   },
   onToggleShipInfo: () => {
-    state.showShipInfo = !state.showShipInfo;
-    if (shipInfoPanelEl) {
-      shipInfoPanelEl.classList.toggle("hidden", !state.showShipInfo);
-    }
+    debugTools.toggleShipInfo();
   },
   onOverlayAction: handleOverlayAction,
 });
