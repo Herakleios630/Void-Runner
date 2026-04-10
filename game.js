@@ -1895,6 +1895,33 @@ function update(dt, now) {
     }
   }
 
+  const orbitalStations = typeof worldSystem.getOrbitalStations === "function" ? worldSystem.getOrbitalStations(state.time) : [];
+  if (orbitalStations.length > 0) {
+    for (const station of orbitalStations) {
+      const p = cameraSystem.worldToScreen(station.x, station.y, station.parallax || 1, WORLD.width, WORLD.height);
+      const d = Math.hypot(ship.x - p.x, ship.y - p.y);
+      const hitR = (station.hitRadius || station.radius || 12) + ship.radius - 2;
+      if (d < hitR) {
+        if (!hitShip("physical", 1)) {
+          setGameOver();
+          return;
+        }
+
+        const nx = d > 0 ? (ship.x - p.x) / d : 1;
+        const ny = d > 0 ? (ship.y - p.y) / d : 0;
+        const pushOut = Math.max(0, hitR - d) + 1;
+        ship.worldX += nx * pushOut;
+        ship.worldY += ny * pushOut;
+        ship.vx += nx * 60;
+        ship.vy += ny * 60;
+
+        const pushedScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
+        ship.x = pushedScreen.x;
+        ship.y = pushedScreen.y;
+      }
+    }
+  }
+
   const desktopAutoShooting = state.desktopAutoFire && !IS_COARSE_POINTER && state.mouseInCanvas;
   if (input.shooting || desktopAutoShooting) weapons.shootAtCursor(now);
 
@@ -1961,15 +1988,20 @@ function update(dt, now) {
 
       if (obj.aggroLocked) {
         const chaseSpeed = obj.chaseSpeed || 540;
-        const steer = obj.steering || 4.4;
+        const steer = obj.steering || 1.5;
+        const chaseAccel = obj.chaseAccel || 320;
         const desiredVx = (dxToShip / distToShip) * chaseSpeed;
         const desiredVy = (dyToShip / distToShip) * chaseSpeed;
-        const blend = Math.min(1, steer * dt);
-        obj.vx += (desiredVx - obj.vx) * blend;
-        obj.vy += (desiredVy - obj.vy) * blend;
+        const maxDelta = chaseAccel * dt;
+        const deltaVx = (desiredVx - obj.vx) * Math.min(1, steer * dt);
+        const deltaVy = (desiredVy - obj.vy) * Math.min(1, steer * dt);
+        const deltaLen = Math.hypot(deltaVx, deltaVy) || 1;
+        const scale = deltaLen > maxDelta ? maxDelta / deltaLen : 1;
+        obj.vx += deltaVx * scale;
+        obj.vy += deltaVy * scale;
       } else {
-        obj.vx *= 0.92;
-        obj.vy *= 0.92;
+        obj.vx *= 0.88;
+        obj.vy *= 0.88;
       }
     }
 

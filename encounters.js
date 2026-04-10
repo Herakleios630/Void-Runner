@@ -139,6 +139,8 @@
       const difficulty = selectedDifficultyMode();
       const blueprint = createObjectBlueprint(rand, difficulty);
       const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
+      const baseAggro = Math.min(WORLD.width, WORLD.height) * 0.5;
+      const aggroRange = baseAggro * (0.8 + rand() * 0.4);
       const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
       const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
       const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
@@ -171,9 +173,10 @@
         passed: true,
         enemy: isEnemy,
         aggroLocked: false,
-        aggroRange: isEnemy ? (blueprint.type === "alienShip" ? 760 : 680) : 0,
-        chaseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 560 : 520) * difficulty.objectSpeedMult : 0,
-        steering: isEnemy ? (blueprint.type === "alienShip" ? 4.8 : 4.2) : 0,
+        aggroRange: isEnemy ? aggroRange : 0,
+        chaseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 340 : 300) * difficulty.objectSpeedMult : 0,
+        chaseAccel: isEnemy ? (blueprint.type === "alienShip" ? 340 : 300) : 0,
+        steering: isEnemy ? (blueprint.type === "alienShip" ? 1.6 : 1.4) : 0,
         nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
       });
     }
