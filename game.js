@@ -1950,6 +1950,29 @@ function update(dt, now) {
       obj.worldY = worldPos.y;
     }
 
+    if (obj.type === "miniAlien" || obj.type === "alienShip") {
+      const dxToShip = (ship.worldX || 0) - obj.worldX;
+      const dyToShip = (ship.worldY || 0) - obj.worldY;
+      const distToShip = Math.hypot(dxToShip, dyToShip) || 1;
+
+      if (!obj.aggroLocked && distToShip <= (obj.aggroRange || 700)) {
+        obj.aggroLocked = true;
+      }
+
+      if (obj.aggroLocked) {
+        const chaseSpeed = obj.chaseSpeed || 540;
+        const steer = obj.steering || 4.4;
+        const desiredVx = (dxToShip / distToShip) * chaseSpeed;
+        const desiredVy = (dyToShip / distToShip) * chaseSpeed;
+        const blend = Math.min(1, steer * dt);
+        obj.vx += (desiredVx - obj.vx) * blend;
+        obj.vy += (desiredVy - obj.vy) * blend;
+      } else {
+        obj.vx *= 0.92;
+        obj.vy *= 0.92;
+      }
+    }
+
     obj.worldX += obj.vx * dt;
     obj.worldY += obj.vy * dt;
 
@@ -1977,7 +2000,7 @@ function update(dt, now) {
       const dyPass = (obj.worldY || obj.y) - (ship.worldY || ship.y);
       const distPass = Math.hypot(dxPass, dyPass);
       if (distPass > Math.max(WORLD.width, WORLD.height) * 1.05) {
-      obj.passed = true;
+        obj.passed = true;
         addPoints(obj.destructible ? 1 : 2);
       }
     }

@@ -138,20 +138,15 @@
       const rand = typeof options.rand === "function" ? options.rand : Math.random;
       const difficulty = selectedDifficultyMode();
       const blueprint = createObjectBlueprint(rand, difficulty);
+      const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
       const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
       const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
       const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
       const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.64 + blueprint.size + (options.spawnPadding || 32);
       const spawnX = focusX + Math.cos(angle) * spawnRing;
       const spawnY = focusY + Math.sin(angle) * spawnRing;
-      const targetX = focusX + (rand() - 0.5) * WORLD.width * 0.22;
-      const targetY = focusY + (rand() - 0.5) * WORLD.height * 0.22;
-      const dx = targetX - spawnX;
-      const dy = targetY - spawnY;
-      const len = Math.hypot(dx, dy) || 1;
-      const baseSpeed = (WORLD.scrollSpeed + rand() * 120) * difficulty.objectSpeedMult;
-      const vx = (dx / len) * baseSpeed + (rand() - 0.5) * 42;
-      const vy = (dy / len) * baseSpeed + (rand() - 0.5) * 42;
+      const vx = 0;
+      const vy = 0;
       const rockProfile = blueprint.corners > 0 ? Array.from({ length: blueprint.corners }, () => 0.72 + rand() * 0.26) : null;
       const spawnWorld = screenToWorld(spawnX, spawnY);
 
@@ -174,6 +169,11 @@
         spin: (rand() - 0.5) * 2,
         angle: rand() * Math.PI * 2,
         passed: true,
+        enemy: isEnemy,
+        aggroLocked: false,
+        aggroRange: isEnemy ? (blueprint.type === "alienShip" ? 760 : 680) : 0,
+        chaseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 560 : 520) * difficulty.objectSpeedMult : 0,
+        steering: isEnemy ? (blueprint.type === "alienShip" ? 4.8 : 4.2) : 0,
         nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
       });
     }
@@ -206,8 +206,8 @@
           worldY: spawnWorld.y,
           radius,
           hitRadius: radius * 0.93,
-          vx: (pullDx / pullLen) * speed,
-          vy: (pullDy / pullLen) * speed,
+          vx: 0,
+          vy: 0,
           angle: rand() * Math.PI * 2,
           spin: (rand() - 0.5) * 0.12,
         });
@@ -233,8 +233,8 @@
           worldY: spawnWorld.y,
           radius,
           hitRadius: radius * 0.66,
-          vx: (pullDx / pullLen) * speed,
-          vy: (pullDy / pullLen) * speed,
+          vx: 0,
+          vy: 0,
           angle: rand() * Math.PI * 2,
           spin: (rand() - 0.5) * 0.4,
         });
@@ -259,8 +259,8 @@
         worldY: spawnWorld.y,
         radius,
         hitRadius: radius * 0.6,
-        vx: (pullDx / pullLen) * speed,
-        vy: (pullDy / pullLen) * speed,
+        vx: 0,
+        vy: 0,
         angle: rand() * Math.PI * 2,
         spin: (rand() - 0.5) * 0.8,
       });
