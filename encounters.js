@@ -9,16 +9,64 @@
       createExplosion,
       playSfx,
       nextObjectId,
+      worldSystem,
+      cameraSystem,
     } = deps;
 
-    function spawnObject() {
-      const difficulty = selectedDifficultyMode();
+    const spawnedChunkEncounters = new Set();
+
+    function chunkKey(cx, cy) {
+      return `${cx},${cy}`;
+    }
+
+    function chunkCoord(value) {
+      const size = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
+      return Math.floor(value / size);
+    }
+
+    function chunkSeed(cx, cy) {
+      const worldSeed = worldSystem && typeof worldSystem.getSeed === "function" ? worldSystem.getSeed() : 1;
+      let x = (cx * 73856093) ^ (cy * 19349663) ^ (worldSeed * 83492791);
+      x = Math.imul(x ^ (x >>> 16), 0x7feb352d);
+      x = Math.imul(x ^ (x >>> 15), 0x846ca68b);
+      return (x ^ (x >>> 16)) >>> 0;
+    }
+
+    function createChunkRng(seed) {
+      let s = seed >>> 0;
+      return function next() {
+        s = (s + 0x6d2b79f5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function spawnAngleFromSides(rand) {
+      const side = Math.floor(rand() * 4);
+      const jitter = (rand() - 0.5) * 1.1;
+      if (side === 0) return 0 + jitter; // right
+      if (side === 1) return Math.PI * 0.5 + jitter; // bottom
+      if (side === 2) return Math.PI + jitter; // left
+      return Math.PI * 1.5 + jitter; // top
+    }
+
+    function screenToWorld(screenX, screenY) {
+      const camX = cameraSystem && typeof cameraSystem.getX === "function" ? cameraSystem.getX() : 0;
+      const camY = cameraSystem && typeof cameraSystem.getY === "function" ? cameraSystem.getY() : 0;
+      return {
+        x: camX + (screenX - WORLD.width * 0.5),
+        y: camY + (screenY - WORLD.height * 0.5),
+      };
+    }
+
+    function createObjectBlueprint(rand, difficulty) {
       const alienShipChance = difficulty.id === "easy" ? 0.06 : difficulty.id === "hard" ? 0.18 : 0.12;
       const miniAlienChance = difficulty.id === "easy" ? 0.11 : difficulty.id === "hard" ? 0.15 : 0.13;
       const firstCut = miniAlienChance;
       const secondCut = firstCut + alienShipChance;
 
-      const r = Math.random();
+      const r = rand();
       let type = "debris";
       let size = 30;
       let hp = 999;
@@ -28,130 +76,250 @@
 
       if (r < firstCut) {
         type = "miniAlien";
-        size = 14 + Math.random() * 10;
+        size = 14 + rand() * 10;
         hp = 3;
         destructible = true;
         collisionScale = 0.7;
         corners = 0;
       } else if (r < secondCut) {
         type = "alienShip";
-        size = 20 + Math.random() * 10;
+        size = 20 + rand() * 10;
         hp = 6;
         destructible = true;
         collisionScale = 0.74;
         corners = 0;
       } else if (r < 0.42) {
         type = "smallRock";
-        size = 11 + Math.random() * 12;
+        size = 11 + rand() * 12;
         hp = 3;
         destructible = true;
         collisionScale = 0.78;
         corners = 8;
       } else if (r < 0.66) {
         type = "mediumRock";
-        size = 24 + Math.random() * 14;
+        size = 24 + rand() * 14;
         hp = 5;
         destructible = true;
         collisionScale = 0.8;
         corners = 9;
       } else if (r < 0.79) {
         type = "debris";
-        size = 22 + Math.random() * 18;
+        size = 22 + rand() * 18;
         collisionScale = 0.76;
         corners = 8;
       } else {
         type = "boulder";
-        size = 36 + Math.random() * 28;
+        size = 36 + rand() * 28;
         collisionScale = 0.82;
         corners = 11;
       }
 
-      let y = size + Math.random() * (WORLD.height - size * 2);
-      if (Math.random() < 0.58) {
-        if (Math.random() < 0.5) {
-          y = size + Math.random() * (WORLD.height * 0.2);
-        } else {
-          y = WORLD.height - size - Math.random() * (WORLD.height * 0.2);
-        }
-      }
+      return {
+        type,
+        size,
+        hp,
+        destructible,
+        collisionScale,
+        corners,
+      };
+    }
 
-      const vx = -(WORLD.scrollSpeed + Math.random() * 120) * difficulty.objectSpeedMult;
-      const vy = (Math.random() - 0.5) * 70 * difficulty.objectSpeedMult;
-      const rockProfile = corners > 0 ? Array.from({ length: corners }, () => 0.72 + Math.random() * 0.26) : null;
+    function spawnObject(options = {}) {
+      const rand = typeof options.rand === "function" ? options.rand : Math.random;
+      const difficulty = selectedDifficultyMode();
+      const blueprint = createObjectBlueprint(rand, difficulty);
+      const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
+      const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
+      const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
+      const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.64 + blueprint.size + (options.spawnPadding || 32);
+      const spawnX = focusX + Math.cos(angle) * spawnRing;
+      const spawnY = focusY + Math.sin(angle) * spawnRing;
+      const targetX = focusX + (rand() - 0.5) * WORLD.width * 0.22;
+      const targetY = focusY + (rand() - 0.5) * WORLD.height * 0.22;
+      const dx = targetX - spawnX;
+      const dy = targetY - spawnY;
+      const len = Math.hypot(dx, dy) || 1;
+      const baseSpeed = (WORLD.scrollSpeed + rand() * 120) * difficulty.objectSpeedMult;
+      const vx = (dx / len) * baseSpeed + (rand() - 0.5) * 42;
+      const vy = (dy / len) * baseSpeed + (rand() - 0.5) * 42;
+      const rockProfile = blueprint.corners > 0 ? Array.from({ length: blueprint.corners }, () => 0.72 + rand() * 0.26) : null;
+      const spawnWorld = screenToWorld(spawnX, spawnY);
 
       state.objects.push({
         id: nextObjectId(),
-        type,
-        x: WORLD.width + size + 20,
-        y,
+        type: blueprint.type,
+        x: spawnX,
+        y: spawnY,
+        worldX: spawnWorld.x,
+        worldY: spawnWorld.y,
         vx,
         vy,
-        size,
-        hp,
+        size: blueprint.size,
+        hp: blueprint.hp,
         destroyed: false,
-        destructible,
-        collisionRadius: size * collisionScale,
-        corners,
+        destructible: blueprint.destructible,
+        collisionRadius: blueprint.size * blueprint.collisionScale,
+        corners: blueprint.corners,
         rockProfile,
-        spin: (Math.random() - 0.5) * 2,
-        angle: Math.random() * Math.PI * 2,
-        passed: false,
-        nextShotAt: type === "miniAlien" ? state.time + 1.2 + Math.random() * 2.4 : type === "alienShip" ? state.time + 1.4 + Math.random() * 2.2 : null,
+        spin: (rand() - 0.5) * 2,
+        angle: rand() * Math.PI * 2,
+        passed: true,
+        nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
       });
     }
 
-    function spawnEdgeHazard() {
+    function spawnEdgeHazard(options = {}) {
+      const rand = typeof options.rand === "function" ? options.rand : Math.random;
       const difficulty = selectedDifficultyMode();
-      const side = Math.random() < 0.5 ? "top" : "bottom";
-      const r = Math.random();
+      const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
+      const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
+      const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
+      const side = Math.sin(angle) < 0 ? "top" : "bottom";
+      const r = rand();
 
       if (r < 0.36) {
-        const radius = 270 + Math.random() * 150;
-        const cy = side === "top" ? -radius * 0.68 : WORLD.height + radius * 0.68;
+        const radius = 270 + rand() * 150;
+        const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
+        const x = focusX + Math.cos(angle) * spawnRing;
+        const y = focusY + Math.sin(angle) * spawnRing;
+        const pullDx = focusX - x;
+        const pullDy = focusY - y;
+        const pullLen = Math.hypot(pullDx, pullDy) || 1;
+        const speed = WORLD.scrollSpeed * (0.84 + rand() * 0.22) * difficulty.edgeSpeedMult;
+        const spawnWorld = screenToWorld(x, y);
         state.edgeHazards.push({
           kind: "planet",
           side,
-          x: WORLD.width + radius + 40,
-          y: cy,
+          x,
+          y,
+          worldX: spawnWorld.x,
+          worldY: spawnWorld.y,
           radius,
           hitRadius: radius * 0.93,
-          vx: -(WORLD.scrollSpeed * (0.84 + Math.random() * 0.22) * difficulty.edgeSpeedMult),
-          angle: Math.random() * Math.PI * 2,
-          spin: (Math.random() - 0.5) * 0.12,
+          vx: (pullDx / pullLen) * speed,
+          vy: (pullDy / pullLen) * speed,
+          angle: rand() * Math.PI * 2,
+          spin: (rand() - 0.5) * 0.12,
         });
         return;
       }
 
       if (r < 0.72) {
-        const radius = 48 + Math.random() * 22;
-        const y = side === "top" ? radius + 8 : WORLD.height - radius - 8;
+        const radius = 48 + rand() * 22;
+        const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
+        const x = focusX + Math.cos(angle) * spawnRing;
+        const y = focusY + Math.sin(angle) * spawnRing;
+        const pullDx = focusX - x;
+        const pullDy = focusY - y;
+        const pullLen = Math.hypot(pullDx, pullDy) || 1;
+        const speed = WORLD.scrollSpeed * (1 + rand() * 0.25) * difficulty.edgeSpeedMult;
+        const spawnWorld = screenToWorld(x, y);
         state.edgeHazards.push({
           kind: "station",
           side,
-          x: WORLD.width + radius + 20,
+          x,
           y,
+          worldX: spawnWorld.x,
+          worldY: spawnWorld.y,
           radius,
           hitRadius: radius * 0.66,
-          vx: -(WORLD.scrollSpeed * (1 + Math.random() * 0.25) * difficulty.edgeSpeedMult),
-          angle: Math.random() * Math.PI * 2,
-          spin: (Math.random() - 0.5) * 0.4,
+          vx: (pullDx / pullLen) * speed,
+          vy: (pullDy / pullLen) * speed,
+          angle: rand() * Math.PI * 2,
+          spin: (rand() - 0.5) * 0.4,
         });
         return;
       }
 
-      const radius = 44 + Math.random() * 18;
-      const y = side === "top" ? radius + 10 : WORLD.height - radius - 10;
+      const radius = 44 + rand() * 18;
+      const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.72 + radius + (options.spawnPadding || 20);
+      const x = focusX + Math.cos(angle) * spawnRing;
+      const y = focusY + Math.sin(angle) * spawnRing;
+      const pullDx = focusX - x;
+      const pullDy = focusY - y;
+      const pullLen = Math.hypot(pullDx, pullDy) || 1;
+      const speed = WORLD.scrollSpeed * (0.92 + rand() * 0.22) * difficulty.edgeSpeedMult;
+      const spawnWorld = screenToWorld(x, y);
       state.edgeHazards.push({
         kind: "blackHole",
         side,
-        x: WORLD.width + radius + 20,
+        x,
         y,
+        worldX: spawnWorld.x,
+        worldY: spawnWorld.y,
         radius,
         hitRadius: radius * 0.6,
-        vx: -(WORLD.scrollSpeed * (0.92 + Math.random() * 0.22) * difficulty.edgeSpeedMult),
-        angle: Math.random() * Math.PI * 2,
-        spin: (Math.random() - 0.5) * 0.8,
+        vx: (pullDx / pullLen) * speed,
+        vy: (pullDy / pullLen) * speed,
+        angle: rand() * Math.PI * 2,
+        spin: (rand() - 0.5) * 0.8,
       });
+    }
+
+    function spawnChunkEncounter(cx, cy) {
+      const key = chunkKey(cx, cy);
+      if (spawnedChunkEncounters.has(key)) return false;
+      spawnedChunkEncounters.add(key);
+
+      const rand = createChunkRng(chunkSeed(cx, cy));
+      const difficulty = selectedDifficultyMode();
+      const worldDistance = Math.hypot(cx, cy);
+      const distancePressure = Math.min(1.4, worldDistance * 0.08);
+      const baseObjects = difficulty.id === "hard" ? 3 : 2;
+      const bonusObjects = Math.floor(distancePressure * (difficulty.id === "hard" ? 2 : 1));
+      const objectCount = 1 + Math.floor(rand() * (baseObjects + bonusObjects));
+
+      for (let i = 0; i < objectCount; i += 1) {
+        spawnObject({
+          rand,
+          spawnPadding: 40 + rand() * 90,
+        });
+      }
+
+      const hazardChance = Math.min(0.88, (difficulty.id === "hard" ? 0.72 : 0.55) + distancePressure * 0.12);
+      if (rand() < hazardChance) {
+        spawnEdgeHazard({
+          rand,
+          spawnPadding: 20 + rand() * 70,
+        });
+      }
+
+      return true;
+    }
+
+    function pruneChunkEncounterCache(centerCx, centerCy) {
+      const keepRadius = 6;
+      for (const key of spawnedChunkEncounters) {
+        const [rawX, rawY] = key.split(",");
+        const x = Number.parseInt(rawX, 10);
+        const y = Number.parseInt(rawY, 10);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          spawnedChunkEncounters.delete(key);
+          continue;
+        }
+        if (Math.abs(x - centerCx) > keepRadius || Math.abs(y - centerCy) > keepRadius) {
+          spawnedChunkEncounters.delete(key);
+        }
+      }
+    }
+
+    function spawnChunksAround(cameraX, cameraY, radius = 1) {
+      const effectiveX = Number.isFinite(cameraX) ? cameraX : (cameraSystem && typeof cameraSystem.getX === "function" ? cameraSystem.getX() : 0);
+      const effectiveY = Number.isFinite(cameraY) ? cameraY : (cameraSystem && typeof cameraSystem.getY === "function" ? cameraSystem.getY() : 0);
+      const centerCx = chunkCoord(effectiveX);
+      const centerCy = chunkCoord(effectiveY);
+
+      pruneChunkEncounterCache(centerCx, centerCy);
+
+      for (let y = centerCy - radius; y <= centerCy + radius; y += 1) {
+        for (let x = centerCx - radius; x <= centerCx + radius; x += 1) {
+          spawnChunkEncounter(x, y);
+        }
+      }
+    }
+
+    function resetChunkSpawns() {
+      spawnedChunkEncounters.clear();
     }
 
     function spawnBoss(level) {
@@ -366,6 +534,8 @@
     return {
       spawnObject,
       spawnEdgeHazard,
+      spawnChunksAround,
+      resetChunkSpawns,
       spawnBoss,
       spawnEnemyProjectile,
       spawnEnemyFlameBurst,

@@ -689,18 +689,52 @@
         if (pickup.type !== "armor") continue;
         ctx.save();
         ctx.translate(pickup.x, pickup.y);
-        ctx.fillStyle = "rgba(132, 188, 255, 0.95)";
+        const r = pickup.radius;
+        const bob = Math.sin((state.time * 4) + pickup.x * 0.02) * 1.2;
+        ctx.translate(0, bob);
+
+        // Knight-shield silhouette.
+        ctx.fillStyle = "rgba(98, 142, 198, 0.98)";
         ctx.beginPath();
-        ctx.arc(0, 0, pickup.radius, 0, Math.PI * 2);
+        ctx.moveTo(0, -r * 1.05);
+        ctx.bezierCurveTo(-r * 0.86, -r * 0.9, -r * 0.95, -r * 0.2, -r * 0.74, r * 0.46);
+        ctx.bezierCurveTo(-r * 0.52, r * 1.02, -r * 0.16, r * 1.28, 0, r * 1.45);
+        ctx.bezierCurveTo(r * 0.16, r * 1.28, r * 0.52, r * 1.02, r * 0.74, r * 0.46);
+        ctx.bezierCurveTo(r * 0.95, -r * 0.2, r * 0.86, -r * 0.9, 0, -r * 1.05);
+        ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = "rgba(220, 242, 255, 0.95)";
-        ctx.lineWidth = 1.5;
+
+        const grad = ctx.createLinearGradient(0, -r * 1.05, 0, r * 1.45);
+        grad.addColorStop(0, "rgba(210, 232, 255, 0.72)");
+        grad.addColorStop(0.5, "rgba(142, 186, 235, 0.34)");
+        grad.addColorStop(1, "rgba(58, 92, 142, 0.24)");
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(-4, 0);
-        ctx.lineTo(4, 0);
-        ctx.moveTo(0, -4);
-        ctx.lineTo(0, 4);
+        ctx.moveTo(0, -r * 0.9);
+        ctx.bezierCurveTo(-r * 0.7, -r * 0.78, -r * 0.75, -r * 0.18, -r * 0.58, r * 0.36);
+        ctx.bezierCurveTo(-r * 0.41, r * 0.82, -r * 0.12, r * 1.02, 0, r * 1.14);
+        ctx.bezierCurveTo(r * 0.12, r * 1.02, r * 0.41, r * 0.82, r * 0.58, r * 0.36);
+        ctx.bezierCurveTo(r * 0.75, -r * 0.18, r * 0.7, -r * 0.78, 0, -r * 0.9);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(232, 246, 255, 0.95)";
+        ctx.lineWidth = 1.4;
         ctx.stroke();
+
+        ctx.strokeStyle = "rgba(238, 250, 255, 0.9)";
+        ctx.lineWidth = 1.15;
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 0.68);
+        ctx.lineTo(0, r * 0.9);
+        ctx.moveTo(-r * 0.34, -r * 0.04);
+        ctx.lineTo(r * 0.34, -r * 0.04);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(240, 250, 255, 0.5)";
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.22, -r * 0.38, r * 0.16, r * 0.09, -0.42, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
 
