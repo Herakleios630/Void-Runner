@@ -15,6 +15,11 @@
 - [ ] Full QA pass for balancing and edge cases
 
 ## Future Features
+- [ ] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
+- [ ] High-detail procedural planets (bands, craters, rim light, atmospheric scattering)
+- [ ] Rich nebula rendering (layered noise, color palettes, wisps, depth fade)
+- [ ] Improved starfield quality (twinkle variance, color temperature, density falloff)
+- [ ] Cinematic background composition rules per chunk (avoid flat empty scenes)
 - [ ] Larger playable area / viewport fill (use much more of browser window)
 - [ ] Multiplayer co-op mode (online)
 - [ ] Multiplayer PvP / versus arena mode
@@ -35,3 +40,4 @@
 
 ## Notes
 - Add new ideas as checklist items here so they can be tracked and checked off.
+- 2026-04-10: Added core perf safeguards (spawn-per-frame caps, background draw budgets) to keep headroom for future visual upgrades.
