@@ -2552,12 +2552,13 @@ function gameLoop(nowMs) {
   const dt = Math.min(0.033, now - lastTime);
   lastTime = now;
 
-  // Fail-safe: recover from broken startup states where no ship got initialized.
-  if (!state.ship && state.pauseReason === "running") {
-    resetGame();
-  }
+  // Fail-safe: recover from broken startup/menu states where no playable session exists.
+  const overlayHidden = overlay.classList.contains("hidden");
+  const inSelectionState = state.pauseReason === "difficulty-select" || state.pauseReason === "ship-select";
+  const recoverableNoShip = !state.ship && overlayHidden && (state.pauseReason === "running" || inSelectionState);
+  const recoverableStopped = !state.running && overlayHidden && (state.pauseReason === "running" || inSelectionState);
 
-  if (!state.ship && state.pauseReason === "difficulty-select" && overlay.classList.contains("hidden")) {
+  if (recoverableNoShip || recoverableStopped) {
     resetGame();
   }
 
