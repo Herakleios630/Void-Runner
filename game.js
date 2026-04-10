@@ -1981,17 +1981,31 @@ function update(dt, now) {
       const dxToShip = (ship.worldX || 0) - obj.worldX;
       const dyToShip = (ship.worldY || 0) - obj.worldY;
       const distToShip = Math.hypot(dxToShip, dyToShip) || 1;
+      const engageRange = obj.aggroRange || 700;
+      const disengageRange = obj.disengageRange || engageRange * 1.7;
+      const memoryWindow = 2.8;
+      const targetRange = obj.preferredRange || 190;
 
-      if (!obj.aggroLocked && distToShip <= (obj.aggroRange || 700)) {
+      if (!obj.aggroLocked && distToShip <= engageRange) {
         obj.aggroLocked = true;
+        obj.aggroUntil = state.time + memoryWindow;
+      }
+
+      if (obj.aggroLocked && distToShip <= disengageRange) {
+        obj.aggroUntil = state.time + memoryWindow;
+      }
+
+      if (obj.aggroLocked && state.time > (obj.aggroUntil || 0)) {
+        obj.aggroLocked = false;
       }
 
       if (obj.aggroLocked) {
         const chaseSpeed = obj.chaseSpeed || 540;
         const steer = obj.steering || 1.5;
         const chaseAccel = obj.chaseAccel || 320;
-        const desiredVx = (dxToShip / distToShip) * chaseSpeed;
-        const desiredVy = (dyToShip / distToShip) * chaseSpeed;
+        const chaseDir = distToShip > targetRange ? 1 : -0.5;
+        const desiredVx = (dxToShip / distToShip) * chaseSpeed * chaseDir;
+        const desiredVy = (dyToShip / distToShip) * chaseSpeed * chaseDir;
         const maxDelta = chaseAccel * dt;
         const deltaVx = (desiredVx - obj.vx) * Math.min(1, steer * dt);
         const deltaVy = (desiredVy - obj.vy) * Math.min(1, steer * dt);

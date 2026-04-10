@@ -22,7 +22,8 @@
 - [x] Space stations orbiting planets
 - [x] Asteroid groups/fields as clustered encounters
 - [x] Dense asteroid belts around planets
-- [ ] Enemy aggro + pursuit tuning pass (engage radius, follow persistence, speed)
+- [x] Enemy aggro + pursuit tuning pass (engage radius, follow persistence, speed)
+- [x] Planet depth readability via atmosphere thickness by layer
 
 ## Notes
 - Add new ideas as checklist items here so they can be tracked and checked off.
