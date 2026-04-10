@@ -149,6 +149,7 @@
 
       if (rand() < 0.32) {
         const nearPlane = rand() < 0.35;
+        const orbitDirection = rand() < 0.5 ? -1 : 1;
         const planet = {
           type: "planet",
           drawOrder: nearPlane ? 6 : 5,
@@ -176,7 +177,7 @@
               orbitCy: planet.y,
               orbitRadius: planet.radius * (1.45 + rand() * 1.25),
               orbitAngle: rand() * Math.PI * 2,
-              orbitSpeed: (0.08 + rand() * 0.18) * (rand() < 0.5 ? -1 : 1),
+              orbitSpeed: (0.08 + rand() * 0.18) * orbitDirection,
               radius: stationRadius,
               hitRadius: collidableStation ? stationHitRadius : 0,
             });
@@ -196,7 +197,7 @@
               orbitCy: planet.y,
               orbitRadius: Math.max(planet.radius * 1.35, beltRadiusBase + beltJitter),
               orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.25,
-              orbitSpeed: (0.12 + rand() * 0.22) * (rand() < 0.5 ? -1 : 1),
+              orbitSpeed: (0.12 + rand() * 0.22) * orbitDirection,
               radius: 2.5 + rand() * 4.2,
               alpha: 0.45 + rand() * 0.35,
             });
