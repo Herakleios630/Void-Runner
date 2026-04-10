@@ -1466,6 +1466,20 @@ function syncEntityScreenPosition(entity, cameraX, cameraY) {
   entity.y = screenPos.y;
 }
 
+function entityWorldX(entity) {
+  return Number.isFinite(entity.worldX) ? entity.worldX : entity.x;
+}
+
+function entityWorldY(entity) {
+  return Number.isFinite(entity.worldY) ? entity.worldY : entity.y;
+}
+
+function circlesOverlapWorldEntities(a, radiusA, b, radiusB) {
+  const dx = entityWorldX(a) - entityWorldX(b);
+  const dy = entityWorldY(a) - entityWorldY(b);
+  return dx * dx + dy * dy < Math.pow(radiusA + radiusB, 2);
+}
+
 
 function createExplosion(x, y, color, amount = 18) {
   for (let i = 0; i < amount; i += 1) {
@@ -1575,7 +1589,7 @@ function destroyObject(obj, reason) {
 function damageNearbyFromShieldPulse(radius, allowHeavyTargets) {
   for (const obj of state.objects) {
     if (obj.hp <= 0) continue;
-    const d = Math.hypot(obj.x - state.ship.x, obj.y - state.ship.y);
+    const d = Math.hypot(entityWorldX(obj) - entityWorldX(state.ship), entityWorldY(obj) - entityWorldY(state.ship));
     if (d > radius + obj.collisionRadius) continue;
 
     if (obj.destructible || allowHeavyTargets || obj.type === "boulder" || obj.type === "debris") {
@@ -1640,7 +1654,11 @@ function tryUseDrillOnObject(obj) {
   const { ux, uy } = getShipAimUnit();
   const tipX = state.ship.x + ux * (state.ship.radius + state.weapon.drillReach);
   const tipY = state.ship.y + uy * (state.ship.radius + state.weapon.drillReach);
-  const d = Math.hypot(obj.x - tipX, obj.y - tipY);
+  const tipWorld = {
+    x: entityWorldX(state.ship) + ux * (state.ship.radius + state.weapon.drillReach),
+    y: entityWorldY(state.ship) + uy * (state.ship.radius + state.weapon.drillReach),
+  };
+  const d = Math.hypot(entityWorldX(obj) - tipWorld.x, entityWorldY(obj) - tipWorld.y);
 
   if (d > obj.collisionRadius + state.weapon.drillRadius) return false;
 
@@ -1652,7 +1670,7 @@ function tryUseDrillOnObject(obj) {
     let cleared = 0;
     for (const other of state.objects) {
       if (other === obj || other.hp <= 0 || !other.destructible) continue;
-      const d2 = Math.hypot(other.x - obj.x, other.y - obj.y);
+      const d2 = Math.hypot(entityWorldX(other) - entityWorldX(obj), entityWorldY(other) - entityWorldY(obj));
       if (d2 <= 86 + other.collisionRadius) {
         destroyObject(other, "shot");
         cleared += 1;
@@ -2170,7 +2188,7 @@ function update(dt, now) {
 
   for (const obj of state.objects) {
     for (const hazard of state.edgeHazards) {
-      if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius - 2, obj.x, obj.y, obj.collisionRadius)) {
+      if (circlesOverlapWorldEntities(hazard, hazard.hitRadius - 2, obj, obj.collisionRadius)) {
         destroyObject(obj, "rocket");
         break;
       }
@@ -2189,13 +2207,14 @@ function update(dt, now) {
 
   for (const bullet of state.bullets) {
     if (bullet.life <= 0) continue;
+    const bulletW = { worldX: entityWorldX(bullet), worldY: entityWorldY(bullet) };
 
-    if (state.bossActive && state.boss && circlesOverlap(state.boss.x, state.boss.y, state.boss.collisionRadius, bullet.x, bullet.y, bullet.radius)) {
+    if (state.bossActive && state.boss && circlesOverlapWorldEntities(state.boss, state.boss.collisionRadius, bulletW, bullet.radius)) {
       const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
       state.boss.hp -= dmg.damage;
       addDamageText(bullet.x, bullet.y - 6, dmg.damage, dmg.crit);
       createExplosion(bullet.x, bullet.y, "#ffe188", 6);
-      tryRicochetBullet(bullet, bullet.x - state.boss.x, bullet.y - state.boss.y, bullet.x, bullet.y);
+      tryRicochetBullet(bullet, entityWorldX(bullet) - entityWorldX(state.boss), entityWorldY(bullet) - entityWorldY(state.boss), bullet.x, bullet.y);
       if (state.boss.hp <= 0) {
         onBossDefeated();
       }
@@ -2204,8 +2223,8 @@ function update(dt, now) {
 
     let blockedByHazard = false;
     for (const hazard of state.edgeHazards) {
-      if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius, bullet.x, bullet.y, bullet.radius)) {
-        tryRicochetBullet(bullet, bullet.x - hazard.x, bullet.y - hazard.y, bullet.x, bullet.y);
+      if (circlesOverlapWorldEntities(hazard, hazard.hitRadius, bulletW, bullet.radius)) {
+        tryRicochetBullet(bullet, entityWorldX(bullet) - entityWorldX(hazard), entityWorldY(bullet) - entityWorldY(hazard), bullet.x, bullet.y);
         blockedByHazard = true;
         break;
       }
@@ -2214,7 +2233,7 @@ function update(dt, now) {
 
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
-      if (!circlesOverlap(obj.x, obj.y, obj.collisionRadius, bullet.x, bullet.y, bullet.radius)) continue;
+      if (!circlesOverlapWorldEntities(obj, obj.collisionRadius, bulletW, bullet.radius)) continue;
       if (obj.destructible) {
         const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
         obj.hp -= dmg.damage;
@@ -2223,7 +2242,7 @@ function update(dt, now) {
           destroyObject(obj, "shot");
         }
       }
-      tryRicochetBullet(bullet, bullet.x - obj.x, bullet.y - obj.y, bullet.x, bullet.y);
+      tryRicochetBullet(bullet, entityWorldX(bullet) - entityWorldX(obj), entityWorldY(bullet) - entityWorldY(obj), bullet.x, bullet.y);
       break;
     }
   }
@@ -2255,9 +2274,10 @@ function update(dt, now) {
     missile.worldY += missile.vy * dt;
     syncEntityScreenPosition(missile, cameraX, cameraY);
     missile.life -= dt;
+    const missileW = { worldX: missile.worldX, worldY: missile.worldY };
 
     if (state.bossActive && state.boss) {
-      if (circlesOverlap(state.boss.x, state.boss.y, state.boss.collisionRadius, missile.x, missile.y, missile.radius)) {
+      if (circlesOverlapWorldEntities(state.boss, state.boss.collisionRadius, missileW, missile.radius)) {
         const blastScale = missile.blastScale || 1;
         weapons.explodeRocketAt(missile.x, missile.y, blastScale);
         const dmg = computeDamage(missile.damageBase || 18, "explosive");
@@ -2274,7 +2294,7 @@ function update(dt, now) {
     let exploded = false;
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
-      if (circlesOverlap(obj.x, obj.y, obj.collisionRadius, missile.x, missile.y, missile.radius)) {
+      if (circlesOverlapWorldEntities(obj, obj.collisionRadius, missileW, missile.radius)) {
         weapons.explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
         missile.life = 0;
         exploded = true;
@@ -2285,7 +2305,7 @@ function update(dt, now) {
     if (exploded) continue;
 
     for (const hazard of state.edgeHazards) {
-      if (circlesOverlap(hazard.x, hazard.y, hazard.hitRadius, missile.x, missile.y, missile.radius)) {
+      if (circlesOverlapWorldEntities(hazard, hazard.hitRadius, missileW, missile.radius)) {
         weapons.explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
         missile.life = 0;
         break;
@@ -2302,7 +2322,7 @@ function update(dt, now) {
 
     if (proj.damageType === "explosive") {
       const splashR = proj.radius + 30;
-      const dSplash = Math.hypot(proj.x - ship.x, proj.y - ship.y);
+      const dSplash = Math.hypot(entityWorldX(proj) - entityWorldX(ship), entityWorldY(proj) - entityWorldY(ship));
       if (dSplash < splashR + ship.radius) {
         proj.life = 0;
         const splashDamage = dSplash < proj.radius + ship.radius ? 2 : 1;
@@ -2314,7 +2334,7 @@ function update(dt, now) {
       }
     }
 
-    const dShip = Math.hypot(proj.x - ship.x, proj.y - ship.y);
+    const dShip = Math.hypot(entityWorldX(proj) - entityWorldX(ship), entityWorldY(proj) - entityWorldY(ship));
     if (dShip < proj.radius + ship.radius) {
       proj.life = 0;
       if (!hitShip(proj.damageType || "physical", proj.damageAmount || 1)) {
@@ -2329,7 +2349,7 @@ function update(dt, now) {
 
     for (const bullet of state.bullets) {
       if (bullet.life <= 0) continue;
-      const d = Math.hypot(proj.x - bullet.x, proj.y - bullet.y);
+      const d = Math.hypot(entityWorldX(proj) - entityWorldX(bullet), entityWorldY(proj) - entityWorldY(bullet));
       if (d < proj.radius + bullet.radius) {
         proj.life = 0;
         bullet.life = 0;
