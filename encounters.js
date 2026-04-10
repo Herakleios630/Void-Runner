@@ -323,6 +323,7 @@
         vy,
         size: blueprint.size,
         hp: blueprint.hp,
+        maxHp: blueprint.hp,
         destroyed: false,
         destructible: blueprint.destructible,
         collisionRadius: blueprint.size * blueprint.collisionScale,
