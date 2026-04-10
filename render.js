@@ -20,6 +20,7 @@
     let miniMapPlanetPoints = [];
     let miniMapOrbitRings = [];
     let miniMapBeltRings = [];
+    let miniMapToxicZones = [];
     const visualTuning = (window.VoidTuning && window.VoidTuning.VISUAL) || {};
     const STAR_VISIBILITY = Number.isFinite(visualTuning.starVisibility)
       ? Math.max(0.45, Math.min(2.5, visualTuning.starVisibility))
@@ -362,6 +363,37 @@
             }
           }
           ctx.globalAlpha = 1;
+          continue;
+        }
+
+        if (obj.type === "toxicNebulaZone") {
+          const toxicSeed = stableUnitFrom2(worldX, worldY, radius || 1);
+          const baseA = obj.colorA || "rgba(124, 248, 145, 0.22)";
+          const baseB = obj.colorB || "rgba(38, 122, 61, 0.1)";
+          const toxicGrad = ctx.createRadialGradient(
+            pos.x,
+            pos.y,
+            radius * 0.16,
+            pos.x,
+            pos.y,
+            radius * 1.32
+          );
+          toxicGrad.addColorStop(0, baseA);
+          toxicGrad.addColorStop(0.62, baseB);
+          toxicGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+          ctx.fillStyle = toxicGrad;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius * 1.32, 0, Math.PI * 2);
+          ctx.fill();
+
+          const pulse = 0.72 + 0.28 * Math.sin(state.time * (1.2 + toxicSeed * 1.1));
+          ctx.strokeStyle = `rgba(128, 255, 152, ${(0.16 + pulse * 0.18).toFixed(3)})`;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius * (0.94 + pulse * 0.04), 0, Math.PI * 2);
+          ctx.stroke();
+
           continue;
         }
 
@@ -1297,6 +1329,7 @@
       miniMapRefreshAt = state.time + 0.24;
 
       const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
+      const toxicZones = typeof worldSystem.getToxicNebulaZones === "function" ? worldSystem.getToxicNebulaZones() : [];
       const planetPoints = [];
       const orbitRings = new Map();
       const beltRings = new Map();
@@ -1363,6 +1396,7 @@
       miniMapPlanetPoints = planetPoints.slice(0, 240);
       miniMapOrbitRings = Array.from(orbitRings.values()).slice(0, 80);
       miniMapBeltRings = Array.from(beltRings.values()).slice(0, 40);
+      miniMapToxicZones = toxicZones.slice(0, 36);
     }
 
     function drawMiniMap() {
@@ -1380,6 +1414,7 @@
       const padding = 14;
       const mapX = WORLD.width - mapSize - padding;
       const mapY = padding;
+      const scannerJam = Math.max(0, Math.min(0.85, (state.ship && state.ship.scannerJam) || 0));
 
       function project(wx, wy) {
         const nx = (wx - (centerX - halfSpan)) / worldSpan;
@@ -1411,9 +1446,23 @@
       ctx.rect(mapX + 1, mapY + 1, mapSize - 2, mapSize - 2);
       ctx.clip();
 
+      if (scannerJam > 0.06) {
+        for (const zone of miniMapToxicZones) {
+          const zp = project(zone.x, zone.y);
+          const r = ((zone.hazardRadius || 120) / worldSpan) * mapSize;
+          if (r < 2 || r > mapSize * 1.4) continue;
+          ctx.fillStyle = `rgba(76, 198, 104, ${(0.08 + scannerJam * 0.16).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(zp.x, zp.y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
       ctx.strokeStyle = "rgba(142, 188, 236, 0.48)";
       ctx.lineWidth = 1;
-      for (const ring of miniMapOrbitRings) {
+      const orbitRingBudget = Math.max(10, Math.floor(miniMapOrbitRings.length * (1 - scannerJam * 0.7)));
+      for (let i = 0; i < orbitRingBudget; i += 1) {
+        const ring = miniMapOrbitRings[i];
         const center = project(ring.x, ring.y);
         const radiusPx = (ring.radius / worldSpan) * mapSize;
         if (radiusPx < 2 || radiusPx > mapSize * 1.2) continue;
@@ -1427,7 +1476,9 @@
 
       ctx.strokeStyle = "rgba(132, 170, 214, 0.35)";
       ctx.lineWidth = 1;
-      for (const ring of miniMapBeltRings) {
+      const beltRingBudget = Math.max(4, Math.floor(miniMapBeltRings.length * (1 - scannerJam * 0.78)));
+      for (let i = 0; i < beltRingBudget; i += 1) {
+        const ring = miniMapBeltRings[i];
         const center = project(ring.x, ring.y);
         const radiusPx = (ring.radius / worldSpan) * mapSize;
         if (radiusPx < 2 || radiusPx > mapSize * 1.2) continue;
@@ -1439,7 +1490,9 @@
         ctx.stroke();
       }
 
-      for (const planet of miniMapPlanetPoints) {
+      const planetBudget = Math.max(12, Math.floor(miniMapPlanetPoints.length * (1 - scannerJam * 0.84)));
+      for (let i = 0; i < planetBudget; i += 1) {
+        const planet = miniMapPlanetPoints[i];
         const p = project(planet.x, planet.y);
         if (!p.visible) continue;
         const r = planet.isMoon ? 1.5 : 2.2;
@@ -1447,6 +1500,11 @@
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
+      }
+
+      if (scannerJam > 0.06) {
+        ctx.fillStyle = `rgba(15, 42, 24, ${(0.1 + scannerJam * 0.28).toFixed(3)})`;
+        ctx.fillRect(mapX + 1, mapY + 1, mapSize - 2, mapSize - 2);
       }
 
       ctx.fillStyle = "rgba(255, 164, 108, 0.98)";
@@ -1460,6 +1518,10 @@
       ctx.font = "11px Trebuchet MS";
       ctx.fillText("MAP", mapX + 7, mapY + 13);
       ctx.fillText(`${chunkSpan} chunks`, mapX + mapSize - 60, mapY + 13);
+      if (scannerJam > 0.25) {
+        ctx.fillStyle = "rgba(170, 244, 170, 0.9)";
+        ctx.fillText("SCANNER JAM", mapX + 42, mapY + mapSize - 8);
+      }
     }
 
     function draw() {

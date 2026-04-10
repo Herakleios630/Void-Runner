@@ -66,6 +66,7 @@
     const NEBULA_DENSITY = Number.isFinite(visualTuning.nebulaDensity)
       ? Math.max(0.5, Math.min(2.2, visualTuning.nebulaDensity))
       : 1;
+    const TOXIC_NEBULA_CHANCE = 0.34;
 
     const activeChunks = new Map();
 
@@ -371,6 +372,30 @@
           spectralClass: sunProfile.cls,
         };
         background.push(sun);
+
+        const toxicNebulaCount = rand() < TOXIC_NEBULA_CHANCE ? (rand() < 0.24 ? 2 : 1) : 0;
+        for (let i = 0; i < toxicNebulaCount; i += 1) {
+          const angle = rand() * Math.PI * 2;
+          const minDist = Math.max(chunkSize * 0.68, sun.radius * 2.2);
+          const maxDist = Math.min(chunkSize * 5.2, chunkSize * systemCellChunks * 0.31);
+          const dist = minDist + rand() * Math.max(1, maxDist - minDist);
+          const hazardRadius = chunkSize * (0.18 + rand() * 0.14);
+          const scannerJam = 0.38 + rand() * 0.34;
+
+          background.push({
+            type: "toxicNebulaZone",
+            drawOrder: 7,
+            parallax: SYSTEM_PARALLAX,
+            x: sun.x + Math.cos(angle) * dist,
+            y: sun.y + Math.sin(angle) * dist,
+            radius: hazardRadius,
+            hazardRadius,
+            toxicDps: 0.42 + rand() * 0.32,
+            scannerJam,
+            colorA: `rgba(122, 245, 136, ${(0.12 + scannerJam * 0.16).toFixed(3)})`,
+            colorB: `rgba(36, 122, 58, ${(0.04 + scannerJam * 0.1).toFixed(3)})`,
+          });
+        }
 
         // Keep a clear interstellar gap between neighboring anchor cells.
         const maxSystemRadius = Math.min(chunkSize * 5.8, chunkSize * systemCellChunks * 0.32);
@@ -828,6 +853,25 @@
       return out;
     }
 
+    function getToxicNebulaZones() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "toxicNebulaZone") continue;
+          out.push({
+            type: "toxicNebulaZone",
+            x: bg.x,
+            y: bg.y,
+            parallax: bg.parallax || 1,
+            hazardRadius: bg.hazardRadius || bg.radius || 140,
+            toxicDps: bg.toxicDps || 0.45,
+            scannerJam: bg.scannerJam || 0.45,
+          });
+        }
+      }
+      return out;
+    }
+
     function setSeed(nextSeed) {
       const numeric = Number.parseInt(nextSeed, 10);
       if (!Number.isFinite(numeric)) return false;
@@ -893,6 +937,7 @@
       getCollidableBodies,
       getOrbitalStations,
       getSolarHeatZones,
+      getToxicNebulaZones,
       resolveOrbitPosition,
       estimateSystemInfluence,
       getActiveChunkRects,

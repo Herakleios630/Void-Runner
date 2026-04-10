@@ -1224,6 +1224,7 @@ function resetGame() {
     armor: Math.max(0, Math.round((state.shipStats ? state.shipStats.maxArmor : 2) * 0.65)),
     maxArmor: state.shipStats ? state.shipStats.maxArmor : 2,
     invulnUntil: 0,
+    scannerJam: 0,
     radius: 17,
     thrust: 420 * model.speed,
     maxSpeed: 560 * model.speed,
@@ -1798,6 +1799,10 @@ function update(dt, now) {
   }
 
   if (!hazardInteractions.handleShipSolarHeat(ship, dt)) {
+    return;
+  }
+
+  if (!hazardInteractions.handleShipToxicNebula(ship, dt)) {
     return;
   }
 
