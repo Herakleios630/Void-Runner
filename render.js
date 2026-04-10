@@ -176,6 +176,7 @@
 
         if (obj.type === "planet") {
           const hue = obj.hue || 210;
+          const isGasGiant = Boolean(obj.isGasGiant);
           const effectiveParallax = obj.isMoon ? 0.62 : (obj.parallax || 0.33);
           const depth = Math.max(0, Math.min(1, (effectiveParallax - 0.33) / 0.37));
           const solidPlanet = Boolean(obj.collidablePlane);
@@ -194,13 +195,44 @@
           ctx.fill();
 
           const grad = ctx.createRadialGradient(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.1, pos.x, pos.y, radius);
-          grad.addColorStop(0, `hsla(${hue}, 80%, 72%, ${0.95 * bodyAlpha})`);
-          grad.addColorStop(0.55, `hsla(${hue}, 58%, 44%, ${0.88 * bodyAlpha})`);
-          grad.addColorStop(1, `hsla(${hue}, 45%, 24%, ${0.78 * bodyAlpha})`);
+          if (isGasGiant) {
+            grad.addColorStop(0, `hsla(${hue}, 78%, 70%, ${0.92 * bodyAlpha})`);
+            grad.addColorStop(0.55, `hsla(${hue}, 56%, 46%, ${0.85 * bodyAlpha})`);
+            grad.addColorStop(1, `hsla(${hue}, 42%, 28%, ${0.78 * bodyAlpha})`);
+          } else {
+            grad.addColorStop(0, `hsla(${hue}, 80%, 72%, ${0.95 * bodyAlpha})`);
+            grad.addColorStop(0.55, `hsla(${hue}, 58%, 44%, ${0.88 * bodyAlpha})`);
+            grad.addColorStop(1, `hsla(${hue}, 45%, 24%, ${0.78 * bodyAlpha})`);
+          }
           ctx.fillStyle = grad;
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
           ctx.fill();
+
+          if (isGasGiant) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+            ctx.clip();
+
+            const bands = 8;
+            for (let i = 0; i < bands; i += 1) {
+              const t = i / (bands - 1);
+              const yOff = (t - 0.5) * radius * 1.7;
+              const bandH = radius * (0.11 + (i % 2 === 0 ? 0.01 : 0.03));
+              const bandHue = hue + (i % 2 === 0 ? 8 : -10);
+              const alpha = 0.1 + (i % 2 === 0 ? 0.06 : 0.03);
+              ctx.fillStyle = `hsla(${bandHue}, 70%, ${44 + (i % 2) * 8}%, ${alpha * bodyAlpha})`;
+              ctx.fillRect(pos.x - radius * 1.05, pos.y + yOff - bandH * 0.5, radius * 2.1, bandH);
+            }
+
+            ctx.restore();
+            ctx.strokeStyle = `hsla(${hue}, 80%, 78%, ${0.3 * bodyAlpha})`;
+            ctx.lineWidth = Math.max(1, radius * 0.03);
+            ctx.beginPath();
+            ctx.ellipse(pos.x, pos.y, radius * 1.18, radius * 0.22, 0.18, 0.15, Math.PI * 1.86);
+            ctx.stroke();
+          }
 
           if (solidPlanet) {
             ctx.strokeStyle = "rgba(255, 212, 128, 0.72)";

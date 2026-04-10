@@ -103,7 +103,7 @@
       const chunkSize = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
 
       for (const sun of suns) {
-        const influenceRadius = Math.max(chunkSize * 3.2, sun.radius * 3.2);
+        const influenceRadius = Math.max(chunkSize * 7.8, sun.radius * 4.4);
         if (Math.hypot(worldX - sun.x, worldY - sun.y) <= influenceRadius) {
           return true;
         }
@@ -262,7 +262,7 @@
       const systemInterior = options.systemInterior === true
         || (options.systemInterior !== false && isWithinGameplaySystem(probeWorld.x, probeWorld.y));
 
-      const forced = options.forceType ? forcedObjectBlueprint(options.forceType, rand) : null;
+      const forced = options.forceType && !systemInterior ? forcedObjectBlueprint(options.forceType, rand) : null;
       const blueprint = forced || createObjectBlueprint(rand, difficulty, { systemInterior });
       const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
       const baseAggro = Math.min(WORLD.width, WORLD.height) * 0.5;

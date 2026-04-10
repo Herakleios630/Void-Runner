@@ -57,7 +57,7 @@ const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none),
 const spriteAssets = window.VoidAssets || null;
 const { SHIP_MODELS, DIFFICULTY_MODES } = window.VoidConfig;
 const { randomFrom, clamp, circlesOverlap } = window.VoidUtils;
-const { initAudio, playSfx } = window.VoidAudio;
+const { initAudio, playSfx, playMusicCategory } = window.VoidAudio;
 const { createWorldSystem } = window.VoidWorld;
 const { createCameraSystem } = window.VoidCamera;
 const { createRenderer } = window.VoidRender;
@@ -873,6 +873,7 @@ const menus = createMenuSystem({
   SHIP_MODELS,
   DIFFICULTY_MODES,
   setPauseIndicatorVisible,
+  playMusicCategory,
 });
 
 const worldSystem = createWorldSystem({
@@ -1064,6 +1065,7 @@ function onBossDefeated() {
 
 function resetGame() {
   initAudio();
+  playMusicCategory("game");
   const model = selectedShipModel();
   const difficulty = selectedDifficultyMode();
   const maxHp = Math.max(2, Math.round(model.maxHp * difficulty.playerHpMult * 2));
@@ -1344,6 +1346,7 @@ function setGameOver() {
   state.pauseReason = "gameover";
   setPauseIndicatorVisible(false);
   overlay.classList.remove("hidden");
+  playMusicCategory("menu");
   overlay.innerHTML = `
     <h1>Game Over</h1>
     <p>Zeit: ${state.time.toFixed(1)}s | Punkte: ${Math.floor(state.score)} | Kills: ${state.kills}</p>
@@ -1850,19 +1853,15 @@ function resolveShipOrbitCollision(ship, collider, cameraX, cameraY, hitDamage, 
 }
 
 function handleShipStructureCollisions(ship, cameraX, cameraY) {
-  const collidablePlanets = worldSystem.getCollidablePlanets(state.time);
-  if (collidablePlanets.length > 0) {
-    for (const planet of collidablePlanets) {
-      if (!resolveShipOrbitCollision(ship, planet, cameraX, cameraY, 2, 80)) {
-        return false;
-      }
-    }
-  }
+  const collidableBodies = typeof worldSystem.getCollidableBodies === "function"
+    ? worldSystem.getCollidableBodies(state.time)
+    : worldSystem.getCollidablePlanets(state.time);
 
-  const orbitalStations = typeof worldSystem.getOrbitalStations === "function" ? worldSystem.getOrbitalStations(state.time) : [];
-  if (orbitalStations.length > 0) {
-    for (const station of orbitalStations) {
-      if (!resolveShipOrbitCollision(ship, station, cameraX, cameraY, 1, 60)) {
+  if (collidableBodies.length > 0) {
+    for (const body of collidableBodies) {
+      const hitDamage = body.type === "orbitalStation" ? 1 : 2;
+      const pushVelocity = body.type === "orbitalStation" ? 60 : 80;
+      if (!resolveShipOrbitCollision(ship, body, cameraX, cameraY, hitDamage, pushVelocity)) {
         return false;
       }
     }
@@ -2149,6 +2148,23 @@ function update(dt, now) {
     if (bullet.life <= 0) continue;
     const bulletW = { worldX: entityWorldX(bullet), worldY: entityWorldY(bullet) };
 
+    const worldBodies = typeof worldSystem.getCollidableBodies === "function" ? worldSystem.getCollidableBodies(state.time) : [];
+    let blockedByWorldBody = false;
+    for (const body of worldBodies) {
+      if (circlesOverlapWorldEntities(body, body.hitRadius || body.radius || 12, bulletW, bullet.radius)) {
+        tryRicochetBullet(
+          bullet,
+          entityWorldX(bullet) - entityWorldX(body),
+          entityWorldY(bullet) - entityWorldY(body),
+          bullet.x,
+          bullet.y,
+        );
+        blockedByWorldBody = true;
+        break;
+      }
+    }
+    if (blockedByWorldBody) continue;
+
     if (state.bossActive && state.boss && circlesOverlapWorldEntities(state.boss, state.boss.collisionRadius, bulletW, bullet.radius)) {
       const dmg = computeDamage((bullet.damageBase || state.weapon.cannonEffectiveness), "physical");
       state.boss.hp -= dmg.damage;
@@ -2222,6 +2238,18 @@ function update(dt, now) {
     }
 
     let exploded = false;
+    const worldBodies = typeof worldSystem.getCollidableBodies === "function" ? worldSystem.getCollidableBodies(state.time) : [];
+    for (const body of worldBodies) {
+      if (circlesOverlapWorldEntities(body, body.hitRadius || body.radius || 12, missileW, missile.radius)) {
+        weapons.explodeRocketAt(missile.x, missile.y, missile.blastScale || 1);
+        missile.life = 0;
+        exploded = true;
+        break;
+      }
+    }
+
+    if (exploded) continue;
+
     for (const obj of state.objects) {
       if (obj.hp <= 0) continue;
       if (circlesOverlapWorldEntities(obj, obj.collisionRadius, missileW, missile.radius)) {
@@ -2370,6 +2398,20 @@ function update(dt, now) {
           applyHeatHit(state.boss, burst.damage, burst.x, burst.y);
           burst.hitDone = true;
           burst.life = Math.min(burst.life, 0.05);
+        }
+      }
+
+      if (!burst.hitDone) {
+        const worldBodies = typeof worldSystem.getCollidableBodies === "function" ? worldSystem.getCollidableBodies(state.time) : [];
+        for (const body of worldBodies) {
+          const bodyPos = cameraSystem.worldToScreen(body.x, body.y, body.parallax || 1, WORLD.width, WORLD.height);
+          const dBody = Math.hypot(bodyPos.x - burst.x, bodyPos.y - burst.y);
+          const bodyR = body.hitRadius || body.radius || 12;
+          if (dBody < bodyR + burst.radius) {
+            burst.hitDone = true;
+            burst.life = 0;
+            break;
+          }
         }
       }
 
@@ -2617,6 +2659,7 @@ const inputSystem = createInputSystem({
 });
 
 menus.showDifficultySelectionMenu();
+playMusicCategory("menu");
 inputSystem.setup();
 worldSystem.update(0, 0);
 fitMobileViewport();
