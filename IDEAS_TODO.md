@@ -10,7 +10,7 @@
 - [x] Projectile world-space foundation
 - [x] Remove remaining screen-bound behavior (walls, edge ricochet assumptions)
 - [x] Boss fully world-space (movement, spawn, attacks)
-- [ ] Convert remaining collision checks to world-space first
+- [x] Convert remaining collision checks to world-space first
 - [ ] Finalize camera/encounter culling and spawn pressure for free-flight
 - [ ] Full QA pass for balancing and edge cases
 
