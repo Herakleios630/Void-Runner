@@ -1554,7 +1554,9 @@ function destroyObject(obj, reason) {
   obj.destroyed = true;
   obj.hp = 0;
 
-  if (reason === "shot") {
+  const playerKill = reason === "shot" || reason === "rocket";
+
+  if (playerKill && reason === "shot") {
     state.kills += 1;
     if (obj.type === "miniAlien") addPoints(34);
     else if (obj.type === "alienShip") addPoints(42);
@@ -1564,7 +1566,7 @@ function destroyObject(obj, reason) {
     else addPoints(24);
   }
 
-  if (reason === "rocket") {
+  if (playerKill && reason === "rocket") {
     state.kills += 1;
     if (obj.type === "boulder") addPoints(88);
     else if (obj.type === "debris") addPoints(50);
@@ -2143,7 +2145,7 @@ function update(dt, now) {
         return;
       }
       if (obj.destructible) {
-        destroyObject(obj, "rocket");
+        destroyObject(obj, "collision");
       }
     }
   }
@@ -2212,7 +2214,7 @@ function update(dt, now) {
   for (const obj of state.objects) {
     for (const hazard of state.edgeHazards) {
       if (circlesOverlapWorldEntities(hazard, hazard.hitRadius - 2, obj, obj.collisionRadius)) {
-        destroyObject(obj, "rocket");
+        destroyObject(obj, "hazard");
         break;
       }
     }
