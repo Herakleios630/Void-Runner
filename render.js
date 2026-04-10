@@ -17,6 +17,7 @@
     let burnVfxSpriteCount = 0;
     let miniMapRefreshAt = 0;
     let miniMapPlanetPoints = [];
+    let miniMapOrbitRings = [];
     let miniMapBeltRings = [];
 
     function resolveBgWorldPosition(obj, atTime) {
@@ -741,7 +742,7 @@
               const orbitParallax = obj.parallax || 1;
               const c = cameraSystem.worldToScreen(obj.parentOrbitCx, obj.parentOrbitCy, orbitParallax, WORLD.width, WORLD.height);
               ctx.beginPath();
-              ctx.arc(c.x, c.y, obj.parentOrbitRadius, 0, Math.PI * 2);
+              ctx.arc(c.x, c.y, obj.parentOrbitRadius * orbitParallax, 0, Math.PI * 2);
               ctx.stroke();
             }
           }
@@ -754,7 +755,7 @@
               const orbitParallax = obj.parallax || 1;
               const c = cameraSystem.worldToScreen(center.x, center.y, orbitParallax, WORLD.width, WORLD.height);
               ctx.beginPath();
-              ctx.arc(c.x, c.y, obj.orbitRadius, 0, Math.PI * 2);
+              ctx.arc(c.x, c.y, obj.orbitRadius * orbitParallax, 0, Math.PI * 2);
               ctx.stroke();
             }
           }
@@ -818,6 +819,7 @@
 
       const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
       const planetPoints = [];
+      const orbitRings = new Map();
       const beltRings = new Map();
 
       for (const obj of bgObjects) {
@@ -828,6 +830,29 @@
             y: pos.y,
             isMoon: Boolean(obj.isMoon),
           });
+
+          if (Number.isFinite(obj.orbitRadius)) {
+            const center = resolveLocalOrbitCenter(obj, state.time);
+            const key = `o:${Math.round(center.x / 16)}:${Math.round(center.y / 16)}:${Math.round(obj.orbitRadius / 8)}`;
+            if (!orbitRings.has(key)) {
+              orbitRings.set(key, {
+                x: center.x,
+                y: center.y,
+                radius: obj.orbitRadius,
+              });
+            }
+          }
+
+          if (Number.isFinite(obj.parentOrbitRadius) && Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy)) {
+            const key = `p:${Math.round(obj.parentOrbitCx / 16)}:${Math.round(obj.parentOrbitCy / 16)}:${Math.round(obj.parentOrbitRadius / 8)}`;
+            if (!orbitRings.has(key)) {
+              orbitRings.set(key, {
+                x: obj.parentOrbitCx,
+                y: obj.parentOrbitCy,
+                radius: obj.parentOrbitRadius,
+              });
+            }
+          }
           continue;
         }
 
@@ -852,6 +877,7 @@
       }
 
       miniMapPlanetPoints = planetPoints.slice(0, 240);
+      miniMapOrbitRings = Array.from(orbitRings.values()).slice(0, 80);
       miniMapBeltRings = Array.from(beltRings.values()).slice(0, 40);
     }
 
@@ -900,6 +926,20 @@
       ctx.beginPath();
       ctx.rect(mapX + 1, mapY + 1, mapSize - 2, mapSize - 2);
       ctx.clip();
+
+      ctx.strokeStyle = "rgba(142, 188, 236, 0.48)";
+      ctx.lineWidth = 1;
+      for (const ring of miniMapOrbitRings) {
+        const center = project(ring.x, ring.y);
+        const radiusPx = (ring.radius / worldSpan) * mapSize;
+        if (radiusPx < 2 || radiusPx > mapSize * 1.2) continue;
+        if (center.x + radiusPx < mapX || center.x - radiusPx > mapX + mapSize || center.y + radiusPx < mapY || center.y - radiusPx > mapY + mapSize) {
+          continue;
+        }
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, radiusPx, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       ctx.strokeStyle = "rgba(132, 170, 214, 0.35)";
       ctx.lineWidth = 1;

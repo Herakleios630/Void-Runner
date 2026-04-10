@@ -878,8 +878,8 @@ const menus = createMenuSystem({
 const worldSystem = createWorldSystem({
   chunkSize: WORLD_CHUNK_SIZE,
   worldSeed: state.worldSeed,
-  activeRadius: 2,
-  unloadRadius: 3,
+  activeRadius: 4,
+  unloadRadius: 6,
 });
 
 const cameraSystem = createCameraSystem({
@@ -2376,7 +2376,7 @@ function update(dt, now) {
     }
   }
 
-  const worldCullBase = Math.max(WORLD.width, WORLD.height) * 1.7;
+  const worldCullBase = Math.max(WORLD.width, WORLD.height) * 2.3;
   state.objects = state.objects.filter((o) => {
     if (o.hp <= 0) return false;
     if (!Number.isFinite(o.worldX) || !Number.isFinite(o.worldY)) {
