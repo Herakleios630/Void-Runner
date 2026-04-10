@@ -1855,7 +1855,7 @@ function resolveShipOrbitCollision(ship, collider, cameraX, cameraY, hitDamage, 
 }
 
 function handleShipStructureCollisions(ship, cameraX, cameraY) {
-  const collidablePlanets = worldSystem.getCollidablePlanets();
+  const collidablePlanets = worldSystem.getCollidablePlanets(state.time);
   if (collidablePlanets.length > 0) {
     for (const planet of collidablePlanets) {
       if (!resolveShipOrbitCollision(ship, planet, cameraX, cameraY, 2, 80)) {
