@@ -1,0 +1,13 @@
+{
+  "name": "void-runner-multiplayer-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "First multiplayer snapshot server for Void Runner",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
