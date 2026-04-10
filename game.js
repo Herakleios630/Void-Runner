@@ -58,6 +58,8 @@ const spriteAssets = window.VoidAssets || null;
 const { SHIP_MODELS, DIFFICULTY_MODES } = window.VoidConfig;
 const { randomFrom, clamp, circlesOverlap } = window.VoidUtils;
 const { initAudio, playSfx } = window.VoidAudio;
+const { createWorldSystem } = window.VoidWorld;
+const { createCameraSystem } = window.VoidCamera;
 const { createRenderer } = window.VoidRender;
 const { createEncountersSystem } = window.VoidEncounters;
 const { createMenuSystem } = window.VoidMenus;
@@ -67,6 +69,8 @@ const { createInputSystem } = window.VoidInput;
 
 const BALANCE_PROFILE_ID = "medium"; // safe | medium | chaos
 const BALANCE_TUNING_TRACKS = ["cannon", "laser", "rocket", "drill", "plasma", "shield"];
+const WORLD_CHUNK_SIZE = 960;
+const WORLD_SEED = 20260410;
 
 const state = {
   running: false,
@@ -206,6 +210,10 @@ const state = {
   },
   upgradesTaken: {},
   pendingUpgradeOptions: [],
+  world: {
+    playerX: 0,
+    playerY: 0,
+  },
 };
 
 const balanceDebug = {
@@ -863,6 +871,19 @@ const menus = createMenuSystem({
   setPauseIndicatorVisible,
 });
 
+const worldSystem = createWorldSystem({
+  chunkSize: WORLD_CHUNK_SIZE,
+  worldSeed: WORLD_SEED,
+  activeRadius: 2,
+  unloadRadius: 3,
+});
+
+const cameraSystem = createCameraSystem({
+  x: 0,
+  y: 0,
+  smoothing: 0.12,
+});
+
 function reloadRate() {
   return state.shipStats ? state.shipStats.reloadRate : 1;
 }
@@ -1123,6 +1144,10 @@ function resetGame() {
   state.bossRewardPending = false;
   state.pendingBossRewards = [];
   state.bossLootTaken = {};
+  state.world.playerX = 0;
+  state.world.playerY = 0;
+  cameraSystem.snap(0, 0);
+  worldSystem.update(0, 0);
 
   state.weapon.extraLasers = 0;
   state.weapon.cannonUnlocked = Boolean(model.startCannonHalf || !(model.startShield || model.startLaser || model.startRocket || model.startDrill || model.startPlasma));
@@ -1777,6 +1802,15 @@ function update(dt, now) {
     ship.vy *= -0.75;
   }
 
+  const moveIntentX = input.axisX + Number(input.right) - Number(input.left);
+  const moveIntentY = input.axisY + Number(input.down) - Number(input.up);
+  const moveLen = Math.hypot(moveIntentX, moveIntentY) || 1;
+  const worldMoveScale = moveIntentX !== 0 || moveIntentY !== 0 ? 0.72 : 0.08;
+  state.world.playerX += ((moveIntentX / moveLen) * ship.maxSpeed * worldMoveScale + ship.vx * (1 - worldMoveScale)) * dt;
+  state.world.playerY += ((moveIntentY / moveLen) * ship.maxSpeed * worldMoveScale + ship.vy * (1 - worldMoveScale)) * dt;
+  cameraSystem.update(dt, state.world.playerX, state.world.playerY);
+  worldSystem.update(cameraSystem.getX(), cameraSystem.getY());
+
   const desktopAutoShooting = state.desktopAutoFire && !IS_COARSE_POINTER && state.mouseInCanvas;
   if (input.shooting || desktopAutoShooting) weapons.shootAtCursor(now);
 
@@ -1822,14 +1856,6 @@ function update(dt, now) {
   }
 
   encounters.updateBoss(dt);
-
-  for (const star of state.stars) {
-    star.x -= star.speed * dt;
-    if (star.x < -4) {
-      star.x = WORLD.width + Math.random() * 50;
-      star.y = Math.random() * WORLD.height;
-    }
-  }
 
   for (const obj of state.objects) {
     obj.x += obj.vx * dt;
@@ -2234,6 +2260,8 @@ const renderer = createRenderer({
   state,
   input,
   WORLD,
+  worldSystem,
+  cameraSystem,
   IS_COARSE_POINTER,
   selectedShipModel,
   getRocketCooldownLeft,
@@ -2366,6 +2394,7 @@ const inputSystem = createInputSystem({
 
 menus.showDifficultySelectionMenu();
 inputSystem.setup();
+worldSystem.update(0, 0);
 fitMobileViewport();
 window.addEventListener("resize", scheduleMobileViewportFit);
 window.addEventListener("orientationchange", scheduleMobileViewportFit);
