@@ -47,7 +47,7 @@
 - [x] Interstellar Space: dynamische Ereignisse zwischen Systemen (Ambush, Drift-Feld, Schrottspur)
 - [x] Giftige Nebelwolken: raeumliche Gefahrenzonen mit DoT/Scanner-Sichtreduktion
 - [x] Giftige Nebelwolken: klare Telegraphs/Farbcode und Gegenmassnahmen als spaetere Upgrades
-- [ ] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
+- [x] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
 - [ ] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
 - [ ] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)
 - [ ] Missionstyp: Zerstoere X Objektklassen (smallRock, mediumRock, boulder, debris)

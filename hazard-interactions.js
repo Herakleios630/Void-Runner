@@ -109,10 +109,52 @@
       return true;
     }
 
+    function handleShipWormholes(ship) {
+      if (!ship) return true;
+      if (ship.wormholeCooldownUntil && state.time < ship.wormholeCooldownUntil) return true;
+
+      const portals = typeof worldSystem.getWormholePortals === "function" ? worldSystem.getWormholePortals() : [];
+      if (portals.length <= 0) return true;
+
+      for (const portal of portals) {
+        if (!Number.isFinite(portal.linkedX) || !Number.isFinite(portal.linkedY)) continue;
+        const p = cameraSystem.worldToScreen(portal.x, portal.y, portal.parallax || 1, WORLD.width, WORLD.height);
+        const d = Math.hypot(ship.x - p.x, ship.y - p.y);
+        const hitRadius = (portal.hitRadius || portal.radius || 20) + ship.radius * 0.4;
+        if (d > hitRadius) continue;
+
+        const fromX = ship.worldX;
+        const fromY = ship.worldY;
+        ship.worldX = portal.linkedX;
+        ship.worldY = portal.linkedY;
+        ship.vx *= 0.35;
+        ship.vy *= 0.35;
+        ship.wormholeCooldownUntil = state.time + 1.25;
+
+        if (typeof cameraSystem.snap === "function") {
+          cameraSystem.snap(ship.worldX, ship.worldY);
+        }
+
+        const cameraX = typeof cameraSystem.getX === "function" ? cameraSystem.getX() : ship.worldX;
+        const cameraY = typeof cameraSystem.getY === "function" ? cameraSystem.getY() : ship.worldY;
+        const teleportedScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
+        ship.x = teleportedScreen.x;
+        ship.y = teleportedScreen.y;
+
+        createExplosion(WORLD.width * 0.5, WORLD.height * 0.5, "#8ecbff", 12);
+        const fromScreen = projectWorldToScreen(fromX, fromY, cameraX, cameraY);
+        createExplosion(fromScreen.x, fromScreen.y, "#6da7ff", 8);
+        return true;
+      }
+
+      return true;
+    }
+
     return {
       handleShipStructureCollisions,
       handleShipSolarHeat,
       handleShipToxicNebula,
+      handleShipWormholes,
     };
   }
 
