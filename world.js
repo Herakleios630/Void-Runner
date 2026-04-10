@@ -59,7 +59,7 @@
     const maxOrbitShells = 10;
     const minSunOrbitDistance = 22;
     const minSunDistanceWorld = orbitUnit * minSunOrbitDistance;
-    const sunCandidateChance = 0.06;
+    const sunCandidateChance = 0.05;
 
     const activeChunks = new Map();
 
@@ -243,7 +243,7 @@
         const sun = {
           type: "sun",
           drawOrder: 0,
-          parallax: 0.16,
+          parallax: 0.08,
           x: sunAnchor.x,
           y: sunAnchor.y,
           radius: 88 + rand() * 110,
