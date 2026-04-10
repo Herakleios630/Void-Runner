@@ -55,7 +55,7 @@
     let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
     const activeRadius = typeof options.activeRadius === "number" ? options.activeRadius : 2;
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
-    const systemGridSize = 3;
+    const systemGridSize = 4;
 
     const activeChunks = new Map();
 
@@ -78,21 +78,6 @@
       const originY = cy * chunkSize;
 
       const background = [];
-
-      if (rand() < 0.26) {
-        const sun = chooseSunProfile(rand);
-        background.push({
-          type: "sun",
-          drawOrder: 0,
-          parallax: 0.05,
-          x: originX + rand() * chunkSize,
-          y: originY + rand() * chunkSize,
-          radius: 72 + rand() * 120,
-          coreColor: sun.core,
-          glowColor: sun.glow,
-          spectralClass: sun.cls,
-        });
-      }
 
       const deepStars = 22 + Math.floor(rand() * 18);
       for (let i = 0; i < deepStars; i += 1) {
@@ -156,24 +141,63 @@
       const systemCellY = systemCellCoord(cy);
       const systemSeed = mixSeed(systemCellX, systemCellY, worldSeed ^ 0x51e9a3d7);
       const systemRand = createRng(systemSeed);
-      const hasSystemInCell = systemRand() < 0.74;
+      const hasSystemInCell = systemRand() < 0.5;
       const anchorCx = systemCellX * systemGridSize + Math.floor(systemRand() * systemGridSize);
       const anchorCy = systemCellY * systemGridSize + Math.floor(systemRand() * systemGridSize);
       const hasPlanetarySystem = hasSystemInCell && cx === anchorCx && cy === anchorCy;
 
       if (hasPlanetarySystem) {
+        const sunProfile = chooseSunProfile(systemRand);
+        const sun = {
+          type: "sun",
+          drawOrder: 0,
+          parallax: 0.05,
+          x: originX + (0.2 + rand() * 0.6) * chunkSize,
+          y: originY + (0.2 + rand() * 0.6) * chunkSize,
+          radius: 88 + rand() * 110,
+          coreColor: sunProfile.core,
+          glowColor: sunProfile.glow,
+          spectralClass: sunProfile.cls,
+        };
+        background.push(sun);
+
         const orbitDirection = rand() < 0.5 ? -1 : 1;
+        const primaryAngle = rand() * Math.PI * 2;
+        const primaryDistance = sun.radius * (2.2 + rand() * 1.2);
         const primaryPlanet = {
           type: "planet",
           drawOrder: 6,
           parallax: 0.7,
           collidablePlane: true,
-          x: originX + rand() * chunkSize,
-          y: originY + rand() * chunkSize,
+          x: sun.x + Math.cos(primaryAngle) * primaryDistance,
+          y: sun.y + Math.sin(primaryAngle) * primaryDistance,
           radius: 34 + rand() * 26,
           hue: Math.floor(rand() * 360),
         };
         background.push(primaryPlanet);
+
+        const outerPlanetCount = 1 + Math.floor(rand() * 2);
+        const orbitalSpeedNearSun = 0.12 + rand() * 0.06;
+        const referenceSunOrbit = Math.max(120, sun.radius * 2.2);
+        for (let i = 0; i < outerPlanetCount; i += 1) {
+          const orbitRadius = sun.radius * (3.6 + i * 1.45 + rand() * 0.95);
+          const ratio = orbitRadius / referenceSunOrbit;
+          const orbitSpeed = orbitalSpeedNearSun * Math.pow(ratio, -1.5) * orbitDirection;
+          const nearFlyby = rand() < 0.32;
+          background.push({
+            type: "planet",
+            drawOrder: nearFlyby ? 6 : 5,
+            parallax: nearFlyby ? 0.56 : 0.36,
+            collidablePlane: false,
+            orbitCx: sun.x,
+            orbitCy: sun.y,
+            orbitRadius,
+            orbitAngle: rand() * Math.PI * 2,
+            orbitSpeed,
+            radius: nearFlyby ? 14 + rand() * 16 : 10 + rand() * 13,
+            hue: Math.floor(rand() * 360),
+          });
+        }
 
         const orbitalSpeedNear = 0.22 + rand() * 0.1;
         const referenceOrbitRadius = primaryPlanet.radius * 1.5;
@@ -249,7 +273,7 @@
             });
           }
         }
-      } else if (rand() < 0.03) {
+      } else if (rand() < 0.02) {
         background.push({
           type: "planet",
           drawOrder: 5,

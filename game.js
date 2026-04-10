@@ -1910,11 +1910,6 @@ function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
   }
 }
 
-function runCleanupPhase(cameraX, cameraY) {
-  runCleanupPhase(cameraX, cameraY);
-}
-
-
 function update(dt, now) {
   if (!state.running) return;
 
@@ -2056,7 +2051,7 @@ function update(dt, now) {
       }
     }
 
-    if (obj.type === "miniAlien" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+    if (obj.type === "miniAlien" && obj.aggroLocked && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
       const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
       const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
       const distShip = Math.hypot(dxShip, dyShip);
@@ -2073,7 +2068,7 @@ function update(dt, now) {
       }
     }
 
-    if (obj.type === "alienShip" && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+    if (obj.type === "alienShip" && obj.aggroLocked && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
       const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
       const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
       const distShip = Math.hypot(dxShip, dyShip);
