@@ -824,6 +824,7 @@
 
       for (const obj of bgObjects) {
         if (obj.type === "planet") {
+          if ((obj.parallax || 1) < 0.95) continue;
           const pos = resolveBgWorldPosition(obj, state.time);
           planetPoints.push({
             x: pos.x,
@@ -846,6 +847,7 @@
         }
 
         if (obj.type !== "beltRock" || !Number.isFinite(obj.orbitRadius)) continue;
+        if ((obj.parallax || 1) < 0.95) continue;
 
         let centerX = Number.isFinite(obj.orbitCx) ? obj.orbitCx : obj.x;
         let centerY = Number.isFinite(obj.orbitCy) ? obj.orbitCy : obj.y;

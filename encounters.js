@@ -14,6 +14,8 @@
     } = deps;
 
     const spawnedChunkEncounters = new Set();
+    let gameplaySunsCache = [];
+    let gameplaySunsCacheUntil = -1;
 
     function chunkKey(cx, cy) {
       return `${cx},${cy}`;
@@ -70,7 +72,72 @@
       };
     }
 
-    function createObjectBlueprint(rand, difficulty) {
+    function getGameplaySuns() {
+      if (state.time < gameplaySunsCacheUntil) return gameplaySunsCache;
+      gameplaySunsCacheUntil = state.time + 0.35;
+
+      if (!worldSystem || typeof worldSystem.getBackgroundObjects !== "function") {
+        gameplaySunsCache = [];
+        return gameplaySunsCache;
+      }
+
+      const out = [];
+      const bgObjects = worldSystem.getBackgroundObjects();
+      for (const obj of bgObjects) {
+        if (obj.type !== "sun") continue;
+        if ((obj.parallax || 1) < 0.95) continue;
+        out.push({
+          x: obj.x,
+          y: obj.y,
+          radius: obj.radius || 180,
+        });
+      }
+      gameplaySunsCache = out;
+      return gameplaySunsCache;
+    }
+
+    function isWithinGameplaySystem(worldX, worldY) {
+      if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return false;
+      const suns = getGameplaySuns();
+      if (suns.length <= 0) return false;
+      const chunkSize = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
+
+      for (const sun of suns) {
+        const influenceRadius = Math.max(chunkSize * 3.2, sun.radius * 3.2);
+        if (Math.hypot(worldX - sun.x, worldY - sun.y) <= influenceRadius) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function createEnemyBlueprint(rand, difficulty) {
+      const shipBias = difficulty.id === "hard" ? 0.44 : difficulty.id === "easy" ? 0.24 : 0.34;
+      if (rand() < shipBias) {
+        return {
+          type: "alienShip",
+          size: 20 + rand() * 10,
+          hp: 6,
+          destructible: true,
+          collisionScale: 0.74,
+          corners: 0,
+        };
+      }
+      return {
+        type: "miniAlien",
+        size: 14 + rand() * 10,
+        hp: 3,
+        destructible: true,
+        collisionScale: 0.7,
+        corners: 0,
+      };
+    }
+
+    function createObjectBlueprint(rand, difficulty, options = {}) {
+      if (options.systemInterior) {
+        return createEnemyBlueprint(rand, difficulty);
+      }
+
       const alienShipChance = difficulty.id === "easy" ? 0.06 : difficulty.id === "hard" ? 0.18 : 0.12;
       const miniAlienChance = difficulty.id === "easy" ? 0.11 : difficulty.id === "hard" ? 0.15 : 0.13;
       const firstCut = miniAlienChance;
@@ -185,15 +252,23 @@
     function spawnObject(options = {}) {
       const rand = typeof options.rand === "function" ? options.rand : Math.random;
       const difficulty = selectedDifficultyMode();
+      const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
+      const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
+      const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
+      const probeRing = Math.max(WORLD.width, WORLD.height) * 0.64 + (options.spawnPadding || 32);
+      const probeX = focusX + Math.cos(angle) * probeRing;
+      const probeY = focusY + Math.sin(angle) * probeRing;
+      const probeWorld = screenToWorld(probeX, probeY);
+      const systemInterior = options.systemInterior === true
+        || (options.systemInterior !== false && isWithinGameplaySystem(probeWorld.x, probeWorld.y));
+
       const forced = options.forceType ? forcedObjectBlueprint(options.forceType, rand) : null;
-      const blueprint = forced || createObjectBlueprint(rand, difficulty);
+      const blueprint = forced || createObjectBlueprint(rand, difficulty, { systemInterior });
       const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
       const baseAggro = Math.min(WORLD.width, WORLD.height) * 0.5;
       const aggroRange = baseAggro * (0.8 + rand() * 0.4);
       const disengageRange = aggroRange * (1.55 + rand() * 0.3);
-      const focusX = state.ship && Number.isFinite(state.ship.x) ? state.ship.x : WORLD.width * 0.5;
-      const focusY = state.ship && Number.isFinite(state.ship.y) ? state.ship.y : WORLD.height * 0.5;
-      const angle = typeof options.angle === "number" ? options.angle : spawnAngleFromSides(rand);
+
       const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.64 + blueprint.size + (options.spawnPadding || 32);
       const spawnX = focusX + Math.cos(angle) * spawnRing;
       const spawnY = focusY + Math.sin(angle) * spawnRing;
@@ -245,19 +320,24 @@
       const difficulty = selectedDifficultyMode();
       const worldDistance = Math.hypot(cx, cy);
       const distancePressure = Math.min(1.4, worldDistance * 0.08);
-      const baseObjects = difficulty.id === "hard" ? 3 : 2;
-      const bonusObjects = Math.floor(distancePressure * (difficulty.id === "hard" ? 2 : 1));
+      const chunkSize = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
+      const chunkCenterX = (cx + 0.5) * chunkSize;
+      const chunkCenterY = (cy + 0.5) * chunkSize;
+      const insideSystem = isWithinGameplaySystem(chunkCenterX, chunkCenterY);
+      const baseObjects = insideSystem ? (difficulty.id === "hard" ? 2 : 1) : (difficulty.id === "hard" ? 3 : 2);
+      const bonusObjects = Math.floor(distancePressure * (insideSystem ? 1 : (difficulty.id === "hard" ? 2 : 1)));
       const objectCount = 1 + Math.floor(rand() * (baseObjects + bonusObjects));
 
       for (let i = 0; i < objectCount; i += 1) {
         spawnObject({
           rand,
+          systemInterior: insideSystem,
           spawnPadding: 40 + rand() * 90,
         });
       }
 
-      // Clustered asteroid fields: deterministic per chunk for stronger spatial identity.
-      if (rand() < 0.74) {
+      // Clustered asteroid fields are intentionally outside gameplay solar systems.
+      if (!insideSystem && rand() < 0.74) {
         const clusterCount = 1 + Math.floor(rand() * (distancePressure > 0.7 ? 2 : 1));
         for (let c = 0; c < clusterCount; c += 1) {
           const baseAngle = spawnAngleFromSides(rand);
