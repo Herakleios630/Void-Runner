@@ -13,6 +13,7 @@
       initAudio,
       onTogglePause,
       onToggleAutoFire,
+      onToggleMusic,
       onToggleHitboxes,
       onDebugBoostWeapons,
       onToggleBalancePanel,
@@ -166,7 +167,12 @@
           return;
         }
 
-        if (event.code === "KeyM" && !event.repeat && !IS_COARSE_POINTER) {
+        if (event.code === "KeyM" && !event.repeat) {
+          onToggleMusic();
+          return;
+        }
+
+        if (event.code === "KeyN" && !event.repeat && !IS_COARSE_POINTER) {
           onToggleAutoFire();
           return;
         }
@@ -209,7 +215,7 @@
           onToggleShipInfo();
         }
 
-        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyO", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyN", "KeyO", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
           event.preventDefault();
         }
 

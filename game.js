@@ -23,6 +23,7 @@ const weaponLevelsStatusEl = document.getElementById("weaponLevelsStatus");
 const armorStatusEl = document.getElementById("armorStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
+const musicStatusEl = document.getElementById("musicStatus");
 const pauseIndicatorEl = document.getElementById("pauseIndicator");
 const joystickAreaEl = document.getElementById("joystickArea");
 const joyBaseEl = document.getElementById("joyBase");
@@ -57,7 +58,14 @@ const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none),
 const spriteAssets = window.VoidAssets || null;
 const { SHIP_MODELS, DIFFICULTY_MODES } = window.VoidConfig;
 const { randomFrom, clamp, circlesOverlap } = window.VoidUtils;
-const { initAudio, playSfx, playMusicCategory } = window.VoidAudio;
+const {
+  initAudio,
+  playSfx,
+  playMusicCategory,
+  setMusicEnabled,
+  getMusicEnabled,
+  toggleMusicEnabled,
+} = window.VoidAudio;
 const { createWorldSystem } = window.VoidWorld;
 const { createCameraSystem } = window.VoidCamera;
 const { createRenderer } = window.VoidRender;
@@ -86,6 +94,7 @@ const state = {
   selectedDifficultyId: "medium",
   selectedShipId: "scout",
   worldSeed: generateWorldSeed(),
+  musicEnabled: typeof getMusicEnabled === "function" ? getMusicEnabled() : true,
   desktopAutoFire: false,
   mouseInCanvas: false,
   joystickPointerId: null,
@@ -1286,6 +1295,9 @@ function refreshHud() {
   if (fireModeStatusEl) {
     fireModeStatusEl.textContent = state.desktopAutoFire ? "Automatisch" : "Manuell (LMB)";
   }
+  if (musicStatusEl) {
+    musicStatusEl.textContent = state.musicEnabled ? "An (M)" : "Aus (M)";
+  }
 
   if (!state.shield.unlocked) {
     shieldStatusEl.textContent = "Aus";
@@ -1455,6 +1467,33 @@ function createExplosion(x, y, color, amount = 18) {
   }
 }
 
+function spawnAlienDeathFx(obj, variant = "mini") {
+  const worldX = Number.isFinite(obj.worldX) ? obj.worldX : undefined;
+  const worldY = Number.isFinite(obj.worldY) ? obj.worldY : undefined;
+  const burstCount = variant === "ship" ? 18 : 12;
+
+  for (let i = 0; i < burstCount; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (variant === "ship" ? 90 : 70) + Math.random() * (variant === "ship" ? 170 : 120);
+    const life = 0.28 + Math.random() * 0.5;
+    const size = (variant === "ship" ? 1.8 : 1.4) + Math.random() * (variant === "ship" ? 3.4 : 2.6);
+    const isShard = Math.random() < (variant === "ship" ? 0.55 : 0.35);
+
+    state.particles.push({
+      x: obj.x,
+      y: obj.y,
+      worldX,
+      worldY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life,
+      size,
+      color: isShard ? "#d8ffe6" : "#86ff6c",
+      kind: isShard ? "alienShard" : "alienGoo",
+    });
+  }
+}
+
 function spawnRockFragments(parent) {
   const pieces = 3 + Math.floor(Math.random() * 3);
   for (let i = 0; i < pieces; i += 1) {
@@ -1527,8 +1566,17 @@ function destroyObject(obj, reason) {
 
   maybeSpawnArmorPickup(obj);
 
-  const color = obj.type === "miniAlien" ? "#94ff74" : "#ffb36a";
-  createExplosion(obj.x, obj.y, color, obj.type === "mediumRock" ? 24 : 14);
+  if (obj.type === "alienShip") {
+    createExplosion(obj.x, obj.y, "#9eff7f", 28);
+    createExplosion(obj.x, obj.y, "#ffb36a", 16);
+    spawnAlienDeathFx(obj, "ship");
+  } else if (obj.type === "miniAlien") {
+    createExplosion(obj.x, obj.y, "#94ff74", 18);
+    spawnAlienDeathFx(obj, "mini");
+  } else {
+    const color = obj.type === "miniAlien" ? "#94ff74" : "#ffb36a";
+    createExplosion(obj.x, obj.y, color, obj.type === "mediumRock" ? 24 : 14);
+  }
   playSfx("explosion");
 }
 
@@ -1893,14 +1941,26 @@ function handleShipSolarHeat(ship, dt) {
 function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
   if (state.bossActive) return;
 
-  encounters.spawnChunksAround(cameraX, cameraY, 1);
+  const shipSpeed = state.ship ? Math.hypot(state.ship.vx || 0, state.ship.vy || 0) : 0;
+  const preloadRadius = shipSpeed > 360 ? 2 : 1;
+  encounters.spawnChunksAround(cameraX, cameraY, preloadRadius);
 
   const intensity = spawnIntensity();
 
+  const activeObjects = state.objects.length;
+  const enemyCount = state.objects.reduce((count, obj) => count + (obj.enemy ? 1 : 0), 0);
+  const targetObjects = difficulty.id === "hard" ? 70 : difficulty.id === "easy" ? 46 : 58;
+  const targetEnemies = difficulty.id === "hard" ? 26 : difficulty.id === "easy" ? 14 : 20;
+  if (activeObjects >= targetObjects || enemyCount >= targetEnemies) {
+    state.lastSpawn = Math.min(state.lastSpawn, 0.28);
+    return;
+  }
+
   state.lastSpawn += dt;
-  const dynamicSpawn = Math.max(0.34, state.spawnInterval / (intensity * difficulty.spawnRateMult));
+  const dynamicSpawn = Math.max(0.44, state.spawnInterval / (intensity * difficulty.spawnRateMult));
   let spawnedThisFrame = 0;
-  const maxSpawnsPerFrame = 6;
+  const pressureGap = Math.max(0, targetObjects - activeObjects);
+  const maxSpawnsPerFrame = Math.max(2, Math.min(5, Math.floor(pressureGap / 10) + 1));
   while (state.lastSpawn >= dynamicSpawn && spawnedThisFrame < maxSpawnsPerFrame) {
     state.lastSpawn -= dynamicSpawn;
     encounters.spawnObject();
@@ -2614,6 +2674,22 @@ const inputSystem = createInputSystem({
   onTogglePause: togglePause,
   onToggleAutoFire: () => {
     state.desktopAutoFire = !state.desktopAutoFire;
+    refreshHud();
+  },
+  onToggleMusic: () => {
+    const nextEnabled = typeof toggleMusicEnabled === "function"
+      ? toggleMusicEnabled()
+      : !state.musicEnabled;
+    if (typeof setMusicEnabled === "function") {
+      setMusicEnabled(nextEnabled);
+    }
+    state.musicEnabled = Boolean(nextEnabled);
+
+    if (state.musicEnabled) {
+      playMusicCategory(state.running ? "game" : "menu");
+    }
+
+    refreshHud();
   },
   onToggleHitboxes: () => {
     state.debugHitboxes = !state.debugHitboxes;
