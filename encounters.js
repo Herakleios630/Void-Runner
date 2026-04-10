@@ -319,7 +319,7 @@
             const forcedType = pick < 0.52 ? "smallRock" : pick < 0.84 ? "mediumRock" : pick < 0.95 ? "debris" : "boulder";
             spawnObject({
               rand,
-              forceType,
+              forceType: forcedType,
               angle: baseAngle + (rand() - 0.5) * 0.6,
               spawnPadding: 55 + rand() * 130,
             });
