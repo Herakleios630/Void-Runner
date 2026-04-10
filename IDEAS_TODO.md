@@ -34,6 +34,22 @@
 ## Future Features
 - [ ] HIGH PRIORITY: Visual overhaul pass (planets, nebulae, overall scene quality)
 - [ ] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
+- [ ] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
+- [ ] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)
+- [ ] Missionstyp: Zerstoere X Objektklassen (smallRock, mediumRock, boulder, debris)
+- [ ] Missionstyp: Lege Y Distanz in Weltkoordinaten zurueck
+- [ ] Missionstyp: Ueberlebe Z Sekunden ohne Tod
+- [ ] Missionstyp: Erreiche Zone/Orbit (annaehern an markierte Koordinate)
+- [ ] Missionstyp: Zerstoere Spezial-Ziel (einmaliger Elite-Gegner)
+- [ ] Spezial-Ziel auf Mini-Map markieren (Icon + Richtung + Distanz)
+- [ ] Missions-Generierung seed-stabil pro Run-Start (deterministische Angebote)
+- [ ] Belohnungen: Score, garantierte Drops, Upgrade-Reroll, seltene Buffs
+- [ ] Missions-Schwierigkeit skaliert mit Boss-Level/Distanz vom Spawn
+- [ ] Kettenmissionen: 2-3 Schritte mit steigender Belohnung
+- [ ] Tagesmissionen/Run-Challenges (optional, ohne Online-Zwang)
+- [ ] UI: kleines Missions-Widget (oben links), minimales Logging bei Fortschritt
+- [ ] Fail-Conditions je Missionstyp (optional): Zeitlimit, Trefferlimit, no-hit Bonus
+- [ ] Missionen nur ausserhalb von Level-Up/Boss-Choice Overlays aktualisieren
 - [ ] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX
 - [ ] Comets: seltene Stern-Orbits mit sehr grossem Radius (deutlich langsamer fern der Sonne)
 - [ ] Rogue planet / brown dwarf (sehr selten): grosses, dunkles Objekt ohne lokales Planetensystem
