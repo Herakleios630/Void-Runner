@@ -25,6 +25,7 @@
 - [x] Dense asteroid belts around planets
 - [x] Enemy aggro + pursuit tuning pass (engage radius, follow persistence, speed)
 - [x] Planet depth readability via atmosphere thickness by layer
+- [x] Rear-layer suns (max 1 per chunk, varied stellar colors)
 - [x] Early-game level-up pacing retune (avoid immediate level-up)
 
 ## Notes
