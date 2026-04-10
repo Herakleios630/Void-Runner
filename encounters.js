@@ -101,25 +101,29 @@
       } else if (r < 0.42) {
         type = "smallRock";
         size = 11 + rand() * 12;
-        hp = 3;
+        hp = 4;
         destructible = true;
         collisionScale = 0.78;
         corners = 8;
       } else if (r < 0.66) {
         type = "mediumRock";
         size = 24 + rand() * 14;
-        hp = 5;
+        hp = 8;
         destructible = true;
         collisionScale = 0.8;
         corners = 9;
       } else if (r < 0.79) {
         type = "debris";
         size = 22 + rand() * 18;
+        hp = 11;
+        destructible = true;
         collisionScale = 0.76;
         corners = 8;
       } else {
         type = "boulder";
         size = 36 + rand() * 28;
+        hp = 18;
+        destructible = true;
         collisionScale = 0.82;
         corners = 11;
       }
@@ -139,7 +143,7 @@
         return {
           type,
           size: 11 + rand() * 12,
-          hp: 3,
+          hp: 4,
           destructible: true,
           collisionScale: 0.78,
           corners: 8,
@@ -149,7 +153,7 @@
         return {
           type,
           size: 24 + rand() * 14,
-          hp: 5,
+          hp: 8,
           destructible: true,
           collisionScale: 0.8,
           corners: 9,
@@ -159,8 +163,8 @@
         return {
           type,
           size: 36 + rand() * 28,
-          hp: 999,
-          destructible: false,
+          hp: 18,
+          destructible: true,
           collisionScale: 0.82,
           corners: 11,
         };
@@ -169,8 +173,8 @@
         return {
           type,
           size: 22 + rand() * 18,
-          hp: 999,
-          destructible: false,
+          hp: 11,
+          destructible: true,
           collisionScale: 0.76,
           corners: 8,
         };

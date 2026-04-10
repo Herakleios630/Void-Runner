@@ -79,13 +79,27 @@
 
       const background = [];
 
+      const farStars = 18 + Math.floor(rand() * 16);
+      for (let i = 0; i < farStars; i += 1) {
+        background.push({
+          type: "star",
+          layer: "far",
+          drawOrder: 1,
+          parallax: 0.035,
+          x: originX + rand() * chunkSize,
+          y: originY + rand() * chunkSize,
+          size: 0.7 + rand() * 1.2,
+          alpha: 0.22 + rand() * 0.3,
+        });
+      }
+
       const deepStars = 22 + Math.floor(rand() * 18);
       for (let i = 0; i < deepStars; i += 1) {
         background.push({
           type: "star",
           layer: "deep",
-          drawOrder: 1,
-          parallax: 0.08,
+          drawOrder: 2,
+          parallax: 0.075,
           x: originX + rand() * chunkSize,
           y: originY + rand() * chunkSize,
           size: 0.8 + rand() * 1.7,
@@ -104,6 +118,20 @@
           y: originY + rand() * chunkSize,
           size: 1.2 + rand() * 2.2,
           alpha: 0.42 + rand() * 0.5,
+        });
+      }
+
+      const nearStars = 7 + Math.floor(rand() * 7);
+      for (let i = 0; i < nearStars; i += 1) {
+        background.push({
+          type: "star",
+          layer: "near",
+          drawOrder: 3,
+          parallax: 0.24,
+          x: originX + rand() * chunkSize,
+          y: originY + rand() * chunkSize,
+          size: 1.4 + rand() * 2.2,
+          alpha: 0.35 + rand() * 0.42,
         });
       }
 
