@@ -51,7 +51,7 @@
 - [x] HIGH PRIORITY: Mini-Map zeigt Chunk-Koordinaten mit Spawn-Ursprung (0,0)
 - [x] Statusbalken unter Spieler/Gegnern (HP/Panzerung/Schild) mit V-Mode-Cycle (aus, Spieler, Gegner, beide)
 - [x] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
-- [ ] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)
+- [x] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)
 - [ ] Missionstyp: Zerstoere X Objektklassen (smallRock, mediumRock, boulder, debris)
 - [ ] Missionstyp: Lege Y Distanz in Weltkoordinaten zurueck
 - [ ] Missionstyp: Ueberlebe Z Sekunden ohne Tod

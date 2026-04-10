@@ -1643,6 +1643,67 @@
       }
     }
 
+    function drawMissionToast() {
+      const toast = state.missionToast;
+      if (!toast || !toast.showUntil) return;
+      const remaining = toast.showUntil - state.time;
+      if (remaining <= 0) return;
+
+      const FADE_IN = 0.35;
+      const FADE_OUT = 0.75;
+      const total = toast.showUntil - (toast.startedAt || 0);
+      const elapsed = total - remaining;
+      let alpha;
+      if (elapsed < FADE_IN) {
+        alpha = elapsed / FADE_IN;
+      } else if (remaining < FADE_OUT) {
+        alpha = remaining / FADE_OUT;
+      } else {
+        alpha = 1;
+      }
+      alpha = Math.max(0, Math.min(1, alpha)) * 0.88;
+
+      const cx = WORLD.width * 0.5;
+      const cy = WORLD.height * 0.28;
+      const boxW = Math.min(WORLD.width - 40, 460);
+      const boxH = 74;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      ctx.fillStyle = "rgba(6, 16, 38, 0.82)";
+      ctx.strokeStyle = "rgba(103, 242, 255, 0.55)";
+      ctx.lineWidth = 1.2;
+      const rx = cx - boxW * 0.5;
+      const ry = cy - boxH * 0.5;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(rx, ry, boxW, boxH, 10);
+      } else {
+        ctx.rect(rx, ry, boxW, boxH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(170, 220, 255, 0.72)";
+      ctx.font = "bold 11px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("NEUE MISSION", cx, ry + 14);
+
+      ctx.fillStyle = "#eef8ff";
+      ctx.font = "bold 17px Trebuchet MS";
+      ctx.fillText(toast.text || "", cx, cy + 2);
+
+      if (toast.subText) {
+        ctx.fillStyle = "rgba(184, 226, 255, 0.85)";
+        ctx.font = "13px Trebuchet MS";
+        ctx.fillText(toast.subText, cx, ry + boxH - 13);
+      }
+
+      ctx.restore();
+    }
+
     function drawCombatStatusBars() {
       const mode = state.statusBarsMode || 0;
       if (mode === 0) return;
@@ -1912,6 +1973,7 @@
         ctx.restore();
       }
 
+      drawMissionToast();
       drawDebugOverlay();
       drawMobileCanvasHud();
     }

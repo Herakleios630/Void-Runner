@@ -1,5 +1,7 @@
 (function () {
   const MUSIC_TARGET_VOLUME = 0.19;
+  let musicVolumeScale = 1.0;
+  let sfxVolumeScale = 1.0;
 
   const audio = {
     ctx: null,
@@ -213,7 +215,7 @@
     }
     to.el.play().then(() => {
       audio.music.pendingCategory = null;
-      fadeTrackVolume(to, 0, MUSIC_TARGET_VOLUME, fadeMs);
+      fadeTrackVolume(to, 0, MUSIC_TARGET_VOLUME * musicVolumeScale, fadeMs);
 
       if (from && from !== to) {
         const fromVol = Number.isFinite(from.el?.volume) ? from.el.volume : 0.35;
@@ -257,7 +259,7 @@
     try {
       to.gain.gain.cancelScheduledValues(now);
       to.gain.gain.setValueAtTime(0.0001, now);
-      to.gain.gain.exponentialRampToValueAtTime(MUSIC_TARGET_VOLUME, now + fadeSeconds);
+      to.gain.gain.exponentialRampToValueAtTime(MUSIC_TARGET_VOLUME * musicVolumeScale, now + fadeSeconds);
     } catch (_err) {
       stopTrack(to);
       crossfadeToFallback(path, category);
@@ -377,13 +379,14 @@
     const now = audio.ctx.currentTime;
     const osc = audio.ctx.createOscillator();
     const gain = audio.ctx.createGain();
+    const scaledVolume = Math.max(0.0001, volume * sfxVolumeScale);
 
     osc.type = type;
     osc.frequency.setValueAtTime(freq, now);
     osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * slide), now + duration);
 
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(scaledVolume, now + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     osc.connect(gain);
@@ -422,6 +425,33 @@
     }
   }
 
+  function setMusicVolume(v) {
+    musicVolumeScale = Math.max(0, Math.min(1, Number.isFinite(v) ? v : 1));
+    const target = MUSIC_TARGET_VOLUME * musicVolumeScale;
+    const track = audio.music.active;
+    if (track && track.fallback) {
+      try { track.el.volume = Math.max(0, Math.min(1, target)); } catch (_) {}
+    } else if (track && track.gain) {
+      try {
+        const now = audio.ctx ? audio.ctx.currentTime : 0;
+        track.gain.gain.setValueAtTime(Math.max(0.0001, track.gain.gain.value || target), now);
+        track.gain.gain.linearRampToValueAtTime(Math.max(0.0001, target), now + 0.4);
+      } catch (_) {}
+    }
+  }
+
+  function getMusicVolume() {
+    return musicVolumeScale;
+  }
+
+  function setSfxVolume(v) {
+    sfxVolumeScale = Math.max(0, Math.min(1, Number.isFinite(v) ? v : 1));
+  }
+
+  function getSfxVolume() {
+    return sfxVolumeScale;
+  }
+
   window.VoidAudio = {
     initAudio,
     playSfx,
@@ -429,5 +459,9 @@
     setMusicEnabled,
     getMusicEnabled,
     toggleMusicEnabled,
+    setMusicVolume,
+    getMusicVolume,
+    setSfxVolume,
+    getSfxVolume,
   };
 })();

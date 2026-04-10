@@ -96,6 +96,12 @@
       const playerKill = reason === "shot" || reason === "rocket";
       if (playerKill) {
         state.kills += 1;
+        if (obj.enemy && obj.type) {
+          if (!state.killStatsByType) {
+            state.killStatsByType = {};
+          }
+          state.killStatsByType[obj.type] = Number(state.killStatsByType[obj.type] || 0) + 1;
+        }
         const reward = getKillReward(reason, obj.type);
         if (reward > 0) {
           scoring.addPoints(reward);
