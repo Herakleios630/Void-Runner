@@ -1000,7 +1000,8 @@ function scoreMultiplier() {
 
 function addPoints(base) {
   const xp = state.shipStats ? state.shipStats.xpBonus : 1;
-  state.score += base * scoreMultiplier() * xp;
+  const earlyLevelScale = state.level <= 4 ? (0.62 + state.level * 0.1) : 1;
+  state.score += base * scoreMultiplier() * xp * earlyLevelScale;
 }
 
 function spawnIntensity() {
@@ -1033,13 +1034,15 @@ function computeNextLevelCost() {
   const killPressure = clamp(killsPerMinute / 7.5, 0, 2.2);
   const combatPressure = clamp(combatRate / 24, 0, 2.2);
   const pressure = clamp(killPressure * 0.68 + combatPressure * 0.32, 0, 2.2);
-  const targetSeconds = clamp(90 - pressure * 27, 30, 90);
+  const baseTargetSeconds = clamp(90 - pressure * 27, 30, 90);
+  const earlyLevelBoost = state.level <= 4 ? (1.35 - state.level * 0.08) : 1;
+  const targetSeconds = clamp(baseTargetSeconds * earlyLevelBoost, 32, 105);
 
   const dynamicCost = Math.floor(adjustedRate * targetSeconds);
   const exponentialBase = Math.floor(state.levelCost * 1.14 + 18);
-  const blended = Math.floor(exponentialBase * 0.38 + dynamicCost * 0.62);
+  const blended = Math.floor(exponentialBase * 0.44 + dynamicCost * 0.56);
 
-  const minBound = state.levelCost + 14;
+  const minBound = state.level <= 4 ? state.levelCost + 34 : state.levelCost + 14;
   const maxBound = Math.floor(state.levelCost * 1.5 + 120);
   return Math.max(minBound, Math.min(maxBound, blended));
 }
@@ -1134,8 +1137,8 @@ function resetGame() {
   state.time = 0;
   state.realNow = performance.now() / 1000;
   state.level = 1;
-  state.levelCost = 100;
-  state.nextLevelScore = 100;
+  state.levelCost = 220;
+  state.nextLevelScore = 220;
   state.lastLevelScore = 0;
   state.lastLevelTime = 0;
   state.lastLevelKills = 0;
@@ -1811,7 +1814,8 @@ function update(dt, now) {
   const difficulty = selectedDifficultyMode();
 
   state.time += dt;
-  state.score += dt * (2.4 + state.level * 0.14) * passiveScoreMultiplier();
+  const earlyPassiveScale = state.level <= 4 ? (0.5 + state.level * 0.1) : 1;
+  state.score += dt * (2.4 + state.level * 0.14) * passiveScoreMultiplier() * earlyPassiveScale;
 
   if (state.score >= state.nextLevelScore && !state.levelUpPending && !state.bossActive) {
     progression.showLevelUpChoice();
