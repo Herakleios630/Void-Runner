@@ -831,7 +831,7 @@
             isMoon: Boolean(obj.isMoon),
           });
 
-          if (Number.isFinite(obj.orbitRadius)) {
+          if (!obj.isMoon && Number.isFinite(obj.orbitRadius)) {
             const center = resolveLocalOrbitCenter(obj, state.time);
             const key = `o:${Math.round(center.x / 16)}:${Math.round(center.y / 16)}:${Math.round(obj.orbitRadius / 8)}`;
             if (!orbitRings.has(key)) {
@@ -839,17 +839,6 @@
                 x: center.x,
                 y: center.y,
                 radius: obj.orbitRadius,
-              });
-            }
-          }
-
-          if (Number.isFinite(obj.parentOrbitRadius) && Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy)) {
-            const key = `p:${Math.round(obj.parentOrbitCx / 16)}:${Math.round(obj.parentOrbitCy / 16)}:${Math.round(obj.parentOrbitRadius / 8)}`;
-            if (!orbitRings.has(key)) {
-              orbitRings.set(key, {
-                x: obj.parentOrbitCx,
-                y: obj.parentOrbitCy,
-                radius: obj.parentOrbitRadius,
               });
             }
           }

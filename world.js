@@ -58,6 +58,7 @@
     const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 320;
     const maxOrbitShells = 5;
     const systemCellChunks = 8;
+    const SYSTEM_PARALLAX = 1;
 
     const activeChunks = new Map();
 
@@ -227,7 +228,7 @@
         const sun = {
           type: "sun",
           drawOrder: 0,
-          parallax: 0.4,
+          parallax: SYSTEM_PARALLAX,
           x: sunAnchor.x,
           y: sunAnchor.y,
           radius: chunkSize * (0.4 + rand() * 0.6),
@@ -266,7 +267,7 @@
               background.push({
                 type: "planet",
                 drawOrder: 6,
-                parallax: planet.parallax,
+                parallax: SYSTEM_PARALLAX,
                 collidablePlane: false,
                 parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
                 parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
@@ -294,7 +295,7 @@
               background.push({
                 type: "orbitalStation",
                 drawOrder: 7,
-                parallax: planet.parallax,
+                parallax: SYSTEM_PARALLAX,
                 collidablePlane: collidableStation,
                 parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
                 parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
@@ -319,7 +320,7 @@
               background.push({
                 type: "beltRock",
                 drawOrder: 6,
-                parallax: planet.parallax,
+                parallax: SYSTEM_PARALLAX,
                 parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
                 parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
                 parentOrbitRadius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
@@ -367,7 +368,7 @@
               background.push({
                 type: "beltRock",
                 drawOrder: 5,
-                parallax: 0.5,
+                parallax: SYSTEM_PARALLAX,
                 orbitCx: sun.x,
                 orbitCy: sun.y,
                 orbitRadius: localOrbit,
@@ -385,7 +386,7 @@
           const planet = {
             type: "planet",
             drawOrder: nearPlanePlanet ? 6 : 5,
-            parallax: nearPlanePlanet ? 0.66 : 0.38,
+            parallax: SYSTEM_PARALLAX,
             // Keep collision rules deterministic and easy to read in gameplay: near-plane planets are solid.
             collidablePlane: nearPlanePlanet,
             orbitCx: sun.x,
