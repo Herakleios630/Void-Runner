@@ -15,6 +15,7 @@
 - [ ] Full QA pass for balancing and edge cases
 
 ## Future Features
+- [ ] Larger playable area / viewport fill (use much more of browser window)
 - [ ] Multiplayer co-op mode (online)
 - [ ] Multiplayer PvP / versus arena mode
 - [ ] Enemy fleets/formations per chunk (coordinated groups)
