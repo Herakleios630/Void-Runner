@@ -110,7 +110,7 @@
 
       if (rand() < 0.32) {
         const nearPlane = rand() < 0.35;
-        background.push({
+        const planet = {
           type: "planet",
           drawOrder: nearPlane ? 6 : 5,
           parallax: nearPlane ? 0.7 : 0.33,
@@ -119,7 +119,47 @@
           y: originY + rand() * chunkSize,
           radius: nearPlane ? 36 + rand() * 48 : 22 + rand() * 28,
           hue: Math.floor(rand() * 360),
-        });
+        };
+        background.push(planet);
+
+        if (nearPlane && rand() < 0.58) {
+          const stationCount = rand() < 0.35 ? 2 : 1;
+          for (let i = 0; i < stationCount; i += 1) {
+            background.push({
+              type: "orbitalStation",
+              drawOrder: 7,
+              parallax: planet.parallax,
+              collidablePlane: true,
+              orbitCx: planet.x,
+              orbitCy: planet.y,
+              orbitRadius: planet.radius * (1.45 + rand() * 1.25),
+              orbitAngle: rand() * Math.PI * 2,
+              orbitSpeed: (0.08 + rand() * 0.18) * (rand() < 0.5 ? -1 : 1),
+              radius: 10 + rand() * 7,
+              hitRadius: 8 + rand() * 6,
+            });
+          }
+        }
+
+        if (nearPlane && rand() < 0.52) {
+          const beltCount = 14 + Math.floor(rand() * 18);
+          const beltRadiusBase = planet.radius * (1.8 + rand() * 1.1);
+          for (let i = 0; i < beltCount; i += 1) {
+            const beltJitter = (rand() - 0.5) * planet.radius * 0.8;
+            background.push({
+              type: "beltRock",
+              drawOrder: 6,
+              parallax: planet.parallax,
+              orbitCx: planet.x,
+              orbitCy: planet.y,
+              orbitRadius: Math.max(planet.radius * 1.35, beltRadiusBase + beltJitter),
+              orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.25,
+              orbitSpeed: (0.12 + rand() * 0.22) * (rand() < 0.5 ? -1 : 1),
+              radius: 2.5 + rand() * 4.2,
+              alpha: 0.45 + rand() * 0.35,
+            });
+          }
+        }
       }
 
       background.sort((a, b) => a.drawOrder - b.drawOrder);
@@ -177,6 +217,25 @@
       return out;
     }
 
+    function getOrbitalStations(atTime = 0) {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "orbitalStation" || !bg.collidablePlane) continue;
+          const angle = (bg.orbitAngle || 0) + atTime * (bg.orbitSpeed || 0);
+          out.push({
+            type: "orbitalStation",
+            x: (bg.orbitCx || 0) + Math.cos(angle) * (bg.orbitRadius || 0),
+            y: (bg.orbitCy || 0) + Math.sin(angle) * (bg.orbitRadius || 0),
+            parallax: bg.parallax || 1,
+            radius: bg.radius || 12,
+            hitRadius: bg.hitRadius || bg.radius || 12,
+          });
+        }
+      }
+      return out;
+    }
+
     function setSeed(nextSeed) {
       const numeric = Number.parseInt(nextSeed, 10);
       if (!Number.isFinite(numeric)) return false;
@@ -201,6 +260,7 @@
       update,
       getBackgroundObjects,
       getCollidablePlanets,
+      getOrbitalStations,
       getDebugInfo,
       setSeed,
       getSeed,

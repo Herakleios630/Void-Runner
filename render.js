@@ -29,7 +29,15 @@
       if (!bgObjects || bgObjects.length === 0) return;
 
       for (const obj of bgObjects) {
-        const pos = cameraSystem.worldToScreen(obj.x, obj.y, obj.parallax, WORLD.width, WORLD.height);
+        let worldX = obj.x;
+        let worldY = obj.y;
+        if (obj.type === "orbitalStation") {
+          const angle = (obj.orbitAngle || 0) + state.time * (obj.orbitSpeed || 0);
+          worldX = (obj.orbitCx || 0) + Math.cos(angle) * (obj.orbitRadius || 0);
+          worldY = (obj.orbitCy || 0) + Math.sin(angle) * (obj.orbitRadius || 0);
+        }
+
+        const pos = cameraSystem.worldToScreen(worldX, worldY, obj.parallax, WORLD.width, WORLD.height);
 
         if (obj.type === "star") {
           if (pos.x < -6 || pos.x > WORLD.width + 6 || pos.y < -6 || pos.y > WORLD.height + 6) continue;
@@ -90,6 +98,39 @@
             ctx.arc(pos.x, pos.y, radius * 1.05, 0.15, Math.PI * 1.85);
             ctx.stroke();
           }
+          continue;
+        }
+
+        if (obj.type === "beltRock") {
+          ctx.fillStyle = `rgba(169, 188, 209, ${obj.alpha || 0.55})`;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+
+        if (obj.type === "orbitalStation") {
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(state.time * 0.3 + (obj.orbitAngle || 0));
+
+          ctx.strokeStyle = "rgba(214, 236, 255, 0.82)";
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.86, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = "rgba(84, 134, 188, 0.92)";
+          ctx.fillRect(-radius * 0.62, -radius * 0.26, radius * 1.24, radius * 0.52);
+          ctx.fillStyle = "rgba(174, 212, 247, 0.95)";
+          ctx.fillRect(-radius * 0.24, -radius * 0.84, radius * 0.48, radius * 1.68);
+
+          ctx.fillStyle = "rgba(236, 248, 255, 0.95)";
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.26, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.restore();
         }
       }
     }
