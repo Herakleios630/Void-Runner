@@ -1977,16 +1977,28 @@ function update(dt, now) {
 
     state.lastSpawn += dt;
     const dynamicSpawn = Math.max(0.34, state.spawnInterval / (intensity * difficulty.spawnRateMult));
-    while (state.lastSpawn >= dynamicSpawn) {
+    let spawnedThisFrame = 0;
+    const maxSpawnsPerFrame = 6;
+    while (state.lastSpawn >= dynamicSpawn && spawnedThisFrame < maxSpawnsPerFrame) {
       state.lastSpawn -= dynamicSpawn;
       encounters.spawnObject();
+      spawnedThisFrame += 1;
+    }
+    if (state.lastSpawn > dynamicSpawn * maxSpawnsPerFrame) {
+      state.lastSpawn = dynamicSpawn * maxSpawnsPerFrame;
     }
 
     state.lastEdgeSpawn += dt;
     const dynamicEdgeSpawn = Math.max(1.2, state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult));
-    while (state.lastEdgeSpawn >= dynamicEdgeSpawn) {
+    let edgeSpawnsThisFrame = 0;
+    const maxEdgeSpawnsPerFrame = 3;
+    while (state.lastEdgeSpawn >= dynamicEdgeSpawn && edgeSpawnsThisFrame < maxEdgeSpawnsPerFrame) {
       state.lastEdgeSpawn -= dynamicEdgeSpawn;
       encounters.spawnEdgeHazard();
+      edgeSpawnsThisFrame += 1;
+    }
+    if (state.lastEdgeSpawn > dynamicEdgeSpawn * maxEdgeSpawnsPerFrame) {
+      state.lastEdgeSpawn = dynamicEdgeSpawn * maxEdgeSpawnsPerFrame;
     }
   }
 

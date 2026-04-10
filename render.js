@@ -28,6 +28,11 @@
       const bgObjects = worldSystem.getBackgroundObjects();
       if (!bgObjects || bgObjects.length === 0) return;
 
+      const deepStarCap = IS_COARSE_POINTER ? 220 : 360;
+      const beltRockCap = IS_COARSE_POINTER ? 180 : 300;
+      let deepStarCount = 0;
+      let beltRockCount = 0;
+
       for (const obj of bgObjects) {
         let worldX = obj.x;
         let worldY = obj.y;
@@ -40,6 +45,10 @@
         const pos = cameraSystem.worldToScreen(worldX, worldY, obj.parallax, WORLD.width, WORLD.height);
 
         if (obj.type === "star") {
+          if (obj.layer === "deep") {
+            deepStarCount += 1;
+            if (deepStarCount > deepStarCap) continue;
+          }
           if (pos.x < -6 || pos.x > WORLD.width + 6 || pos.y < -6 || pos.y > WORLD.height + 6) continue;
           ctx.fillStyle = `rgba(186, 220, 255, ${obj.alpha || 0.5})`;
           const size = obj.size || 1.5;
@@ -49,6 +58,9 @@
 
         if (obj.type === "sun") {
           const sunRadius = obj.radius || 0;
+          if (pos.x < -sunRadius * 2.1 || pos.x > WORLD.width + sunRadius * 2.1 || pos.y < -sunRadius * 2.1 || pos.y > WORLD.height + sunRadius * 2.1) {
+            continue;
+          }
           const core = obj.coreColor || "rgba(255, 224, 164, 0.95)";
           const glow = obj.glowColor || "rgba(255, 178, 102, 0.32)";
 
@@ -148,6 +160,8 @@
         }
 
         if (obj.type === "beltRock") {
+          beltRockCount += 1;
+          if (beltRockCount > beltRockCap) continue;
           ctx.fillStyle = `rgba(169, 188, 209, ${obj.alpha || 0.55})`;
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
