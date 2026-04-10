@@ -2146,6 +2146,67 @@ function handleOverlayAction(actionNode) {
   }
 }
 
+function debugTeleportNearNearestWormhole() {
+  if (!state.debugHitboxes || !state.ship) return;
+
+  const ship = state.ship;
+  if (!Number.isFinite(ship.worldX) || !Number.isFinite(ship.worldY)) return;
+
+  let nearest = null;
+
+  const portals = typeof worldSystem.getWormholePortals === "function" ? worldSystem.getWormholePortals() : [];
+  if (portals.length > 0) {
+    let nearestDistSq = Number.POSITIVE_INFINITY;
+    for (const portal of portals) {
+      if (!Number.isFinite(portal.x) || !Number.isFinite(portal.y)) continue;
+      const dx = portal.x - ship.worldX;
+      const dy = portal.y - ship.worldY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearest = portal;
+      }
+    }
+  } else if (typeof worldSystem.getNearestWormholePortal === "function") {
+    nearest = worldSystem.getNearestWormholePortal(ship.worldX, ship.worldY);
+  }
+
+  if (!nearest) return;
+
+  let offsetX = ship.worldX - nearest.x;
+  let offsetY = ship.worldY - nearest.y;
+  const offsetLen = Math.hypot(offsetX, offsetY);
+  if (offsetLen > 0.0001) {
+    offsetX /= offsetLen;
+    offsetY /= offsetLen;
+  } else {
+    offsetX = 1;
+    offsetY = 0;
+  }
+
+  const safeOffset = (nearest.hitRadius || nearest.radius || 20) + ship.radius + 28;
+  ship.worldX = nearest.x + offsetX * safeOffset;
+  ship.worldY = nearest.y + offsetY * safeOffset;
+  ship.vx = 0;
+  ship.vy = 0;
+  ship.wormholeCooldownUntil = state.time + 0.6;
+
+  state.world.playerX = ship.worldX;
+  state.world.playerY = ship.worldY;
+
+  if (typeof cameraSystem.snap === "function") {
+    cameraSystem.snap(ship.worldX, ship.worldY);
+  }
+
+  worldSystem.update(ship.worldX, ship.worldY);
+
+  const cameraX = typeof cameraSystem.getX === "function" ? cameraSystem.getX() : ship.worldX;
+  const cameraY = typeof cameraSystem.getY === "function" ? cameraSystem.getY() : ship.worldY;
+  const teleportedScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
+  ship.x = teleportedScreen.x;
+  ship.y = teleportedScreen.y;
+}
+
 const inputSystem = createInputSystem({
   canvas,
   overlay,
@@ -2182,6 +2243,9 @@ const inputSystem = createInputSystem({
   },
   onDebugBoostWeapons: () => {
     debugTools.debugBoostWeapons();
+  },
+  onDebugTeleportNearWormhole: () => {
+    debugTeleportNearNearestWormhole();
   },
   onToggleBalancePanel: () => {
     debugTools.toggleBalancePanel();

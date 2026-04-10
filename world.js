@@ -68,8 +68,10 @@
       : 1;
     const TOXIC_NEBULA_CHANCE = 0.34;
     const WORMHOLE_CHANCE = 0.2;
+    const MAX_WORMHOLE_JUMP_CELLS = 12;
 
     const activeChunks = new Map();
+    const wormholeOutgoingCache = new Map();
 
     function chunkKey(cx, cy) {
       return `${cx},${cy}`;
@@ -122,7 +124,14 @@
       };
     }
 
-    function getWormholeLinkForCell(cellX, cellY) {
+    function makeWormholePairId(aX, aY, bX, bY) {
+      if (aX < bX || (aX === bX && aY <= bY)) {
+        return `${aX},${aY}<->${bX},${bY}`;
+      }
+      return `${bX},${bY}<->${aX},${aY}`;
+    }
+
+    function computeOutgoingWormholeLinkForCell(cellX, cellY) {
       const sourceAnchor = getSystemAnchorForCell(cellX, cellY);
       if (!sourceAnchor) return null;
 
@@ -171,8 +180,63 @@
         sourceY: sourceAnchor.y + Math.sin(sourceAngle) * sourceRadius,
         targetX: targetAnchor.x + Math.cos(targetAngle) * targetRadius,
         targetY: targetAnchor.y + Math.sin(targetAngle) * targetRadius,
-        pairId: `${cellX},${cellY}->${targetCellX},${targetCellY}`,
+        pairId: makeWormholePairId(cellX, cellY, targetCellX, targetCellY),
       };
+    }
+
+    function getOutgoingWormholeLinkForCell(cellX, cellY) {
+      const key = `${cellX},${cellY}`;
+      if (wormholeOutgoingCache.has(key)) {
+        return wormholeOutgoingCache.get(key);
+      }
+      const link = computeOutgoingWormholeLinkForCell(cellX, cellY);
+      wormholeOutgoingCache.set(key, link);
+      return link;
+    }
+
+    function getWormholeLinksForCell(cellX, cellY) {
+      const links = [];
+      const seen = new Set();
+
+      const outgoing = getOutgoingWormholeLinkForCell(cellX, cellY);
+      if (outgoing) {
+        const outKey = `${outgoing.pairId}|${outgoing.targetCellX},${outgoing.targetCellY}`;
+        seen.add(outKey);
+        links.push(outgoing);
+      }
+
+      for (let cy = cellY - MAX_WORMHOLE_JUMP_CELLS; cy <= cellY + MAX_WORMHOLE_JUMP_CELLS; cy += 1) {
+        for (let cx = cellX - MAX_WORMHOLE_JUMP_CELLS; cx <= cellX + MAX_WORMHOLE_JUMP_CELLS; cx += 1) {
+          if (cx === cellX && cy === cellY) continue;
+          const incomingSource = getOutgoingWormholeLinkForCell(cx, cy);
+          if (!incomingSource) continue;
+          if (incomingSource.targetCellX !== cellX || incomingSource.targetCellY !== cellY) continue;
+
+          const reverseLink = {
+            sourceCellX: cellX,
+            sourceCellY: cellY,
+            targetCellX: incomingSource.sourceCellX,
+            targetCellY: incomingSource.sourceCellY,
+            sourceX: incomingSource.targetX,
+            sourceY: incomingSource.targetY,
+            targetX: incomingSource.sourceX,
+            targetY: incomingSource.sourceY,
+            pairId: incomingSource.pairId,
+          };
+
+          const reverseKey = `${reverseLink.pairId}|${reverseLink.targetCellX},${reverseLink.targetCellY}`;
+          if (seen.has(reverseKey)) continue;
+          seen.add(reverseKey);
+          links.push(reverseLink);
+        }
+      }
+
+      return links;
+    }
+
+    function getWormholeLinkForCell(cellX, cellY) {
+      const links = getWormholeLinksForCell(cellX, cellY);
+      return links.length > 0 ? links[0] : null;
     }
 
     function isSunAnchorChunk(cx, cy) {
@@ -453,8 +517,8 @@
           });
         }
 
-        const wormholeLink = getWormholeLinkForCell(systemCellX, systemCellY);
-        if (wormholeLink) {
+        const wormholeLinks = getWormholeLinksForCell(systemCellX, systemCellY);
+        for (const wormholeLink of wormholeLinks) {
           background.push({
             type: "wormholePortal",
             drawOrder: 8,
@@ -965,11 +1029,52 @@
       return out;
     }
 
+    function getNearestWormholePortal(worldX, worldY, maxCellRadius = 18) {
+      if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return null;
+
+      const worldChunkX = Math.floor(worldX / chunkSize);
+      const worldChunkY = Math.floor(worldY / chunkSize);
+      const baseCellX = Math.floor(worldChunkX / systemCellChunks);
+      const baseCellY = Math.floor(worldChunkY / systemCellChunks);
+
+      let nearest = null;
+      let nearestDistSq = Number.POSITIVE_INFINITY;
+      const radius = Math.max(1, Math.floor(maxCellRadius));
+
+      for (let cy = baseCellY - radius; cy <= baseCellY + radius; cy += 1) {
+        for (let cx = baseCellX - radius; cx <= baseCellX + radius; cx += 1) {
+          const links = getWormholeLinksForCell(cx, cy);
+          for (const link of links) {
+            const dx = link.sourceX - worldX;
+            const dy = link.sourceY - worldY;
+            const distSq = dx * dx + dy * dy;
+            if (distSq >= nearestDistSq) continue;
+
+            nearestDistSq = distSq;
+            nearest = {
+              type: "wormholePortal",
+              x: link.sourceX,
+              y: link.sourceY,
+              parallax: 1,
+              radius: chunkSize * 0.032,
+              hitRadius: chunkSize * 0.024,
+              linkedX: link.targetX,
+              linkedY: link.targetY,
+              pairId: link.pairId,
+            };
+          }
+        }
+      }
+
+      return nearest;
+    }
+
     function setSeed(nextSeed) {
       const numeric = Number.parseInt(nextSeed, 10);
       if (!Number.isFinite(numeric)) return false;
       worldSeed = Math.abs(Math.floor(numeric)) || 1;
       activeChunks.clear();
+      wormholeOutgoingCache.clear();
       return true;
     }
 
@@ -1032,6 +1137,7 @@
       getSolarHeatZones,
       getToxicNebulaZones,
       getWormholePortals,
+      getNearestWormholePortal,
       resolveOrbitPosition,
       estimateSystemInfluence,
       getActiveChunkRects,
