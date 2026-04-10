@@ -2036,8 +2036,13 @@ function update(dt, now) {
         obj.vx += deltaVx * scale;
         obj.vy += deltaVy * scale;
       } else {
-        obj.vx *= 0.88;
-        obj.vy *= 0.88;
+        const cruiseSpeed = obj.cruiseSpeed || 140;
+        const cruiseSteer = Math.max(0.4, (obj.steering || 1.25) * 0.75);
+        const desiredVx = (dxToShip / distToShip) * cruiseSpeed;
+        const desiredVy = (dyToShip / distToShip) * cruiseSpeed;
+        const blend = Math.min(1, cruiseSteer * dt);
+        obj.vx += (desiredVx - obj.vx) * blend;
+        obj.vy += (desiredVy - obj.vy) * blend;
       }
     }
 

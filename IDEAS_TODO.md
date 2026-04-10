@@ -15,6 +15,10 @@
 - [ ] Full QA pass for balancing and edge cases
 
 ## Future Features
+- [ ] Multiplayer co-op mode (online)
+- [ ] Multiplayer PvP / versus arena mode
+- [ ] Enemy fleets/formations per chunk (coordinated groups)
+- [ ] Dynamic faction encounters and roaming patrol groups
 - [ ] Black hole in parallax layer 2 with gravity pull zone
 - [ ] Black hole event horizon that swallows entities crossing threshold
 - [ ] Distortion VFX/accretion ring for black holes
