@@ -323,21 +323,7 @@
       refreshHud();
     }
 
-    function showLevelUpChoice() {
-      state.running = false;
-      state.levelUpPending = true;
-      state.pauseReason = "levelup";
-
-      state.pendingUpgradeOptions = chooseUpgradeOptions();
-
-      if (state.pendingUpgradeOptions.length === 0) {
-        state.shotCooldown = Math.max(0.05, state.shotCooldown * 0.93);
-        finishLevelUp();
-        return;
-      }
-
-      overlay.classList.remove("hidden");
-
+    function renderLevelUpOverlay() {
       const cards = state.pendingUpgradeOptions
         .map((u) => {
           const track = weaponUpgradeTrack[u.id] || null;
@@ -363,13 +349,49 @@
         })
         .join("<div style='height:8px'></div>");
 
+      const rerolls = Math.max(0, Number(state.missionRerollTokens || 0));
+      const rerollButton = rerolls > 0
+        ? `<button data-action="reroll-upgrades" style="margin-top:12px;padding:10px 16px;">Neu wuerfeln (${rerolls})</button>`
+        : "";
+
+      overlay.classList.remove("hidden");
       overlay.innerHTML = `
     <h1>Level ${state.level + 1}</h1>
     <p>Waehle 1 Upgrade</p>
     <div style="width:min(92vw,620px)">${cards}</div>
+    ${rerollButton}
   `;
+    }
+
+    function showLevelUpChoice() {
+      state.running = false;
+      state.levelUpPending = true;
+      state.pauseReason = "levelup";
+
+      state.pendingUpgradeOptions = chooseUpgradeOptions();
+
+      if (state.pendingUpgradeOptions.length === 0) {
+        state.shotCooldown = Math.max(0.05, state.shotCooldown * 0.93);
+        finishLevelUp();
+        return;
+      }
+      renderLevelUpOverlay();
 
       playSfx("levelup");
+    }
+
+    function rerollLevelUpOptions() {
+      if (!state.levelUpPending || state.pauseReason !== "levelup") return;
+      if ((state.missionRerollTokens || 0) <= 0) return;
+      state.missionRerollTokens = Math.max(0, (state.missionRerollTokens || 0) - 1);
+      state.pendingUpgradeOptions = chooseUpgradeOptions();
+      if (state.pendingUpgradeOptions.length <= 0) {
+        state.shotCooldown = Math.max(0.05, state.shotCooldown * 0.93);
+        finishLevelUp();
+        return;
+      }
+      renderLevelUpOverlay();
+      playSfx("upgrade");
     }
 
     function applyWeaponMilestone(track, milestone) {
@@ -602,6 +624,7 @@
 
     return {
       showLevelUpChoice,
+      rerollLevelUpOptions,
       applyUpgrade,
       initializeWeaponLevelsFromLoadout,
       gainWeaponLevel,

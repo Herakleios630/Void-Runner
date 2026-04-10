@@ -55,6 +55,10 @@
       const musicVolPct = Math.round((opts.musicVolume !== undefined ? opts.musicVolume : 1) * 100);
       const sfxVolPct = Math.round((opts.sfxVolume !== undefined ? opts.sfxVolume : 1) * 100);
       const toastEnabled = opts.missionToastEnabled !== false;
+      const dailyChallengesEnabled = opts.dailyRunChallengesEnabled === true;
+      const failTimeExtraEnabled = opts.missionFailExtraTimeLimit === true;
+      const failHitExtraEnabled = opts.missionFailExtraHitLimit === true;
+      const failNoHitExtraEnabled = opts.missionFailExtraNoHit === true;
       const statusBarsMode = state.statusBarsMode || 0;
       const modeLabels = ["Aus", "Nur Spieler", "Nur Gegner", "Beide"];
 
@@ -73,6 +77,26 @@
           <div style="display:flex;align-items:center;gap:10px;">
             <input type="checkbox" id="missionToastToggle" ${toastEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
             <label for="missionToastToggle" style="color:#d0e8ff;cursor:pointer;">Missions-Popup anzeigen</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="dailyChallengeToggle" ${dailyChallengesEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+            <label for="dailyChallengeToggle" style="color:#d0e8ff;cursor:pointer;">Tages-/Run-Challenges aktivieren</label>
+          </div>
+          <div style="padding:10px 12px;border:1px solid rgba(255,255,255,0.18);border-radius:10px;background:rgba(9,23,46,0.45);display:grid;gap:8px;">
+            <div style="font-weight:600;color:#d9ecff;">Missionen: zusaetzliche Fail-Conditions</div>
+            <div style="font-size:12px;color:#9ec8e9;">Schwierigkeit: Einfach = keine, Mittel = Zeitlimit, Schwer = alle. Diese Schalter fuegen extra Regeln hinzu.</div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="checkbox" id="missionFailTimeToggle" ${failTimeExtraEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+              <label for="missionFailTimeToggle" style="color:#d0e8ff;cursor:pointer;">Extra: Zeitlimit</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="checkbox" id="missionFailHitToggle" ${failHitExtraEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+              <label for="missionFailHitToggle" style="color:#d0e8ff;cursor:pointer;">Extra: Trefferlimit</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="checkbox" id="missionFailNoHitToggle" ${failNoHitExtraEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+              <label for="missionFailNoHitToggle" style="color:#d0e8ff;cursor:pointer;">Extra: No-Hit</label>
+            </div>
           </div>
           <div>
             <label style="display:block;margin-bottom:8px;color:#d0e8ff;">Lebensbalken-Modus</label>

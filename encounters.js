@@ -234,6 +234,26 @@
     }
 
     function forcedObjectBlueprint(type, rand) {
+      if (type === "miniAlien") {
+        return {
+          type,
+          size: 14 + rand() * 10,
+          hp: 3,
+          destructible: true,
+          collisionScale: 0.7,
+          corners: 0,
+        };
+      }
+      if (type === "alienShip") {
+        return {
+          type,
+          size: 20 + rand() * 10,
+          hp: 6,
+          destructible: true,
+          collisionScale: 0.74,
+          corners: 0,
+        };
+      }
       if (type === "smallRock") {
         return {
           type,
@@ -291,7 +311,7 @@
       const systemInterior = options.systemInterior === true
         || (options.systemInterior !== false && probeInfluence >= 0.33);
 
-      const forced = options.forceType && probeInfluence < 0.2 ? forcedObjectBlueprint(options.forceType, rand) : null;
+      const forced = options.forceType ? forcedObjectBlueprint(options.forceType, rand) : null;
       const blueprint = forced || createObjectBlueprint(rand, difficulty, {
         systemInterior,
         systemInfluence: probeInfluence,
@@ -312,7 +332,7 @@
       const spawnInfluence = getGameplaySystemInfluence(spawnWorld.x, spawnWorld.y);
       const enemyWeapon = isEnemy ? selectEnemyWeapon(blueprint.type, rand) : null;
 
-      state.objects.push({
+      const spawnedObj = {
         id: nextObjectId(),
         type: blueprint.type,
         x: spawnX,
@@ -345,7 +365,9 @@
         nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
         enemyWeapon,
         systemInfluence: spawnInfluence,
-      });
+      };
+      state.objects.push(spawnedObj);
+      return spawnedObj;
     }
 
     function spawnChunkEncounter(cx, cy) {

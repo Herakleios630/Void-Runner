@@ -17,6 +17,8 @@
       if (!state.ship) return false;
       if (state.time < state.ship.invulnUntil) return true;
 
+      state.shipHitsTaken = Number(state.shipHitsTaken || 0) + 1;
+
       if (consumeShield(damageType, amount)) {
         state.ship.invulnUntil = state.time + 0.5;
         return true;

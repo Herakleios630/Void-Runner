@@ -22,10 +22,15 @@ const xpStatusEl = document.getElementById("xpStatus");
 const weaponLevelsStatusEl = document.getElementById("weaponLevelsStatus");
 const armorStatusEl = document.getElementById("armorStatus");
 const hazardStatusEl = document.getElementById("hazardStatus");
+const exploredChunksStatEl = document.getElementById("exploredChunksStat");
+const enemyKillsByTypeStatEl = document.getElementById("enemyKillsByTypeStat");
+const topSpeedStatEl = document.getElementById("topSpeedStat");
+const distanceStatEl = document.getElementById("distanceStat");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
 const musicStatusEl = document.getElementById("musicStatus");
-const missionStatusEl = document.getElementById("missionStatus");
+const missionWidgetTitleEl = document.getElementById("missionWidgetTitle");
+const missionWidgetProgressEl = document.getElementById("missionWidgetProgress");
 const pauseIndicatorEl = document.getElementById("pauseIndicator");
 const joystickAreaEl = document.getElementById("joystickArea");
 const joyBaseEl = document.getElementById("joyBase");
@@ -154,9 +159,20 @@ const state = {
   lastAimTapAt: -999,
   score: 0,
   kills: 0,
+  shipHitsTaken: 0,
   killStatsByType: {
     miniAlien: 0,
     alienShip: 0,
+    smallRock: 0,
+    mediumRock: 0,
+    boulder: 0,
+    debris: 0,
+  },
+  runStats: {
+    distanceWU: 0,
+    topSpeedWU: 0,
+    exploredChunks: Object.create(null),
+    exploredChunksCount: 0,
   },
   time: 0,
   realNow: performance.now() / 1000,
@@ -295,6 +311,10 @@ const state = {
     missionToastEnabled: true,
     musicVolume: 1.0,
     sfxVolume: 1.0,
+    dailyRunChallengesEnabled: false,
+    missionFailExtraTimeLimit: false,
+    missionFailExtraHitLimit: false,
+    missionFailExtraNoHit: false,
   },
   missionToast: {
     text: "",
@@ -302,8 +322,19 @@ const state = {
     startedAt: 0,
     showUntil: 0,
   },
+  missionRerollTokens: 0,
+  missionRewardBuff: null,
+  runChallenge: null,
+  missionLog: [],
   missions: {
     serial: 0,
+    runSeed: 1,
+    offers: [],
+    chain: {
+      active: false,
+      total: 0,
+      nextStep: 1,
+    },
     active: null,
   },
 };
@@ -351,10 +382,24 @@ const MISSION_TYPES = {
   DESTROY: "destroy",
   TRAVEL: "travel",
   SURVIVE: "survive",
+  REACH_ZONE: "reach-zone",
+  SPECIAL_TARGET: "special-target",
 };
 const MISSION_ENEMY_CLASS_DEFS = [
   { type: "miniAlien", label: "Mini-Aliens", minTarget: 8, targetSpan: 8, rewardFactor: 9 },
   { type: "alienShip", label: "Alien-Schiffe", minTarget: 5, targetSpan: 6, rewardFactor: 12 },
+];
+const MISSION_OBJECT_CLASS_DEFS = [
+  { type: "smallRock", label: "kleine Felsen", minTarget: 12, targetSpan: 10, rewardFactor: 6 },
+  { type: "mediumRock", label: "mittlere Felsen", minTarget: 8, targetSpan: 8, rewardFactor: 7 },
+  { type: "boulder", label: "Felsbrocken", minTarget: 5, targetSpan: 6, rewardFactor: 9 },
+  { type: "debris", label: "Schrott", minTarget: 10, targetSpan: 10, rewardFactor: 6 },
+];
+// Combined pool: enemies (weight 2) + objects (weight 1)
+const MISSION_DESTROY_POOL = [
+  ...MISSION_ENEMY_CLASS_DEFS.map(d => ({ ...d, isObject: false })),
+  ...MISSION_ENEMY_CLASS_DEFS.map(d => ({ ...d, isObject: false })),
+  ...MISSION_OBJECT_CLASS_DEFS.map(d => ({ ...d, isObject: true })),
 ];
 
 const MAX_WEAPON_SLOTS = 3;
@@ -400,27 +445,179 @@ function canUnlockNewWeapon() {
 
 function missionUnitLabel(type) {
   if (type === MISSION_TYPES.DESTROY) return "Kills";
-  if (type === MISSION_TYPES.TRAVEL) return "Chunks";
+  if (type === MISSION_TYPES.TRAVEL) return "WU";
+  if (type === MISSION_TYPES.REACH_ZONE) return "WU";
+  if (type === MISSION_TYPES.SPECIAL_TARGET) return "Ziel";
   return "Sek";
 }
 
 function missionTitle(type) {
   if (type === MISSION_TYPES.DESTROY) return "Zerstoere Gegner";
-  if (type === MISSION_TYPES.TRAVEL) return "Reise durch den Sektor";
-  return "Ueberlebe";
+  if (type === MISSION_TYPES.TRAVEL) return "Lege Distanz zurueck";
+  if (type === MISSION_TYPES.REACH_ZONE) return "Erreiche Zielkoordinate";
+  if (type === MISSION_TYPES.SPECIAL_TARGET) return "Zerstoere Spezial-Ziel";
+  return "Ueberlebe ohne Tod";
+}
+
+function missionFailBaselineForDifficulty(diffId) {
+  if (diffId === "hard") {
+    return {
+      timeLimit: true,
+      hitLimit: true,
+      noHit: true,
+    };
+  }
+  if (diffId === "medium") {
+    return {
+      timeLimit: true,
+      hitLimit: false,
+      noHit: false,
+    };
+  }
+  return {
+    timeLimit: false,
+    hitLimit: false,
+    noHit: false,
+  };
+}
+
+function missionEffectiveFailRules() {
+  const difficulty = selectedDifficultyMode();
+  const baseline = missionFailBaselineForDifficulty(difficulty && difficulty.id);
+  const opts = state.options || {};
+  return {
+    timeLimit: baseline.timeLimit || opts.missionFailExtraTimeLimit === true,
+    hitLimit: baseline.hitLimit || opts.missionFailExtraHitLimit === true,
+    noHit: baseline.noHit || opts.missionFailExtraNoHit === true,
+  };
+}
+
+function missionTimeLimitSeconds(type, target) {
+  if (type === MISSION_TYPES.DESTROY) {
+    return Math.max(26, target * 3.6);
+  }
+  if (type === MISSION_TYPES.TRAVEL) {
+    return Math.max(24, target / 210 + 16);
+  }
+  if (type === MISSION_TYPES.REACH_ZONE) {
+    return Math.max(20, Math.min(84, target / 7 + 20));
+  }
+  if (type === MISSION_TYPES.SPECIAL_TARGET) {
+    return 72;
+  }
+  return Math.max(16, target + 10);
+}
+
+function missionHitLimit(type, target) {
+  if (type === MISSION_TYPES.DESTROY) {
+    return Math.max(2, Math.floor(target * 0.18));
+  }
+  if (type === MISSION_TYPES.TRAVEL) {
+    return Math.max(2, Math.floor(target / 900));
+  }
+  if (type === MISSION_TYPES.REACH_ZONE) {
+    return 3;
+  }
+  if (type === MISSION_TYPES.SPECIAL_TARGET) {
+    return 2;
+  }
+  return Math.max(1, Math.floor(target / 14));
+}
+
+function buildMissionFailConditions(type, target, now) {
+  const rules = missionEffectiveFailRules();
+  const cond = {
+    timeLimitSec: null,
+    failAt: null,
+    hitLimit: null,
+    noHit: false,
+    startShipHits: Number(state.shipHitsTaken || 0),
+  };
+
+  if (rules.timeLimit) {
+    cond.timeLimitSec = missionTimeLimitSeconds(type, target);
+    cond.failAt = now + cond.timeLimitSec;
+  }
+  if (rules.hitLimit) {
+    cond.hitLimit = missionHitLimit(type, target);
+  }
+  if (rules.noHit) {
+    cond.noHit = true;
+  }
+
+  return cond;
+}
+
+function missionFailStatusText(mission) {
+  const cond = mission && mission.failConditions;
+  if (!cond) return "";
+
+  const parts = [];
+  if (Number.isFinite(cond.failAt)) {
+    const left = Math.max(0, cond.failAt - state.time);
+    parts.push(`Zeit ${left.toFixed(1)}s`);
+  }
+
+  const hitsTaken = Math.max(0, Number(state.shipHitsTaken || 0) - Number(cond.startShipHits || 0));
+  if (Number.isFinite(cond.hitLimit)) {
+    parts.push(`Treffer ${hitsTaken}/${cond.hitLimit}`);
+  }
+  if (cond.noHit) {
+    parts.push(`No-Hit ${hitsTaken === 0 ? "aktiv" : "verletzt"}`);
+  }
+  return parts.join(" | ");
+}
+
+function missionFailReason(mission, value) {
+  const cond = mission && mission.failConditions;
+  if (!cond || mission.completed || mission.failed) return "";
+
+  const hitsTaken = Math.max(0, Number(state.shipHitsTaken || 0) - Number(cond.startShipHits || 0));
+  if (cond.noHit && hitsTaken > 0) {
+    return "No-Hit verletzt";
+  }
+  if (Number.isFinite(cond.hitLimit) && hitsTaken > cond.hitLimit) {
+    return `Trefferlimit ueberschritten (${hitsTaken}/${cond.hitLimit})`;
+  }
+  if (Number.isFinite(cond.failAt) && state.time >= cond.failAt && value < mission.target) {
+    return "Zeitlimit abgelaufen";
+  }
+  return "";
+}
+
+function trackExploredChunk(worldX, worldY) {
+  const chunkX = Math.floor(worldX / WORLD_CHUNK_SIZE);
+  const chunkY = Math.floor(worldY / WORLD_CHUNK_SIZE);
+  const key = `${chunkX},${chunkY}`;
+  if (!state.runStats.exploredChunks[key]) {
+    state.runStats.exploredChunks[key] = true;
+    state.runStats.exploredChunksCount += 1;
+  }
+}
+
+function updateRunStats(movedDistance, shipSpeed) {
+  state.runStats.distanceWU += Math.max(0, movedDistance || 0);
+  state.runStats.topSpeedWU = Math.max(state.runStats.topSpeedWU || 0, Math.max(0, shipSpeed || 0));
+  if (state.ship && Number.isFinite(state.ship.worldX) && Number.isFinite(state.ship.worldY)) {
+    trackExploredChunk(state.ship.worldX, state.ship.worldY);
+  }
 }
 
 function missionProgressValue(mission) {
   if (!mission) return 0;
   if (mission.type === MISSION_TYPES.DESTROY) {
-    if (mission.targetEnemyType) {
+    const targetKey = mission.targetEnemyType || mission.targetObjectType;
+    if (targetKey) {
       const byType = state.killStatsByType || {};
       const startByType = mission.startKillsByType || {};
-      const current = Number(byType[mission.targetEnemyType] || 0);
-      const baseline = Number(startByType[mission.targetEnemyType] || 0);
+      const current = Number(byType[targetKey] || 0);
+      const baseline = Number(startByType[targetKey] || 0);
       return Math.max(0, current - baseline);
     }
     return Math.max(0, state.kills - mission.startKills);
+  }
+  if (mission.type === MISSION_TYPES.SPECIAL_TARGET) {
+    return Math.max(0, mission.progress || 0);
   }
   return mission.progress || 0;
 }
@@ -430,43 +627,355 @@ function missionDeterministicRand(seedBase) {
   return x - Math.floor(x);
 }
 
-function assignNextMission(now = state.time, showToast = false) {
-  const serial = (state.missions.serial || 0) + 1;
-  state.missions.serial = serial;
+function pushMissionLog(text) {
+  if (!text) return;
+  if (!Array.isArray(state.missionLog)) {
+    state.missionLog = [];
+  }
+  state.missionLog.push({
+    at: state.time,
+    text,
+  });
+  if (state.missionLog.length > 4) {
+    state.missionLog.shift();
+  }
+}
 
-  const seedBase = (state.worldSeed || 1) * 0.001 + serial * 17.131;
+function localDaySeed() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return y * 10000 + m * 100 + day;
+}
+
+function assignRunChallenge(now = state.time) {
+  if (!state.options || state.options.dailyRunChallengesEnabled !== true) {
+    state.runChallenge = null;
+    return;
+  }
+
+  const seed = localDaySeed();
+  const roll = missionDeterministicRand(seed * 0.013 + 3.11);
+  const targetRoll = missionDeterministicRand(seed * 0.017 + 9.27);
+  const rewardRoll = missionDeterministicRand(seed * 0.021 + 13.71);
+
+  let type = "travel";
+  let title = "Tages-Challenge: Lege Distanz zurueck";
+  let unit = "WU";
+  let target = 12000 + Math.floor(targetRoll * 7000);
+
+  if (roll < 0.33) {
+    type = "kills";
+    title = "Tages-Challenge: Zerstoere Gegner";
+    unit = "Kills";
+    target = 55 + Math.floor(targetRoll * 35);
+  } else if (roll > 0.66) {
+    type = "survive";
+    title = "Tages-Challenge: Ueberlebe";
+    unit = "Sek";
+    target = 150 + Math.floor(targetRoll * 120);
+  }
+
+  const rewardScore = 260 + Math.floor(target * (type === "kills" ? 4.5 : type === "travel" ? 0.05 : 2.2));
+  const rewardRerolls = rewardRoll < 0.3 ? 2 : 1;
+
+  state.runChallenge = {
+    seed,
+    type,
+    title,
+    unit,
+    target,
+    progress: 0,
+    rewardScore,
+    rewardRerolls,
+    startedAt: now,
+    completed: false,
+    failed: false,
+  };
+
+  pushMissionLog(`${title} gestartet`);
+
+  if (state.options.missionToastEnabled !== false) {
+    state.missionToast = {
+      text: title,
+      subText: `${Math.floor(target)} ${unit}  |  +${rewardScore} Pkt`,
+      startedAt: now,
+      showUntil: now + 4,
+    };
+  }
+}
+
+function updateRunChallenge(dt, movedWorldDistance) {
+  const ch = state.runChallenge;
+  if (!ch || ch.completed || ch.failed) return;
+
+  if (ch.type === "kills") {
+    ch.progress = state.kills;
+  } else if (ch.type === "travel") {
+    ch.progress += Math.max(0, movedWorldDistance);
+  } else {
+    ch.progress += dt;
+  }
+
+  if (ch.progress < ch.target) return;
+
+  ch.completed = true;
+  scoring.addPoints(ch.rewardScore);
+  state.missionRerollTokens = Math.min(9, (state.missionRerollTokens || 0) + ch.rewardRerolls);
+  pushMissionLog(`Challenge geschafft (+${ch.rewardScore})`);
+  if (state.options.missionToastEnabled !== false) {
+    state.missionToast = {
+      text: "Challenge geschafft",
+      subText: `+${ch.rewardScore} Pkt | +${ch.rewardRerolls} Reroll`,
+      startedAt: state.time,
+      showUntil: state.time + 3.2,
+    };
+  }
+}
+
+function missionRewardRand(serial, salt = 0) {
+  const runSeed = Number.isFinite(state.missions.runSeed) ? state.missions.runSeed : (state.worldSeed || 1);
+  return missionDeterministicRand(runSeed * 0.0023 + serial * 23.17 + salt);
+}
+
+function spawnMissionArmorDrop() {
+  if (!state.ship) return;
+  const shipWX = Number.isFinite(state.ship.worldX) ? state.ship.worldX : (state.world.playerX || 0);
+  const shipWY = Number.isFinite(state.ship.worldY) ? state.ship.worldY : (state.world.playerY || 0);
+  const a = missionRewardRand(state.missions.serial, 41.9) * Math.PI * 2;
+  const r = 36 + missionRewardRand(state.missions.serial, 47.2) * 24;
+  const worldX = shipWX + Math.cos(a) * r;
+  const worldY = shipWY + Math.sin(a) * r;
+  const cameraX = typeof cameraSystem.getX === "function" ? cameraSystem.getX() : shipWX;
+  const cameraY = typeof cameraSystem.getY === "function" ? cameraSystem.getY() : shipWY;
+  const screen = projectWorldToScreen(worldX, worldY, cameraX, cameraY);
+
+  state.pickups.push({
+    id: nextObjectId(),
+    type: "armor",
+    x: screen.x,
+    y: screen.y,
+    worldX,
+    worldY,
+    vx: Math.cos(a) * 18,
+    vy: Math.sin(a) * 18,
+    radius: 10,
+    life: 14,
+  });
+}
+
+function grantMissionCompletionRewards(mission) {
+  scoring.addPoints(mission.rewardScore);
+  spawnMissionArmorDrop();
+
+  const serial = state.missions.serial || 1;
+  const rerollChance = mission.type === MISSION_TYPES.SPECIAL_TARGET ? 0.55 : 0.28;
+  if (missionRewardRand(serial, 53.1) < rerollChance) {
+    state.missionRerollTokens = Math.min(9, (state.missionRerollTokens || 0) + 1);
+  }
+
+  const rareBuffChance = mission.type === MISSION_TYPES.SPECIAL_TARGET ? 0.2 : 0.1;
+  if (missionRewardRand(serial, 61.7) < rareBuffChance) {
+    state.missionRewardBuff = {
+      id: "score-overdrive",
+      until: state.time + 18,
+      scoreMult: 1.35,
+      reloadMult: 1.12,
+    };
+  }
+}
+
+function createMissionOffer(serial) {
+  const runSeed = Number.isFinite(state.missions.runSeed) ? state.missions.runSeed : (state.worldSeed || 1);
+  const seedBase = runSeed * 0.001 + serial * 17.131;
   const missionRoll = missionDeterministicRand(seedBase);
   const targetRoll = missionDeterministicRand(seedBase + 3.71);
 
   let type = MISSION_TYPES.TRAVEL;
-  if (missionRoll < 0.34) type = MISSION_TYPES.DESTROY;
-  else if (missionRoll > 0.67) type = MISSION_TYPES.SURVIVE;
+  if (missionRoll < 0.24) type = MISSION_TYPES.DESTROY;
+  else if (missionRoll < 0.46) type = MISSION_TYPES.TRAVEL;
+  else if (missionRoll < 0.64) type = MISSION_TYPES.SURVIVE;
+  else if (missionRoll < 0.82) type = MISSION_TYPES.REACH_ZONE;
+  else type = MISSION_TYPES.SPECIAL_TARGET;
 
   let target = 8;
   let title = missionTitle(type);
   let targetEnemyType = null;
   let targetEnemyLabel = null;
-  let rewardFactor = type === MISSION_TYPES.DESTROY ? 9 : type === MISSION_TYPES.TRAVEL ? 11 : 7;
+  let rewardFactor = type === MISSION_TYPES.DESTROY ? 9 : type === MISSION_TYPES.TRAVEL ? 11 : type === MISSION_TYPES.REACH_ZONE ? 10 : type === MISSION_TYPES.SPECIAL_TARGET ? 26 : 7;
+
+  let targetObjectType = null;
+  let targetWorldX = null;
+  let targetWorldY = null;
+  let orbitDistance = 0;
+  let specialTargetType = null;
+  let specialTargetName = null;
+  let specialSpawnAngle = null;
 
   if (type === MISSION_TYPES.DESTROY) {
     const classRoll = missionDeterministicRand(seedBase + 9.13);
     const classIndex = Math.min(
-      MISSION_ENEMY_CLASS_DEFS.length - 1,
-      Math.floor(classRoll * MISSION_ENEMY_CLASS_DEFS.length),
+      MISSION_DESTROY_POOL.length - 1,
+      Math.floor(classRoll * MISSION_DESTROY_POOL.length),
     );
-    const classDef = MISSION_ENEMY_CLASS_DEFS[classIndex];
-    targetEnemyType = classDef.type;
+    const classDef = MISSION_DESTROY_POOL[classIndex];
+    if (classDef.isObject) {
+      targetObjectType = classDef.type;
+    } else {
+      targetEnemyType = classDef.type;
+    }
     targetEnemyLabel = classDef.label;
     title = `Zerstoere ${classDef.label}`;
     target = classDef.minTarget + Math.floor(targetRoll * classDef.targetSpan);
     rewardFactor = classDef.rewardFactor;
   } else if (type === MISSION_TYPES.TRAVEL) {
-    target = 6 + Math.floor(targetRoll * 7);
+    target = 4500 + Math.floor(targetRoll * 5500);
+  } else if (type === MISSION_TYPES.REACH_ZONE) {
+    const angleRoll = missionDeterministicRand(seedBase + 6.91);
+    const radiusRoll = missionDeterministicRand(seedBase + 11.47);
+    const radius = 3400 + Math.floor(radiusRoll * 9600);
+    const angle = angleRoll * Math.PI * 2;
+    targetWorldX = Math.round(Math.cos(angle) * radius);
+    targetWorldY = Math.round(Math.sin(angle) * radius);
+    orbitDistance = radius;
+    target = 200;
+    title = "Erreiche Zone/Orbit";
+  } else if (type === MISSION_TYPES.SPECIAL_TARGET) {
+    const eliteRoll = missionDeterministicRand(seedBase + 15.33);
+    specialTargetType = eliteRoll < 0.56 ? "alienShip" : "miniAlien";
+    specialTargetName = specialTargetType === "alienShip" ? "Elite-Schiff" : "Elite-Mini-Alien";
+    specialSpawnAngle = missionDeterministicRand(seedBase + 13.77) * Math.PI * 2;
+    target = 1;
+    title = `Zerstoere ${specialTargetName}`;
   } else {
     target = 35 + Math.floor(targetRoll * 35);
   }
 
-  const rewardScore = Math.round(80 + target * rewardFactor);
+  let rewardScore = Math.round(80 + target * rewardFactor);
+  if (type === MISSION_TYPES.REACH_ZONE) {
+    rewardScore = Math.round(180 + orbitDistance * 0.03 + target * 0.09);
+  }
+
+  return {
+    type,
+    title,
+    unit: missionUnitLabel(type),
+    target,
+    rewardScore,
+    targetEnemyType,
+    targetEnemyLabel,
+    targetObjectType,
+    targetWorldX,
+    targetWorldY,
+    specialTargetType,
+    specialTargetName,
+    specialSpawnAngle,
+  };
+}
+
+function missionDifficultyScale() {
+  const shipX = state.ship && Number.isFinite(state.ship.worldX) ? state.ship.worldX : (state.world.playerX || 0);
+  const shipY = state.ship && Number.isFinite(state.ship.worldY) ? state.ship.worldY : (state.world.playerY || 0);
+  const distFromSpawn = Math.hypot(shipX, shipY);
+  const bossNorm = Math.max(0, Math.min(1, (state.bossLevelsCleared || 0) / 8));
+  const distNorm = Math.max(0, Math.min(1, distFromSpawn / 22000));
+
+  return {
+    targetMult: 1 + bossNorm * 0.45 + distNorm * 0.35,
+    rewardMult: 1 + bossNorm * 0.55 + distNorm * 0.45,
+    eliteHpMult: 1 + bossNorm * 0.5 + distNorm * 0.4,
+    eliteSpeedMult: 1 + bossNorm * 0.16 + distNorm * 0.12,
+  };
+}
+
+function assignNextMission(now = state.time, showToast = false) {
+  const serial = (state.missions.serial || 0) + 1;
+  state.missions.serial = serial;
+  if (!Array.isArray(state.missions.offers)) {
+    state.missions.offers = [];
+  }
+
+  if (!state.missions.offers[serial - 1]) {
+    state.missions.offers[serial - 1] = createMissionOffer(serial);
+  }
+
+  const offer = state.missions.offers[serial - 1];
+  let type = offer.type;
+  let title = offer.title;
+  let target = offer.target;
+  const targetEnemyType = offer.targetEnemyType;
+  const targetEnemyLabel = offer.targetEnemyLabel;
+  const targetObjectType = offer.targetObjectType;
+  const targetWorldX = offer.targetWorldX;
+  const targetWorldY = offer.targetWorldY;
+  let specialTargetObjectId = null;
+  let rewardScore = offer.rewardScore;
+  const difficultyScale = missionDifficultyScale();
+
+  if (!state.missions.chain) {
+    state.missions.chain = { active: false, total: 0, nextStep: 1 };
+  }
+
+  if (!state.missions.chain.active) {
+    const runSeed = Number.isFinite(state.missions.runSeed) ? state.missions.runSeed : (state.worldSeed || 1);
+    const chainRoll = missionDeterministicRand(runSeed * 0.0019 + serial * 8.31 + 91.17);
+    if (chainRoll < 0.32) {
+      const lenRoll = missionDeterministicRand(runSeed * 0.0021 + serial * 9.47 + 103.7);
+      state.missions.chain.active = true;
+      state.missions.chain.total = lenRoll < 0.56 ? 2 : 3;
+      state.missions.chain.nextStep = 1;
+    }
+  }
+
+  let chainStep = 0;
+  let chainTotal = 0;
+  let chainRewardMult = 1;
+  if (state.missions.chain.active) {
+    chainStep = Math.max(1, state.missions.chain.nextStep || 1);
+    chainTotal = Math.max(chainStep, state.missions.chain.total || 1);
+    chainRewardMult = 1 + (chainStep - 1) * 0.35;
+    title = `Kette ${chainStep}/${chainTotal}: ${title}`;
+  }
+
+  if (type === MISSION_TYPES.DESTROY || type === MISSION_TYPES.TRAVEL || type === MISSION_TYPES.SURVIVE) {
+    target = Math.max(1, Math.floor(target * difficultyScale.targetMult));
+  }
+  rewardScore = Math.max(10, Math.floor(rewardScore * difficultyScale.rewardMult));
+  rewardScore = Math.max(10, Math.floor(rewardScore * chainRewardMult));
+
+  if (type === MISSION_TYPES.SPECIAL_TARGET) {
+    const eliteType = offer.specialTargetType;
+    const spawnAngle = offer.specialSpawnAngle;
+    const runSeed = Number.isFinite(state.missions.runSeed) ? state.missions.runSeed : (state.worldSeed || 1);
+    const seedBase = runSeed * 0.001 + serial * 17.131;
+    let randTick = 0;
+    const deterministicSpawnRand = () => {
+      randTick += 1;
+      return missionDeterministicRand(seedBase + 19.1 + randTick * 1.73);
+    };
+    const spawned = encounters && typeof encounters.spawnObject === "function"
+      ? encounters.spawnObject({
+        rand: deterministicSpawnRand,
+        forceType: eliteType,
+        systemInterior: true,
+        angle: spawnAngle,
+        spawnPadding: 96,
+      })
+      : null;
+
+    if (spawned && spawned.enemy) {
+      spawned.missionSpecialTarget = true;
+      spawned.aggroLocked = true;
+      spawned.aggroUntil = state.time + 120;
+      spawned.hp = Math.max(spawned.hp + 8, Math.floor(spawned.hp * 2.8 * difficultyScale.eliteHpMult));
+      spawned.maxHp = spawned.hp;
+      spawned.size *= 1.16;
+      spawned.collisionRadius *= 1.14;
+      spawned.chaseSpeed *= 1.08 * difficultyScale.eliteSpeedMult;
+      specialTargetObjectId = spawned.id;
+    }
+  }
 
   state.missions.active = {
     id: `mission-${serial}`,
@@ -480,18 +989,35 @@ function assignNextMission(now = state.time, showToast = false) {
     startKillsByType: {
       miniAlien: Number((state.killStatsByType && state.killStatsByType.miniAlien) || 0),
       alienShip: Number((state.killStatsByType && state.killStatsByType.alienShip) || 0),
+      smallRock: Number((state.killStatsByType && state.killStatsByType.smallRock) || 0),
+      mediumRock: Number((state.killStatsByType && state.killStatsByType.mediumRock) || 0),
+      boulder: Number((state.killStatsByType && state.killStatsByType.boulder) || 0),
+      debris: Number((state.killStatsByType && state.killStatsByType.debris) || 0),
     },
     targetEnemyType,
     targetEnemyLabel,
+    targetObjectType,
+    targetWorldX,
+    targetWorldY,
+    currentDistance: null,
+    specialTargetObjectId,
+    chainStep,
+    chainTotal,
+    chainRewardMult,
+    progressLogBucket: 0,
+    failConditions: buildMissionFailConditions(type, target, now),
+    failReason: "",
     completed: false,
     completedUntil: 0,
     startedAt: now,
   };
 
+  pushMissionLog(`Neue Mission: ${state.missions.active.title}`);
+
   if (showToast && state.options && state.options.missionToastEnabled !== false) {
     const m = state.missions.active;
     const toastDuration = 4.0;
-    const unitStr = m.unit === "Chunks" || m.unit === "Sek"
+    const unitStr = m.unit === "Sek"
       ? `${m.target} ${m.unit}`
       : `${m.target} ${m.unit}`;
     state.missionToast = {
@@ -517,37 +1043,141 @@ function updateMissions(dt, movedWorldDistance) {
     return;
   }
 
+  if (mission.failed) {
+    if (state.time >= mission.failedUntil) {
+      const reason = mission.failReason ? ` (${mission.failReason})` : "";
+      pushMissionLog(`Mission fehlgeschlagen: ${mission.title}${reason}`);
+      state.missions.chain.active = false;
+      state.missions.chain.total = 0;
+      state.missions.chain.nextStep = 1;
+      assignNextMission(state.time, true);
+    }
+    return;
+  }
+
   if (mission.type === MISSION_TYPES.TRAVEL) {
-    const chunkSize = worldSystem.chunkSize || WORLD_CHUNK_SIZE || 960;
-    mission.progress += Math.max(0, movedWorldDistance / chunkSize);
+    mission.progress += Math.max(0, movedWorldDistance);
   } else if (mission.type === MISSION_TYPES.SURVIVE) {
     mission.progress += dt;
+  } else if (mission.type === MISSION_TYPES.REACH_ZONE) {
+    const shipX = state.ship && Number.isFinite(state.ship.worldX) ? state.ship.worldX : state.world.playerX;
+    const shipY = state.ship && Number.isFinite(state.ship.worldY) ? state.ship.worldY : state.world.playerY;
+    const dx = shipX - mission.targetWorldX;
+    const dy = shipY - mission.targetWorldY;
+    const distance = Math.hypot(dx, dy);
+    mission.currentDistance = distance;
+    mission.progress = distance <= mission.target ? mission.target : 0;
+  } else if (mission.type === MISSION_TYPES.SPECIAL_TARGET) {
+    const targetObj = state.objects.find((obj) => obj && obj.id === mission.specialTargetObjectId);
+    if (!targetObj || targetObj.destroyed || targetObj.hp <= 0) {
+      mission.progress = 1;
+    } else {
+      mission.progress = 0;
+    }
   }
 
   const value = missionProgressValue(mission);
+  const failReason = missionFailReason(mission, value);
+  if (failReason) {
+    mission.failed = true;
+    mission.failedUntil = state.time + 2.2;
+    mission.failReason = failReason;
+    return;
+  }
+
+  if (mission.target > 0 && !mission.completed && !mission.failed) {
+    const pct = Math.max(0, Math.min(0.999, value / mission.target));
+    const bucket = Math.floor(pct * 4);
+    if (bucket > (mission.progressLogBucket || 0)) {
+      mission.progressLogBucket = bucket;
+      pushMissionLog(`${mission.title}: ${Math.floor(pct * 100)}%`);
+    }
+  }
   if (value < mission.target) return;
 
   mission.completed = true;
   mission.completedUntil = state.time + 2.2;
-  scoring.addPoints(mission.rewardScore);
+  grantMissionCompletionRewards(mission);
+  pushMissionLog(`Mission geschafft: ${mission.title}`);
+
+  if (mission.chainTotal > 1) {
+    if (mission.chainStep < mission.chainTotal) {
+      state.missions.chain.active = true;
+      state.missions.chain.total = mission.chainTotal;
+      state.missions.chain.nextStep = mission.chainStep + 1;
+    } else {
+      state.missions.chain.active = false;
+      state.missions.chain.total = 0;
+      state.missions.chain.nextStep = 1;
+    }
+  }
+}
+
+function areMissionUpdatesBlockedByOverlay() {
+  return state.levelUpPending === true
+    || state.bossRewardPending === true
+    || state.pauseReason === "levelup"
+    || state.pauseReason === "bossreward";
 }
 
 function missionHudText() {
   const mission = state.missions.active;
   if (!mission) return "Mission: -";
 
+  if (mission.failed) {
+    return "Mission fehlgeschlagen";
+  }
+
   if (mission.completed) {
     return `Mission abgeschlossen: +${mission.rewardScore} Punkte`;
   }
 
+  if (mission.type === MISSION_TYPES.REACH_ZONE) {
+    const shipX = state.ship && Number.isFinite(state.ship.worldX) ? state.ship.worldX : state.world.playerX;
+    const shipY = state.ship && Number.isFinite(state.ship.worldY) ? state.ship.worldY : state.world.playerY;
+    const dx = shipX - mission.targetWorldX;
+    const dy = shipY - mission.targetWorldY;
+    const distance = Number.isFinite(mission.currentDistance)
+      ? mission.currentDistance
+      : Math.hypot(dx, dy);
+    const sx = mission.targetWorldX >= 0 ? "+" : "";
+    const sy = mission.targetWorldY >= 0 ? "+" : "";
+    return `Mission: ${mission.title} Dist ${Math.floor(distance)} <= ${Math.floor(mission.target)} WU @ ${sx}${Math.floor(mission.targetWorldX)}, ${sy}${Math.floor(mission.targetWorldY)} (+${mission.rewardScore})`;
+  }
+
+  if (mission.type === MISSION_TYPES.SPECIAL_TARGET) {
+    const targetObj = state.objects.find((obj) => obj && obj.id === mission.specialTargetObjectId);
+    if (!targetObj || targetObj.destroyed || targetObj.hp <= 0) {
+      return `Mission: ${mission.title} [eliminiert] (+${mission.rewardScore})`;
+    }
+    const shipX = state.ship && Number.isFinite(state.ship.worldX) ? state.ship.worldX : state.world.playerX;
+    const shipY = state.ship && Number.isFinite(state.ship.worldY) ? state.ship.worldY : state.world.playerY;
+    const distance = Math.hypot((targetObj.worldX || 0) - shipX, (targetObj.worldY || 0) - shipY);
+    return `Mission: ${mission.title} Dist ${Math.floor(distance)} WU (+${mission.rewardScore})`;
+  }
+
   const value = missionProgressValue(mission);
-  const shown = mission.unit === "Chunks" || mission.unit === "Sek"
+  const shown = mission.unit === "Sek"
     ? value.toFixed(1)
     : `${Math.floor(value)}`;
-  const targetShown = mission.unit === "Chunks" || mission.unit === "Sek"
+  const targetShown = mission.unit === "Sek"
     ? mission.target.toFixed(1)
-    : `${mission.target}`;
-  return `Mission: ${mission.title} ${shown}/${targetShown} ${mission.unit} (+${mission.rewardScore})`;
+    : `${Math.floor(mission.target)}`;
+  const missionText = `Mission: ${mission.title} ${shown}/${targetShown} ${mission.unit} (+${mission.rewardScore})`;
+  const failText = missionFailStatusText(mission);
+  const ch = state.runChallenge;
+  if (ch && !ch.completed && !ch.failed) {
+    const challengeShown = ch.unit === "Sek" ? ch.progress.toFixed(1) : `${Math.floor(ch.progress)}`;
+    const challengeTarget = ch.unit === "Sek" ? ch.target.toFixed(1) : `${Math.floor(ch.target)}`;
+    if (failText) {
+      return `${missionText} | Fail: ${failText} | CH: ${challengeShown}/${challengeTarget} ${ch.unit}`;
+    }
+    return `${missionText} | CH: ${challengeShown}/${challengeTarget} ${ch.unit}`;
+  }
+  if (failText) {
+    return `${missionText} | Fail: ${failText}`;
+  }
+  return missionText;
 }
 
 const BOSS_LOOT_DEFS = [
@@ -1160,7 +1790,12 @@ const cameraSystem = createCameraSystem({
 });
 
 function reloadRate() {
-  return state.shipStats ? state.shipStats.reloadRate : 1;
+  const base = state.shipStats ? state.shipStats.reloadRate : 1;
+  const buff = state.missionRewardBuff;
+  if (buff && state.time < buff.until) {
+    return base * Math.max(1, buff.reloadMult || 1);
+  }
+  return base;
 }
 
 function effectiveRocketCooldown() {
@@ -1333,8 +1968,17 @@ function resetGame() {
   state.levelUpPending = false;
   state.score = 0;
   state.kills = 0;
+  state.shipHitsTaken = 0;
   state.killStatsByType.miniAlien = 0;
   state.killStatsByType.alienShip = 0;
+  state.killStatsByType.smallRock = 0;
+  state.killStatsByType.mediumRock = 0;
+  state.killStatsByType.boulder = 0;
+  state.killStatsByType.debris = 0;
+  state.runStats.distanceWU = 0;
+  state.runStats.topSpeedWU = 0;
+  state.runStats.exploredChunks = Object.create(null);
+  state.runStats.exploredChunksCount = 0;
   state.time = 0;
   state.realNow = performance.now() / 1000;
   state.level = 1;
@@ -1363,7 +2007,15 @@ function resetGame() {
   state.bossRewardPending = false;
   state.pendingBossRewards = [];
   state.bossLootTaken = {};
+  state.missionRerollTokens = 0;
+  state.missionRewardBuff = null;
+  state.missionLog = [];
   state.missions.serial = 0;
+  state.missions.runSeed = state.worldSeed;
+  state.missions.offers = [];
+  state.missions.chain.active = false;
+  state.missions.chain.total = 0;
+  state.missions.chain.nextStep = 1;
   state.missions.active = null;
   worldSystem.setSeed(state.worldSeed);
   encounters.resetChunkSpawns();
@@ -1454,6 +2106,7 @@ function resetGame() {
 
   state.world.playerX = state.ship.worldX;
   state.world.playerY = state.ship.worldY;
+  trackExploredChunk(state.ship.worldX, state.ship.worldY);
   cameraSystem.snap(state.ship.worldX, state.ship.worldY);
   worldSystem.update(state.ship.worldX, state.ship.worldY);
 
@@ -1482,6 +2135,7 @@ function resetGame() {
   }
 
   progression.initializeWeaponLevelsFromLoadout();
+  assignRunChallenge(0);
   assignNextMission(0, true);
 
   overlay.classList.add("hidden");
@@ -1543,9 +2197,47 @@ function refreshHud() {
   if (musicStatusEl) {
     musicStatusEl.textContent = state.musicEnabled ? "An (M)" : "Aus (M)";
   }
+  if (exploredChunksStatEl) {
+    exploredChunksStatEl.textContent = `${Math.max(0, state.runStats.exploredChunksCount || 0)}`;
+  }
+  if (enemyKillsByTypeStatEl) {
+    const mini = Math.max(0, Number((state.killStatsByType && state.killStatsByType.miniAlien) || 0));
+    const ships = Math.max(0, Number((state.killStatsByType && state.killStatsByType.alienShip) || 0));
+    enemyKillsByTypeStatEl.textContent = `Mini ${mini} | Schiff ${ships}`;
+  }
+  if (topSpeedStatEl) {
+    topSpeedStatEl.textContent = `${Math.floor(Math.max(0, state.runStats.topSpeedWU || 0))} WU/s`;
+  }
+  if (distanceStatEl) {
+    distanceStatEl.textContent = `${Math.floor(Math.max(0, state.runStats.distanceWU || 0))} WU`;
+  }
 
-  if (missionStatusEl) {
-    missionStatusEl.textContent = missionHudText();
+  if (missionWidgetTitleEl && missionWidgetProgressEl) {
+    const mission = state.missions && state.missions.active;
+    if (!mission) {
+      missionWidgetTitleEl.textContent = "Keine aktive Mission";
+      missionWidgetProgressEl.textContent = "Nimm eine Mission im Pause-Menue an.";
+    } else {
+      missionWidgetTitleEl.textContent = mission.title;
+      if (mission.failed) {
+        missionWidgetProgressEl.textContent = "Fehlgeschlagen";
+      } else if (mission.completed) {
+        missionWidgetProgressEl.textContent = `Abgeschlossen (+${mission.rewardScore})`;
+      } else if (mission.type === MISSION_TYPES.REACH_ZONE) {
+        const distance = Number.isFinite(mission.currentDistance) ? mission.currentDistance : 0;
+        missionWidgetProgressEl.textContent = `${Math.floor(distance)} / ${Math.floor(mission.target)} WU`;
+      } else {
+        const value = missionProgressValue(mission);
+        const shown = mission.unit === "Sek" ? value.toFixed(1) : `${Math.floor(value)}`;
+        const targetShown = mission.unit === "Sek" ? mission.target.toFixed(1) : `${Math.floor(mission.target)}`;
+        missionWidgetProgressEl.textContent = `${shown} / ${targetShown} ${mission.unit}`;
+      }
+
+      const failText = missionFailStatusText(mission);
+      if (failText && !mission.failed && !mission.completed) {
+        missionWidgetProgressEl.textContent += ` | ${failText}`;
+      }
+    }
   }
 
   if (!state.shield.unlocked) {
@@ -1568,6 +2260,18 @@ function refreshHud() {
 }
 
 function setGameOver() {
+  if (state.runChallenge && !state.runChallenge.completed) {
+    state.runChallenge.failed = true;
+    pushMissionLog(`Challenge fehlgeschlagen: ${state.runChallenge.title}`);
+  }
+
+  const mission = state.missions && state.missions.active;
+  if (mission && mission.type === MISSION_TYPES.SURVIVE && !mission.completed && !mission.failed) {
+    mission.failed = true;
+    mission.failReason = "Tod";
+    mission.failedUntil = state.time + 2.2;
+  }
+
   state.running = false;
   state.gameOver = true;
   state.pauseReason = "gameover";
@@ -2046,7 +2750,11 @@ function update(dt, now) {
   }
 
   const movedDistance = Math.hypot(ship.worldX - beforeMoveWorldX, ship.worldY - beforeMoveWorldY);
-  updateMissions(dt, movedDistance);
+  updateRunStats(movedDistance, Math.hypot(ship.vx || 0, ship.vy || 0));
+  if (!areMissionUpdatesBlockedByOverlay()) {
+    updateMissions(dt, movedDistance);
+    updateRunChallenge(dt, movedDistance);
+  }
 
   const desktopAutoShooting = state.desktopAutoFire && !IS_COARSE_POINTER && state.mouseInCanvas;
   if (input.shooting || desktopAutoShooting) weapons.shootAtCursor(now);
@@ -2286,9 +2994,17 @@ function handleOverlayAction(actionNode) {
     const musicSlider = overlay.querySelector("#musicVolumeSlider");
     const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
     const toastToggle = overlay.querySelector("#missionToastToggle");
+    const dailyChallengeToggle = overlay.querySelector("#dailyChallengeToggle");
+    const failTimeToggle = overlay.querySelector("#missionFailTimeToggle");
+    const failHitToggle = overlay.querySelector("#missionFailHitToggle");
+    const failNoHitToggle = overlay.querySelector("#missionFailNoHitToggle");
     if (musicSlider) state.options.musicVolume = Math.max(0, Math.min(1, Number(musicSlider.value) / 100));
     if (sfxSlider) state.options.sfxVolume = Math.max(0, Math.min(1, Number(sfxSlider.value) / 100));
     if (toastToggle) state.options.missionToastEnabled = toastToggle.checked;
+    if (dailyChallengeToggle) state.options.dailyRunChallengesEnabled = dailyChallengeToggle.checked;
+    if (failTimeToggle) state.options.missionFailExtraTimeLimit = failTimeToggle.checked;
+    if (failHitToggle) state.options.missionFailExtraHitLimit = failHitToggle.checked;
+    if (failNoHitToggle) state.options.missionFailExtraNoHit = failNoHitToggle.checked;
     const backAction = actionNode.dataset.back || "main-menu";
     menus.showOptionsMenu(backAction);
     return;
@@ -2298,6 +3014,10 @@ function handleOverlayAction(actionNode) {
     const musicSlider = overlay.querySelector("#musicVolumeSlider");
     const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
     const toastToggle = overlay.querySelector("#missionToastToggle");
+    const dailyChallengeToggle = overlay.querySelector("#dailyChallengeToggle");
+    const failTimeToggle = overlay.querySelector("#missionFailTimeToggle");
+    const failHitToggle = overlay.querySelector("#missionFailHitToggle");
+    const failNoHitToggle = overlay.querySelector("#missionFailNoHitToggle");
     if (musicSlider) {
       const v = Math.max(0, Math.min(1, Number(musicSlider.value) / 100));
       state.options.musicVolume = v;
@@ -2310,6 +3030,18 @@ function handleOverlayAction(actionNode) {
     }
     if (toastToggle) {
       state.options.missionToastEnabled = toastToggle.checked;
+    }
+    if (dailyChallengeToggle) {
+      state.options.dailyRunChallengesEnabled = dailyChallengeToggle.checked;
+    }
+    if (failTimeToggle) {
+      state.options.missionFailExtraTimeLimit = failTimeToggle.checked;
+    }
+    if (failHitToggle) {
+      state.options.missionFailExtraHitLimit = failHitToggle.checked;
+    }
+    if (failNoHitToggle) {
+      state.options.missionFailExtraNoHit = failNoHitToggle.checked;
     }
     const backAction = actionNode.dataset.back || "main-menu";
     if (backAction === "manual-pause") {
@@ -2394,6 +3126,11 @@ function handleOverlayAction(actionNode) {
     if (id) {
       progression.applyUpgrade(id);
     }
+  }
+
+  if (actionNode.dataset.action === "reroll-upgrades") {
+    progression.rerollLevelUpOptions();
+    return;
   }
 
   if (actionNode.dataset.action === "boss-reward") {

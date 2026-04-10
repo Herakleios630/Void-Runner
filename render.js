@@ -427,6 +427,55 @@
           continue;
         }
 
+        if (obj.type === "comet") {
+          const prevResolved = resolveBgWorldPosition(obj, state.time - 0.08);
+          const prevPos = cameraSystem.worldToScreen(prevResolved.x, prevResolved.y, obj.parallax, WORLD.width, WORLD.height);
+          let dirX = pos.x - prevPos.x;
+          let dirY = pos.y - prevPos.y;
+          let dirLen = Math.hypot(dirX, dirY);
+          if (dirLen < 0.001) {
+            const fallback = Number.isFinite(obj.cometAngle) ? obj.cometAngle : 0;
+            dirX = Math.cos(fallback);
+            dirY = Math.sin(fallback);
+            dirLen = 1;
+          }
+          dirX /= dirLen;
+          dirY /= dirLen;
+
+          const cometRadius = Math.max(2.8, obj.radius || 6.5);
+          const tailLength = Math.max(120, obj.tailLength || 420);
+          const hue = Number.isFinite(obj.hue) ? obj.hue : 204;
+          const tailSteps = IS_COARSE_POINTER ? 6 : 9;
+
+          for (let i = tailSteps; i >= 1; i -= 1) {
+            const t = i / tailSteps;
+            const tx = pos.x - dirX * tailLength * t;
+            const ty = pos.y - dirY * tailLength * t;
+            const alpha = Math.max(0.02, (1 - t) * (1 - t) * 0.26);
+            const rr = cometRadius * (0.22 + (1 - t) * 1.15);
+            ctx.fillStyle = `hsla(${hue}, 88%, 72%, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(tx, ty, rr, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          const glow = ctx.createRadialGradient(pos.x, pos.y, cometRadius * 0.2, pos.x, pos.y, cometRadius * 3.2);
+          glow.addColorStop(0, `hsla(${hue}, 100%, 92%, 0.98)`);
+          glow.addColorStop(0.35, `hsla(${hue}, 96%, 78%, 0.7)`);
+          glow.addColorStop(1, `hsla(${hue}, 95%, 70%, 0)`);
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, cometRadius * 3.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, cometRadius * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+
+          continue;
+        }
+
         if (obj.type === "galaxy") {
           ctx.save();
           ctx.translate(pos.x, pos.y);
@@ -1606,6 +1655,61 @@
       if (scannerJam > 0.25) {
         ctx.fillStyle = "rgba(170, 244, 170, 0.9)";
         ctx.fillText("SCANNER JAM", mapX + 42, mapY + mapSize - 8);
+      }
+
+      const mission = state.missions && state.missions.active;
+      if (mission && mission.type === "special-target" && !mission.completed && !mission.failed) {
+        const targetObj = state.objects.find((obj) => obj && obj.id === mission.specialTargetObjectId && !obj.destroyed && obj.hp > 0);
+        if (targetObj && Number.isFinite(targetObj.worldX) && Number.isFinite(targetObj.worldY)) {
+          const target = project(targetObj.worldX, targetObj.worldY);
+          const dist = Math.hypot((targetObj.worldX || 0) - centerX, (targetObj.worldY || 0) - centerY);
+
+          if (target.visible) {
+            const r = 4.4;
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 120, 106, 0.98)";
+            ctx.fillStyle = "rgba(255, 120, 106, 0.35)";
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(target.x, target.y - r);
+            ctx.lineTo(target.x + r, target.y);
+            ctx.lineTo(target.x, target.y + r);
+            ctx.lineTo(target.x - r, target.y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          } else {
+            const dx = (targetObj.worldX || 0) - centerX;
+            const dy = (targetObj.worldY || 0) - centerY;
+            const len = Math.hypot(dx, dy) || 1;
+            const nx = dx / len;
+            const ny = dy / len;
+            const inset = 10;
+            const px = Math.max(mapX + inset, Math.min(mapX + mapSize - inset, mapX + mapSize * 0.5 + nx * (mapSize * 0.5 - inset)));
+            const py = Math.max(mapY + inset, Math.min(mapY + mapSize - inset, mapY + mapSize * 0.5 + ny * (mapSize * 0.5 - inset)));
+            const a = Math.atan2(ny, nx);
+            const tip = 6;
+            const wing = 4;
+
+            ctx.save();
+            ctx.fillStyle = "rgba(255, 120, 106, 0.95)";
+            ctx.strokeStyle = "rgba(255, 222, 216, 0.95)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(px + Math.cos(a) * tip, py + Math.sin(a) * tip);
+            ctx.lineTo(px + Math.cos(a + 2.45) * wing, py + Math.sin(a + 2.45) * wing);
+            ctx.lineTo(px + Math.cos(a - 2.45) * wing, py + Math.sin(a - 2.45) * wing);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          ctx.fillStyle = "rgba(255, 168, 158, 0.95)";
+          ctx.font = "11px Trebuchet MS";
+          ctx.fillText(`TARGET ${Math.floor(dist)} WU`, mapX + 7, mapY + mapSize - 21);
+        }
       }
     }
 
