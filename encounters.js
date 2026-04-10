@@ -193,12 +193,9 @@
       const spawnRing = Math.max(WORLD.width, WORLD.height) * 0.64 + blueprint.size + (options.spawnPadding || 32);
       const spawnX = focusX + Math.cos(angle) * spawnRing;
       const spawnY = focusY + Math.sin(angle) * spawnRing;
-      const inboundDx = focusX - spawnX;
-      const inboundDy = focusY - spawnY;
-      const inboundLen = Math.hypot(inboundDx, inboundDy) || 1;
-      const inboundSpeed = isEnemy ? (120 + rand() * 45) * difficulty.objectSpeedMult : 0;
-      const vx = isEnemy ? (inboundDx / inboundLen) * inboundSpeed : 0;
-      const vy = isEnemy ? (inboundDy / inboundLen) * inboundSpeed : 0;
+      // Enemies should only commit toward the player after aggro lock, not on spawn.
+      const vx = 0;
+      const vy = 0;
       const rockProfile = blueprint.corners > 0 ? Array.from({ length: blueprint.corners }, () => 0.72 + rand() * 0.26) : null;
       const spawnWorld = screenToWorld(spawnX, spawnY);
 
