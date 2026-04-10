@@ -147,62 +147,106 @@
         });
       }
 
-      if (rand() < 0.32) {
-        const nearPlane = rand() < 0.35;
+      const hasPlanetarySystem = rand() < 0.16;
+      if (hasPlanetarySystem) {
         const orbitDirection = rand() < 0.5 ? -1 : 1;
-        const planet = {
+        const primaryPlanet = {
           type: "planet",
-          drawOrder: nearPlane ? 6 : 5,
-          parallax: nearPlane ? 0.7 : 0.33,
-          collidablePlane: nearPlane,
+          drawOrder: 6,
+          parallax: 0.7,
+          collidablePlane: true,
           x: originX + rand() * chunkSize,
           y: originY + rand() * chunkSize,
-          radius: nearPlane ? 36 + rand() * 48 : 22 + rand() * 28,
+          radius: 46 + rand() * 44,
           hue: Math.floor(rand() * 360),
         };
-        background.push(planet);
+        background.push(primaryPlanet);
 
-        if (nearPlane && rand() < 0.58) {
-          const stationCount = rand() < 0.35 ? 2 : 1;
+        const orbitalSpeedNear = 0.22 + rand() * 0.1;
+        const referenceOrbitRadius = primaryPlanet.radius * 1.5;
+        function orbitalAngularSpeed(orbitRadius, localScale = 1) {
+          const safeRadius = Math.max(1, orbitRadius);
+          const ratio = safeRadius / Math.max(1, referenceOrbitRadius);
+          const angular = orbitalSpeedNear * Math.pow(ratio, -1.5) * localScale;
+          return angular * orbitDirection;
+        }
+
+        let moonOrbitRadius = null;
+        if (rand() < 0.78) {
+          const moonRadius = Math.max(11, primaryPlanet.radius * (0.2 + rand() * 0.12));
+          moonOrbitRadius = primaryPlanet.radius * (2.65 + rand() * 1.1);
+          background.push({
+            type: "planet",
+            drawOrder: 6,
+            parallax: primaryPlanet.parallax,
+            collidablePlane: false,
+            orbitCx: primaryPlanet.x,
+            orbitCy: primaryPlanet.y,
+            orbitRadius: moonOrbitRadius,
+            orbitAngle: rand() * Math.PI * 2,
+            orbitSpeed: orbitalAngularSpeed(moonOrbitRadius, 0.92 + rand() * 0.14),
+            radius: moonRadius,
+            hue: Math.floor(rand() * 360),
+            isMoon: true,
+          });
+        }
+
+        if (rand() < 0.72) {
+          const stationCount = rand() < 0.22 ? 2 : 1;
+          const stationOrbitBase = primaryPlanet.radius * (1.5 + rand() * 0.45);
           for (let i = 0; i < stationCount; i += 1) {
-            const stationRadius = 10 + rand() * 7;
-            const stationHitRadius = 8 + rand() * 6;
+            const stationRadius = 11 + rand() * 8;
+            const stationHitRadius = 9 + rand() * 6;
             const collidableStation = stationRadius >= 14;
+            const stationOrbitRadius = stationOrbitBase + (rand() - 0.5) * primaryPlanet.radius * 0.25;
             background.push({
               type: "orbitalStation",
               drawOrder: 7,
-              parallax: planet.parallax,
+              parallax: primaryPlanet.parallax,
               collidablePlane: collidableStation,
-              orbitCx: planet.x,
-              orbitCy: planet.y,
-              orbitRadius: planet.radius * (1.45 + rand() * 1.25),
+              orbitCx: primaryPlanet.x,
+              orbitCy: primaryPlanet.y,
+              orbitRadius: stationOrbitRadius,
               orbitAngle: rand() * Math.PI * 2,
-              orbitSpeed: (0.08 + rand() * 0.18) * orbitDirection,
+              orbitSpeed: orbitalAngularSpeed(stationOrbitRadius, 0.95 + rand() * 0.12),
               radius: stationRadius,
               hitRadius: collidableStation ? stationHitRadius : 0,
             });
           }
         }
 
-        if (nearPlane && rand() < 0.52) {
-          const beltCount = 14 + Math.floor(rand() * 18);
-          const beltRadiusBase = planet.radius * (1.8 + rand() * 1.1);
+        if (rand() < 0.76) {
+          const beltCount = 16 + Math.floor(rand() * 18);
+          const outerBaseMultiplier = moonOrbitRadius ? (moonOrbitRadius / primaryPlanet.radius) + 0.9 : 3.8 + rand() * 0.7;
+          const beltRadiusBase = primaryPlanet.radius * outerBaseMultiplier;
           for (let i = 0; i < beltCount; i += 1) {
-            const beltJitter = (rand() - 0.5) * planet.radius * 0.8;
+            const beltJitter = (rand() - 0.5) * primaryPlanet.radius * 0.95;
+            const orbitRadius = Math.max(primaryPlanet.radius * 2.4, beltRadiusBase + beltJitter);
             background.push({
               type: "beltRock",
               drawOrder: 6,
-              parallax: planet.parallax,
-              orbitCx: planet.x,
-              orbitCy: planet.y,
-              orbitRadius: Math.max(planet.radius * 1.35, beltRadiusBase + beltJitter),
+              parallax: primaryPlanet.parallax,
+              orbitCx: primaryPlanet.x,
+              orbitCy: primaryPlanet.y,
+              orbitRadius,
               orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.25,
-              orbitSpeed: (0.12 + rand() * 0.22) * orbitDirection,
-              radius: 2.5 + rand() * 4.2,
-              alpha: 0.45 + rand() * 0.35,
+              orbitSpeed: orbitalAngularSpeed(orbitRadius, 0.9 + rand() * 0.12),
+              radius: 2.4 + rand() * 4,
+              alpha: 0.42 + rand() * 0.34,
             });
           }
         }
+      } else if (rand() < 0.06) {
+        background.push({
+          type: "planet",
+          drawOrder: 5,
+          parallax: 0.3,
+          collidablePlane: false,
+          x: originX + rand() * chunkSize,
+          y: originY + rand() * chunkSize,
+          radius: 22 + rand() * 26,
+          hue: Math.floor(rand() * 360),
+        });
       }
 
       background.sort((a, b) => a.drawOrder - b.drawOrder);
@@ -299,11 +343,26 @@
       };
     }
 
+    function getActiveChunkRects() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        out.push({
+          cx: chunk.cx,
+          cy: chunk.cy,
+          x: chunk.cx * chunkSize,
+          y: chunk.cy * chunkSize,
+          size: chunkSize,
+        });
+      }
+      return out;
+    }
+
     return {
       update,
       getBackgroundObjects,
       getCollidablePlanets,
       getOrbitalStations,
+      getActiveChunkRects,
       getDebugInfo,
       setSeed,
       getSeed,
