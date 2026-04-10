@@ -28,7 +28,7 @@
 
   function createWorldSystem(options = {}) {
     const chunkSize = typeof options.chunkSize === "number" ? options.chunkSize : 960;
-    const worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
+    let worldSeed = typeof options.worldSeed === "number" ? options.worldSeed : 94321;
     const activeRadius = typeof options.activeRadius === "number" ? options.activeRadius : 2;
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
 
@@ -165,6 +165,30 @@
       return out;
     }
 
+    function getCollidablePlanets() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type === "planet" && bg.collidablePlane) {
+            out.push(bg);
+          }
+        }
+      }
+      return out;
+    }
+
+    function setSeed(nextSeed) {
+      const numeric = Number.parseInt(nextSeed, 10);
+      if (!Number.isFinite(numeric)) return false;
+      worldSeed = Math.abs(Math.floor(numeric)) || 1;
+      activeChunks.clear();
+      return true;
+    }
+
+    function getSeed() {
+      return worldSeed;
+    }
+
     function getDebugInfo() {
       return {
         activeChunkCount: activeChunks.size,
@@ -176,9 +200,11 @@
     return {
       update,
       getBackgroundObjects,
+      getCollidablePlanets,
       getDebugInfo,
+      setSeed,
+      getSeed,
       chunkSize,
-      worldSeed,
     };
   }
 

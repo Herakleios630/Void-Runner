@@ -22,6 +22,7 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 ## Start
 1. Datei index.html im Browser oeffnen.
 2. Auf Spiel starten klicken.
+3. Optional im Schwierigkeitsmenue den Welt-Seed setzen (oder zufaellig generieren), um Welten reproduzierbar zu machen.
 
 ## Eigene Grafiken (Sprites)
 - Das Spiel laedt optional Bilder ueber [assets.js](assets.js).
