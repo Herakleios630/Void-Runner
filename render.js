@@ -36,7 +36,7 @@
       for (const obj of bgObjects) {
         let worldX = obj.x;
         let worldY = obj.y;
-        if (obj.type === "orbitalStation" || obj.type === "beltRock") {
+        if (Number.isFinite(obj.orbitCx) && Number.isFinite(obj.orbitCy) && Number.isFinite(obj.orbitRadius)) {
           const angle = (obj.orbitAngle || 0) + state.time * (obj.orbitSpeed || 0);
           worldX = (obj.orbitCx || 0) + Math.cos(angle) * (obj.orbitRadius || 0);
           worldY = (obj.orbitCy || 0) + Math.sin(angle) * (obj.orbitRadius || 0);
@@ -121,7 +121,8 @@
 
         if (obj.type === "planet") {
           const hue = obj.hue || 210;
-          const depth = Math.max(0, Math.min(1, ((obj.parallax || 0.33) - 0.33) / 0.37));
+          const effectiveParallax = obj.isMoon ? 0.62 : (obj.parallax || 0.33);
+          const depth = Math.max(0, Math.min(1, (effectiveParallax - 0.33) / 0.37));
           const atmThickness = radius * (0.04 + depth * 0.12);
           const atmAlpha = 0.16 + depth * 0.34;
 
@@ -707,6 +708,30 @@
       ctx.beginPath();
       ctx.arc(state.ship.x, state.ship.y, state.ship.radius, 0, Math.PI * 2);
       ctx.stroke();
+
+      const chunks = typeof worldSystem.getActiveChunkRects === "function" ? worldSystem.getActiveChunkRects() : [];
+      if (chunks.length > 0) {
+        ctx.strokeStyle = "rgba(132, 230, 255, 0.7)";
+        ctx.lineWidth = 1;
+        for (const chunk of chunks) {
+          const topLeft = cameraSystem.worldToScreen(chunk.x, chunk.y, 1, WORLD.width, WORLD.height);
+          const bottomRight = cameraSystem.worldToScreen(chunk.x + chunk.size, chunk.y + chunk.size, 1, WORLD.width, WORLD.height);
+          const width = bottomRight.x - topLeft.x;
+          const height = bottomRight.y - topLeft.y;
+          if (width <= 0 || height <= 0) continue;
+          if (topLeft.x > WORLD.width + 2 || topLeft.y > WORLD.height + 2 || bottomRight.x < -2 || bottomRight.y < -2) continue;
+          ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+        }
+      }
+
+      ctx.strokeStyle = "rgba(255, 78, 94, 0.6)";
+      ctx.lineWidth = 1;
+      for (const obj of state.objects) {
+        if (!obj.enemy || !(obj.aggroRange > 0)) continue;
+        ctx.beginPath();
+        ctx.arc(obj.x, obj.y, obj.aggroRange, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       ctx.strokeStyle = "rgba(255, 180, 106, 0.95)";
       for (const obj of state.objects) {
