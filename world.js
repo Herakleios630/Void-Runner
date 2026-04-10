@@ -221,8 +221,8 @@
         background.push(sun);
 
         const orbitDirection = rand() < 0.5 ? -1 : 1;
-        const orbitalSpeedNearSun = 0.1 + rand() * 0.06;
-        const referenceSunOrbit = Math.max(120, sun.radius * 2.1);
+        const orbitalSpeedNearSun = 0.095 + rand() * 0.05;
+        const referenceSunOrbit = Math.max(120, sun.radius * 2.2);
         function sunOrbitAngularSpeed(orbitRadius, localScale = 1) {
           const safeRadius = Math.max(1, orbitRadius);
           const ratio = safeRadius / referenceSunOrbit;
@@ -314,16 +314,18 @@
           }
         }
 
-        const orbitSlotCount = 3 + Math.floor(rand() * 3);
+        const orbitSlotCount = 3 + Math.floor(rand() * 2);
+        const shellBase = sun.radius * (2.2 + rand() * 0.25);
+        const shellSpacing = sun.radius * (1.15 + rand() * 0.22);
         for (let slot = 0; slot < orbitSlotCount; slot += 1) {
-          const orbitRadius = sun.radius * (2.1 + slot * 1.15 + rand() * 0.8);
+          const orbitRadius = shellBase + slot * shellSpacing + (rand() - 0.5) * sun.radius * 0.12;
           const slotAngle = rand() * Math.PI * 2;
-          const beltInsteadOfPlanet = rand() < (slot === 0 ? 0.12 : 0.28);
+          const beltInsteadOfPlanet = slot > 0 && rand() < (slot >= 2 ? 0.38 : 0.26);
 
           if (beltInsteadOfPlanet) {
-            const beltCount = 20 + Math.floor(rand() * 22);
+            const beltCount = 18 + Math.floor(rand() * 18);
             for (let i = 0; i < beltCount; i += 1) {
-              const jitter = (rand() - 0.5) * sun.radius * 0.85;
+              const jitter = (rand() - 0.5) * sun.radius * 0.36;
               const localOrbit = Math.max(sun.radius * 1.9, orbitRadius + jitter);
               background.push({
                 type: "beltRock",
@@ -341,7 +343,8 @@
             continue;
           }
 
-          const nearPlanePlanet = slot === 0 || rand() < 0.28;
+          const nearPlanePlanet = slot <= 1 || rand() < 0.24;
+          const shellScale = 1 - slot / Math.max(1, orbitSlotCount + 1);
           const planet = {
             type: "planet",
             drawOrder: nearPlanePlanet ? 6 : 5,
@@ -352,7 +355,7 @@
             orbitRadius,
             orbitAngle: slotAngle,
             orbitSpeed: sunOrbitAngularSpeed(orbitRadius, nearPlanePlanet ? 1 : 0.92 + rand() * 0.14),
-            radius: nearPlanePlanet ? 22 + rand() * 22 : 11 + rand() * 15,
+            radius: (nearPlanePlanet ? 20 + rand() * 18 : 10 + rand() * 13) * (0.8 + shellScale * 0.35),
             hue: Math.floor(rand() * 360),
           };
           planet.x = planet.orbitCx + Math.cos(planet.orbitAngle) * planet.orbitRadius;
