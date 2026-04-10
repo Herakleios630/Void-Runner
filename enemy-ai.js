@@ -56,6 +56,16 @@
         return;
       }
 
+      if (Number.isFinite(obj.patrolUntil) && state.time < obj.patrolUntil && Number.isFinite(obj.patrolHeading)) {
+        const patrolSpeed = Math.max(0, obj.patrolSpeed || obj.cruiseSpeed || 120);
+        const desiredVx = Math.cos(obj.patrolHeading) * patrolSpeed;
+        const desiredVy = Math.sin(obj.patrolHeading) * patrolSpeed;
+        const steer = Math.max(0.3, obj.steering || 0.9);
+        obj.vx += (desiredVx - obj.vx) * Math.min(1, steer * dt * 0.55);
+        obj.vy += (desiredVy - obj.vy) * Math.min(1, steer * dt * 0.55);
+        return;
+      }
+
       // Outside aggro, enemies should not actively home toward the player.
       const cruiseDamp = Math.max(0.94, 1 - dt * 0.18);
       obj.vx *= cruiseDamp;

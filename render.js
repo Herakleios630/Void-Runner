@@ -22,6 +22,8 @@
     let miniMapBeltRings = [];
     let miniMapToxicZones = [];
     let miniMapWormholes = [];
+    let miniMapLastCenterX = 0;
+    let miniMapLastCenterY = 0;
     const visualTuning = (window.VoidTuning && window.VoidTuning.VISUAL) || {};
     const STAR_VISIBILITY = Number.isFinite(visualTuning.starVisibility)
       ? Math.max(0.45, Math.min(2.5, visualTuning.starVisibility))
@@ -398,6 +400,87 @@
           continue;
         }
 
+        if (obj.type === "ionStormZone") {
+          const ionSeed = stableUnitFrom2(worldX, worldY, radius || 1);
+          const baseA = obj.colorA || "rgba(126, 210, 255, 0.2)";
+          const baseB = obj.colorB || "rgba(54, 78, 194, 0.08)";
+          const ionGrad = ctx.createRadialGradient(
+            pos.x,
+            pos.y,
+            radius * 0.14,
+            pos.x,
+            pos.y,
+            radius * 1.36
+          );
+          ionGrad.addColorStop(0, baseA);
+          ionGrad.addColorStop(0.65, baseB);
+          ionGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = ionGrad;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius * 1.36, 0, Math.PI * 2);
+          ctx.fill();
+
+          const flicker = 0.72 + 0.28 * Math.sin(state.time * (2 + ionSeed * 2.1));
+          ctx.strokeStyle = `rgba(142, 222, 255, ${(0.12 + flicker * 0.24).toFixed(3)})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius * (0.9 + flicker * 0.05), 0, Math.PI * 2);
+          ctx.stroke();
+
+          continue;
+        }
+
+        if (obj.type === "blackHoleZone") {
+          const baseR = Math.max(12, obj.radius || 40);
+          const horizonR = Math.max(8, obj.eventHorizonRadius || baseR * 0.5);
+          const seed = stableUnitFrom2(worldX, worldY, obj.swirlSeed || 0.5);
+          const pulse = 0.88 + 0.12 * Math.sin(state.time * (0.9 + seed * 1.2));
+
+          const lens = ctx.createRadialGradient(pos.x, pos.y, horizonR * 0.2, pos.x, pos.y, baseR * 2.4);
+          lens.addColorStop(0, "rgba(0, 0, 0, 0.95)");
+          lens.addColorStop(0.34, "rgba(8, 12, 26, 0.84)");
+          lens.addColorStop(0.72, "rgba(60, 94, 170, 0.16)");
+          lens.addColorStop(1, "rgba(0, 0, 0, 0)");
+          ctx.fillStyle = lens;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, baseR * 2.4, 0, Math.PI * 2);
+          ctx.fill();
+
+          const ringRot = state.time * (0.23 + seed * 0.32);
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(ringRot);
+          ctx.strokeStyle = `rgba(168, 214, 255, ${(0.26 + 0.16 * pulse).toFixed(3)})`;
+          ctx.lineWidth = Math.max(1.2, baseR * 0.07);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, baseR * 1.6, baseR * 0.56, 0.4, 0.2, Math.PI * 1.86);
+          ctx.stroke();
+          ctx.strokeStyle = `rgba(255, 176, 122, ${(0.16 + 0.12 * pulse).toFixed(3)})`;
+          ctx.lineWidth = Math.max(1, baseR * 0.05);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, baseR * 1.36, baseR * 0.44, 0.4, 0.1, Math.PI * 1.9);
+          ctx.stroke();
+          ctx.restore();
+
+          const arcCount = IS_COARSE_POINTER ? 3 : 5;
+          for (let i = 0; i < arcCount; i += 1) {
+            const t = i / Math.max(1, arcCount - 1);
+            const a0 = ringRot * 0.7 + t * Math.PI * 2 + seed * 2.7;
+            const rr = baseR * (1.2 + t * 0.9 + 0.08 * Math.sin(state.time * 1.4 + i));
+            ctx.strokeStyle = `rgba(112, 182, 255, ${(0.08 + (1 - t) * 0.1).toFixed(3)})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, rr, a0, a0 + 0.7 + (1 - t) * 0.3);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = "rgba(0, 0, 0, 0.98)";
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, horizonR, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+
         if (obj.type === "wormholePortal") {
           const pulse = 0.62 + 0.38 * Math.sin(state.time * 2.2 + stableUnitFrom2(worldX, worldY, radius || 1) * Math.PI * 2);
           const outer = (obj.radius || 26) * (1.1 + pulse * 0.14);
@@ -476,6 +559,67 @@
           continue;
         }
 
+        if (obj.type === "derelictStation") {
+          const rot = (obj.heading || 0) + state.time * 0.01;
+          const rr = Math.max(14, radius || 22);
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(rot);
+
+          ctx.strokeStyle = "rgba(156, 176, 201, 0.66)";
+          ctx.lineWidth = Math.max(1.2, rr * 0.08);
+          ctx.beginPath();
+          ctx.arc(0, 0, rr * 0.86, -0.25, Math.PI * 1.75);
+          ctx.stroke();
+
+          ctx.fillStyle = "rgba(74, 92, 116, 0.9)";
+          ctx.fillRect(-rr * 0.64, -rr * 0.2, rr * 1.05, rr * 0.4);
+          ctx.fillStyle = "rgba(128, 150, 176, 0.72)";
+          ctx.fillRect(-rr * 0.2, -rr * 0.66, rr * 0.34, rr * 1.12);
+
+          ctx.strokeStyle = "rgba(232, 142, 106, 0.55)";
+          ctx.beginPath();
+          ctx.moveTo(-rr * 0.1, -rr * 0.06);
+          ctx.lineTo(rr * 0.5, rr * 0.24);
+          ctx.stroke();
+
+          ctx.restore();
+          continue;
+        }
+
+        if (obj.type === "derelictWreck") {
+          const rot = (obj.heading || 0) - state.time * 0.008;
+          const rr = Math.max(12, radius || 18);
+          const partCount = Math.max(3, Math.min(9, obj.wreckCount || 5));
+
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(rot);
+
+          for (let i = 0; i < partCount; i += 1) {
+            const t = i / Math.max(1, partCount - 1);
+            const a = t * Math.PI * 2 + (obj.heading || 0) * 0.6;
+            const pr = rr * (0.3 + t * 0.9);
+            const px = Math.cos(a) * pr;
+            const py = Math.sin(a * 1.25) * pr * 0.72;
+            const w = rr * (0.26 + (1 - t) * 0.18);
+            const h = rr * (0.08 + t * 0.12);
+
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(a * 0.5);
+            ctx.fillStyle = "rgba(86, 104, 130, 0.84)";
+            ctx.fillRect(-w * 0.5, -h * 0.5, w, h);
+            ctx.strokeStyle = "rgba(164, 186, 214, 0.45)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-w * 0.5, -h * 0.5, w, h);
+            ctx.restore();
+          }
+
+          ctx.restore();
+          continue;
+        }
+
         if (obj.type === "galaxy") {
           ctx.save();
           ctx.translate(pos.x, pos.y);
@@ -496,12 +640,14 @@
         if (obj.type === "planet") {
           const hue = obj.hue || 210;
           const isGasGiant = Boolean(obj.isGasGiant);
+          const isRogueBody = Boolean(obj.isRogueBody);
           const effectiveParallax = obj.isMoon ? 0.62 : (obj.parallax || 0.33);
           const depth = Math.max(0, Math.min(1, (effectiveParallax - 0.33) / 0.37));
           const solidPlanet = Boolean(obj.collidablePlane);
           const bodyAlpha = solidPlanet ? 1 : (obj.isMoon ? 0.78 : 0.62);
           const atmThickness = radius * (0.04 + depth * 0.12);
-          const atmAlpha = (0.16 + depth * 0.34) * (solidPlanet ? 1 : 0.58);
+          const atmAlphaBase = (0.16 + depth * 0.34) * (solidPlanet ? 1 : 0.58);
+          const atmAlpha = isRogueBody ? atmAlphaBase * 0.3 : atmAlphaBase;
 
           // Enhanced Atmosphere with multiple layers for atmospheric scattering
           const atmosphere = ctx.createRadialGradient(pos.x, pos.y, Math.max(0, radius - atmThickness), pos.x, pos.y, radius + atmThickness * 2.2);
@@ -528,7 +674,11 @@
           }
 
           const grad = ctx.createRadialGradient(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.1, pos.x, pos.y, radius);
-          if (isGasGiant) {
+          if (isRogueBody) {
+            grad.addColorStop(0, `hsla(${hue}, 18%, 36%, ${0.88 * bodyAlpha})`);
+            grad.addColorStop(0.52, `hsla(${hue}, 16%, 19%, ${0.9 * bodyAlpha})`);
+            grad.addColorStop(1, `hsla(${hue}, 20%, 8%, ${0.94 * bodyAlpha})`);
+          } else if (isGasGiant) {
             grad.addColorStop(0, `hsla(${hue}, 78%, 70%, ${0.92 * bodyAlpha})`);
             grad.addColorStop(0.55, `hsla(${hue}, 56%, 46%, ${0.85 * bodyAlpha})`);
             grad.addColorStop(1, `hsla(${hue}, 42%, 28%, ${0.78 * bodyAlpha})`);
@@ -704,13 +854,13 @@
           }
 
           if (solidPlanet) {
-            ctx.strokeStyle = "rgba(255, 212, 128, 0.72)";
+            ctx.strokeStyle = isRogueBody ? "rgba(176, 196, 224, 0.38)" : "rgba(255, 212, 128, 0.72)";
             ctx.lineWidth = 2 + depth * 2;
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, radius * 1.05, 0.15, Math.PI * 1.85);
             ctx.stroke();
 
-            ctx.strokeStyle = "rgba(255, 120, 96, 0.48)";
+            ctx.strokeStyle = isRogueBody ? "rgba(106, 136, 180, 0.32)" : "rgba(255, 120, 96, 0.48)";
             ctx.lineWidth = 1.2 + depth * 0.8;
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, radius * 1.13, 0, Math.PI * 2);
@@ -1046,6 +1196,8 @@
           ? "enemy.miniAlien"
           : obj.type === "alienShip"
             ? "enemy.alienShip"
+            : obj.type === "mothership"
+              ? "enemy.alienShip"
             : obj.type === "smallRock"
               ? "rock.smallRock"
               : obj.type === "mediumRock"
@@ -1087,6 +1239,22 @@
 
         ctx.fillStyle = "#1b3b24";
         ctx.fillRect(-obj.size * 0.2, -obj.size * 0.15, obj.size * 0.38, obj.size * 0.3);
+      } else if (obj.type === "mothership") {
+        ctx.fillStyle = "#7de0b6";
+        ctx.beginPath();
+        ctx.moveTo(obj.size * 0.98, 0);
+        ctx.lineTo(obj.size * 0.35, obj.size * 0.28);
+        ctx.lineTo(-obj.size * 0.72, obj.size * 0.42);
+        ctx.lineTo(-obj.size * 0.9, 0);
+        ctx.lineTo(-obj.size * 0.72, -obj.size * 0.42);
+        ctx.lineTo(obj.size * 0.35, -obj.size * 0.28);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(24, 58, 42, 0.95)";
+        ctx.fillRect(-obj.size * 0.3, -obj.size * 0.18, obj.size * 0.72, obj.size * 0.36);
+        ctx.fillStyle = "rgba(186, 255, 216, 0.7)";
+        ctx.fillRect(-obj.size * 0.06, -obj.size * 0.12, obj.size * 0.28, obj.size * 0.24);
       } else {
         ctx.beginPath();
         const corners = obj.corners || (obj.type === "boulder" ? 11 : obj.type === "mediumRock" ? 9 : 8);
@@ -1103,6 +1271,8 @@
 
         if (obj.type === "smallRock") ctx.fillStyle = "#b8c4d4";
         else if (obj.type === "mediumRock") ctx.fillStyle = "#96a2b8";
+        else if (obj.type === "goldAsteroid") ctx.fillStyle = "#d6b86a";
+        else if (obj.type === "ironAsteroid") ctx.fillStyle = "#8a96a8";
         else if (obj.type === "rockShard") ctx.fillStyle = "#d5deea";
         else if (obj.type === "boulder") ctx.fillStyle = "#7b8496";
         else ctx.fillStyle = "#5c6474";
@@ -1281,10 +1451,16 @@
             ambush:       "rgba(255,  72,  72, 0.92)",
             drift:        "rgba( 80, 200, 255, 0.92)",
             trail:        "rgba(255, 200,  80, 0.92)",
+            meteor:       "rgba(176, 220, 255, 0.92)",
+            fleet:        "rgba(140, 255, 188, 0.92)",
+            faction:      "rgba(255, 170, 220, 0.92)",
           };
           const ZONE_LABEL = {
             system: "SYS", edge: "EDGE", interstellar: "VOID",
             ambush: "AMBUSH", drift: "DRIFT-FELD", trail: "SCHROTTSPUR",
+            meteor: "METEOR",
+            fleet: "FLEET",
+            faction: "FACTION",
           };
           ctx.font = "bold 10px monospace";
           ctx.textAlign = "center";
@@ -1404,7 +1580,14 @@
     }
 
     function refreshMiniMapCache() {
-      if (!state.ship || state.time < miniMapRefreshAt) return;
+      if (!state.ship) return;
+
+      const shipWorldX = Number.isFinite(state.ship.worldX) ? state.ship.worldX : 0;
+      const shipWorldY = Number.isFinite(state.ship.worldY) ? state.ship.worldY : 0;
+      const teleportRefreshDistance = (worldSystem.chunkSize || 960) * 3.5;
+      const centerJump = Math.hypot(shipWorldX - miniMapLastCenterX, shipWorldY - miniMapLastCenterY);
+      if (state.time < miniMapRefreshAt && centerJump < teleportRefreshDistance) return;
+
       miniMapRefreshAt = state.time + 0.24;
 
       const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
@@ -1473,11 +1656,29 @@
         }
       }
 
+      const distSqToShip = (p) => {
+        const dx = (p.x || 0) - shipWorldX;
+        const dy = (p.y || 0) - shipWorldY;
+        return dx * dx + dy * dy;
+      };
+
+      planetPoints.sort((a, b) => distSqToShip(a) - distSqToShip(b));
+      const orbitRingList = Array.from(orbitRings.values()).sort((a, b) => distSqToShip(a) - distSqToShip(b));
+      const beltRingList = Array.from(beltRings.values()).sort((a, b) => distSqToShip(a) - distSqToShip(b));
+      const toxicZoneList = toxicZones
+        .filter((z) => Number.isFinite(z.x) && Number.isFinite(z.y))
+        .sort((a, b) => distSqToShip(a) - distSqToShip(b));
+      const wormholeList = wormholes
+        .filter((w) => Number.isFinite(w.x) && Number.isFinite(w.y))
+        .sort((a, b) => distSqToShip(a) - distSqToShip(b));
+
       miniMapPlanetPoints = planetPoints.slice(0, 240);
-      miniMapOrbitRings = Array.from(orbitRings.values()).slice(0, 80);
-      miniMapBeltRings = Array.from(beltRings.values()).slice(0, 40);
-      miniMapToxicZones = toxicZones.slice(0, 36);
-      miniMapWormholes = wormholes.slice(0, 24);
+      miniMapOrbitRings = orbitRingList.slice(0, 80);
+      miniMapBeltRings = beltRingList.slice(0, 40);
+      miniMapToxicZones = toxicZoneList.slice(0, 36);
+      miniMapWormholes = wormholeList.slice(0, 24);
+      miniMapLastCenterX = shipWorldX;
+      miniMapLastCenterY = shipWorldY;
     }
 
     function drawMiniMap() {

@@ -67,10 +67,18 @@
       ? Math.max(0.5, Math.min(2.2, visualTuning.nebulaDensity))
       : 1;
     const TOXIC_NEBULA_CHANCE = 0.34;
+    const ION_STORM_CELL_CHUNKS = 16;
+    const ION_STORM_CHANCE = 0.2;
     const WORMHOLE_CHANCE = 0.2;
     const MAX_WORMHOLE_JUMP_CELLS = 12;
     const COMET_CELL_CHUNKS = 18;
     const COMET_CELL_CHANCE = 0.5;
+    const ROGUE_BODY_CELL_CHUNKS = 26;
+    const ROGUE_BODY_CHANCE = 0.08;
+    const DERELICT_CELL_CHUNKS = 20;
+    const DERELICT_CHANCE = 0.18;
+    const BLACK_HOLE_CELL_CHUNKS = 28;
+    const BLACK_HOLE_CHANCE = 0.09;
 
     const activeChunks = new Map();
     const wormholeOutgoingCache = new Map();
@@ -298,6 +306,78 @@
       return {
         x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.32),
         y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.32),
+        seed,
+      };
+    }
+
+    function getRogueBodyAnchorForChunk(cx, cy) {
+      const cellX = Math.floor(cx / ROGUE_BODY_CELL_CHUNKS);
+      const cellY = Math.floor(cy / ROGUE_BODY_CELL_CHUNKS);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x8c13de57);
+      const rand = createRng(seed);
+      if (rand() > ROGUE_BODY_CHANCE) return null;
+
+      const anchorCx = cellX * ROGUE_BODY_CELL_CHUNKS + Math.floor(ROGUE_BODY_CELL_CHUNKS * 0.5);
+      const anchorCy = cellY * ROGUE_BODY_CELL_CHUNKS + Math.floor(ROGUE_BODY_CELL_CHUNKS * 0.5);
+      if (cx !== anchorCx || cy !== anchorCy) return null;
+
+      return {
+        x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.34),
+        y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.34),
+        seed,
+      };
+    }
+
+    function getIonStormAnchorForChunk(cx, cy) {
+      const cellX = Math.floor(cx / ION_STORM_CELL_CHUNKS);
+      const cellY = Math.floor(cy / ION_STORM_CELL_CHUNKS);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x3c75b2a1);
+      const rand = createRng(seed);
+      if (rand() > ION_STORM_CHANCE) return null;
+
+      const anchorCx = cellX * ION_STORM_CELL_CHUNKS + Math.floor(ION_STORM_CELL_CHUNKS * 0.5);
+      const anchorCy = cellY * ION_STORM_CELL_CHUNKS + Math.floor(ION_STORM_CELL_CHUNKS * 0.5);
+      if (cx !== anchorCx || cy !== anchorCy) return null;
+
+      return {
+        x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.34),
+        y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.34),
+        seed,
+      };
+    }
+
+    function getDerelictAnchorForChunk(cx, cy) {
+      const cellX = Math.floor(cx / DERELICT_CELL_CHUNKS);
+      const cellY = Math.floor(cy / DERELICT_CELL_CHUNKS);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x55c9e213);
+      const rand = createRng(seed);
+      if (rand() > DERELICT_CHANCE) return null;
+
+      const anchorCx = cellX * DERELICT_CELL_CHUNKS + Math.floor(DERELICT_CELL_CHUNKS * 0.5);
+      const anchorCy = cellY * DERELICT_CELL_CHUNKS + Math.floor(DERELICT_CELL_CHUNKS * 0.5);
+      if (cx !== anchorCx || cy !== anchorCy) return null;
+
+      return {
+        x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.36),
+        y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.36),
+        seed,
+      };
+    }
+
+    function getBlackHoleAnchorForChunk(cx, cy) {
+      const cellX = Math.floor(cx / BLACK_HOLE_CELL_CHUNKS);
+      const cellY = Math.floor(cy / BLACK_HOLE_CELL_CHUNKS);
+      const seed = mixSeed(cellX, cellY, worldSeed ^ 0x72c9f14b);
+      const rand = createRng(seed);
+      if (rand() > BLACK_HOLE_CHANCE) return null;
+
+      const anchorCx = cellX * BLACK_HOLE_CELL_CHUNKS + Math.floor(BLACK_HOLE_CELL_CHUNKS * 0.5);
+      const anchorCy = cellY * BLACK_HOLE_CELL_CHUNKS + Math.floor(BLACK_HOLE_CELL_CHUNKS * 0.5);
+      if (cx !== anchorCx || cy !== anchorCy) return null;
+
+      return {
+        x: anchorCx * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.34),
+        y: anchorCy * chunkSize + chunkSize * (0.5 + (rand() - 0.5) * 0.34),
         seed,
       };
     }
@@ -584,6 +664,28 @@
             linkedX: wormholeLink.targetX,
             linkedY: wormholeLink.targetY,
             pairId: wormholeLink.pairId,
+          });
+        }
+
+        const solarCometRand = createRng(systemSeed ^ 0x4bf21c9d);
+        if (solarCometRand() < 0.16) {
+          const orbitA = chunkSize * (8.8 + solarCometRand() * 5.6);
+          const orbitB = orbitA * (0.45 + solarCometRand() * 0.24);
+          background.push({
+            type: "comet",
+            drawOrder: 6,
+            parallax: SYSTEM_PARALLAX,
+            cometCx: sun.x,
+            cometCy: sun.y,
+            cometPath: "elliptic",
+            cometA: orbitA,
+            cometB: orbitB,
+            cometAngle: solarCometRand() * Math.PI * 2,
+            cometSpeed: 0.0035 + solarCometRand() * 0.0048,
+            cometPhase: solarCometRand() * Math.PI * 2,
+            radius: 4.2 + solarCometRand() * 3.2,
+            hue: 188 + Math.floor(solarCometRand() * 42),
+            tailLength: chunkSize * (0.9 + solarCometRand() * 1.2),
           });
         }
 
@@ -881,6 +983,83 @@
         }
       }
 
+      if (!hasPlanetarySystem) {
+        const blackHoleAnchor = getBlackHoleAnchorForChunk(cx, cy);
+        if (blackHoleAnchor) {
+          const bRand = createRng(blackHoleAnchor.seed ^ 0x29c7a65d);
+          const radius = chunkSize * (0.075 + bRand() * 0.06);
+          const horizonRadius = radius * (0.44 + bRand() * 0.12);
+          const gravityRadius = radius * (5.2 + bRand() * 2.2);
+          background.push({
+            type: "blackHoleZone",
+            drawOrder: 4,
+            parallax: 0.3,
+            x: blackHoleAnchor.x,
+            y: blackHoleAnchor.y,
+            radius,
+            eventHorizonRadius: horizonRadius,
+            gravityRadius,
+            gravityPull: 190 + bRand() * 170,
+            playerPullScale: 0.55 + bRand() * 0.45,
+            swirlSeed: bRand(),
+          });
+        }
+
+        const ionStormAnchor = getIonStormAnchorForChunk(cx, cy);
+        if (ionStormAnchor) {
+          const iRand = createRng(ionStormAnchor.seed ^ 0x64a13f27);
+          const hazardRadius = chunkSize * (0.2 + iRand() * 0.16);
+          const scannerJam = 0.22 + iRand() * 0.26;
+          background.push({
+            type: "ionStormZone",
+            drawOrder: 7,
+            parallax: SYSTEM_PARALLAX,
+            x: ionStormAnchor.x,
+            y: ionStormAnchor.y,
+            radius: hazardRadius,
+            hazardRadius,
+            scannerJam,
+            projectileDrift: 24 + iRand() * 34,
+            colorA: `rgba(128, 208, 255, ${(0.12 + scannerJam * 0.14).toFixed(3)})`,
+            colorB: `rgba(52, 86, 198, ${(0.04 + scannerJam * 0.08).toFixed(3)})`,
+          });
+        }
+
+        const rogueAnchor = getRogueBodyAnchorForChunk(cx, cy);
+        if (rogueAnchor) {
+          const rRand = createRng(rogueAnchor.seed ^ 0x2f41b687);
+          background.push({
+            type: "planet",
+            drawOrder: 5,
+            parallax: SYSTEM_PARALLAX,
+            collidablePlane: true,
+            x: rogueAnchor.x,
+            y: rogueAnchor.y,
+            radius: chunkSize * (0.24 + rRand() * 0.38),
+            hue: 22 + Math.floor(rRand() * 18),
+            isGasGiant: rRand() < 0.42,
+            isRogueBody: true,
+          });
+        }
+
+        const derelictAnchor = getDerelictAnchorForChunk(cx, cy);
+        if (derelictAnchor) {
+          const dRand = createRng(derelictAnchor.seed ^ 0x1f9ba743);
+          const stationLike = dRand() < 0.62;
+          background.push({
+            type: stationLike ? "derelictStation" : "derelictWreck",
+            drawOrder: 7,
+            parallax: SYSTEM_PARALLAX,
+            x: derelictAnchor.x,
+            y: derelictAnchor.y,
+            radius: chunkSize * (stationLike ? (0.08 + dRand() * 0.08) : (0.06 + dRand() * 0.08)),
+            heading: dRand() * Math.PI * 2,
+            scrapLevel: 0.45 + dRand() * 0.5,
+            wreckCount: 4 + Math.floor(dRand() * 5),
+          });
+        }
+      }
+
       const cometAnchor = getCometAnchorForChunk(cx, cy);
       if (cometAnchor) {
         const cRand = createRng(cometAnchor.seed ^ 0x1ab7d42f);
@@ -1084,6 +1263,49 @@
       return out;
     }
 
+    function getIonStormZones() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "ionStormZone") continue;
+          out.push({
+            type: "ionStormZone",
+            x: bg.x,
+            y: bg.y,
+            parallax: bg.parallax || 1,
+            hazardRadius: bg.hazardRadius || bg.radius || 150,
+            scannerJam: bg.scannerJam || 0.32,
+            projectileDrift: bg.projectileDrift || 32,
+            colorA: bg.colorA,
+            colorB: bg.colorB,
+          });
+        }
+      }
+      return out;
+    }
+
+    function getBlackHoleZones() {
+      const out = [];
+      for (const chunk of activeChunks.values()) {
+        for (const bg of chunk.background) {
+          if (bg.type !== "blackHoleZone") continue;
+          out.push({
+            type: "blackHoleZone",
+            x: bg.x,
+            y: bg.y,
+            parallax: bg.parallax || 0.3,
+            radius: bg.radius || 54,
+            eventHorizonRadius: bg.eventHorizonRadius || Math.max(14, (bg.radius || 54) * 0.5),
+            gravityRadius: bg.gravityRadius || Math.max(120, (bg.radius || 54) * 5.5),
+            gravityPull: bg.gravityPull || 220,
+            playerPullScale: bg.playerPullScale || 0.8,
+            swirlSeed: bg.swirlSeed || 0.5,
+          });
+        }
+      }
+      return out;
+    }
+
     function getWormholePortals() {
       const out = [];
       for (const chunk of activeChunks.values()) {
@@ -1212,6 +1434,8 @@
       getOrbitalStations,
       getSolarHeatZones,
       getToxicNebulaZones,
+      getIonStormZones,
+      getBlackHoleZones,
       getWormholePortals,
       getNearestWormholePortal,
       resolveOrbitPosition,

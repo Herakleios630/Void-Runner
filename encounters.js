@@ -223,6 +223,23 @@
         corners = 11;
       }
 
+      if (type === "smallRock" || type === "mediumRock" || type === "boulder") {
+        const specialRoll = rand();
+        if (specialRoll < 0.018) {
+          type = "goldAsteroid";
+          size = Math.max(18, size * (0.84 + rand() * 0.22));
+          hp = Math.max(8, Math.round(hp * (1.1 + rand() * 0.3)));
+          collisionScale = 0.8;
+          corners = 10;
+        } else if (specialRoll < 0.04) {
+          type = "ironAsteroid";
+          size = Math.max(20, size * (0.9 + rand() * 0.22));
+          hp = Math.max(10, Math.round(hp * (1.18 + rand() * 0.34)));
+          collisionScale = 0.82;
+          corners = 10;
+        }
+      }
+
       return {
         type,
         size,
@@ -294,6 +311,36 @@
           corners: 8,
         };
       }
+      if (type === "goldAsteroid") {
+        return {
+          type,
+          size: 22 + rand() * 14,
+          hp: 12,
+          destructible: true,
+          collisionScale: 0.8,
+          corners: 10,
+        };
+      }
+      if (type === "ironAsteroid") {
+        return {
+          type,
+          size: 24 + rand() * 15,
+          hp: 14,
+          destructible: true,
+          collisionScale: 0.82,
+          corners: 10,
+        };
+      }
+      if (type === "mothership") {
+        return {
+          type,
+          size: 46 + rand() * 18,
+          hp: 38,
+          destructible: true,
+          collisionScale: 0.86,
+          corners: 0,
+        };
+      }
       return null;
     }
 
@@ -316,7 +363,7 @@
         systemInterior,
         systemInfluence: probeInfluence,
       });
-      const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
+      const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip" || blueprint.type === "mothership";
       const baseAggro = Math.min(WORLD.width, WORLD.height) * 0.5;
       const aggroRange = baseAggro * (0.8 + rand() * 0.4);
       const disengageRange = aggroRange * (1.55 + rand() * 0.3);
@@ -325,12 +372,15 @@
       const spawnX = focusX + Math.cos(angle) * spawnRing;
       const spawnY = focusY + Math.sin(angle) * spawnRing;
       // Enemies should only commit toward the player after aggro lock, not on spawn.
-      const vx = 0;
-      const vy = 0;
+      const vx = Number.isFinite(options.initialVx) ? options.initialVx : 0;
+      const vy = Number.isFinite(options.initialVy) ? options.initialVy : 0;
       const rockProfile = blueprint.corners > 0 ? Array.from({ length: blueprint.corners }, () => 0.72 + rand() * 0.26) : null;
       const spawnWorld = screenToWorld(spawnX, spawnY);
       const spawnInfluence = getGameplaySystemInfluence(spawnWorld.x, spawnWorld.y);
-      const enemyWeapon = isEnemy ? selectEnemyWeapon(blueprint.type, rand) : null;
+      let enemyWeapon = isEnemy ? selectEnemyWeapon(blueprint.type, rand) : null;
+      if (blueprint.type === "mothership") {
+        enemyWeapon = rand() < 0.5 ? "rocket" : "plasma";
+      }
 
       const spawnedObj = {
         id: nextObjectId(),
@@ -357,17 +407,162 @@
         aggroRange: isEnemy ? aggroRange : 0,
         disengageRange: isEnemy ? disengageRange : 0,
         aggroUntil: 0,
-        chaseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 300 : 270) * difficulty.objectSpeedMult : 0,
-        chaseAccel: isEnemy ? (blueprint.type === "alienShip" ? 300 : 270) : 0,
-        steering: isEnemy ? (blueprint.type === "alienShip" ? 1.45 : 1.25) : 0,
-        cruiseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 150 : 130) * difficulty.objectSpeedMult : 0,
-        preferredRange: isEnemy ? (blueprint.type === "alienShip" ? 220 + rand() * 80 : 150 + rand() * 70) : 0,
-        nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
+        chaseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 300 : blueprint.type === "mothership" ? 95 : 270) * difficulty.objectSpeedMult : 0,
+        chaseAccel: isEnemy ? (blueprint.type === "alienShip" ? 300 : blueprint.type === "mothership" ? 140 : 270) : 0,
+        steering: isEnemy ? (blueprint.type === "alienShip" ? 1.45 : blueprint.type === "mothership" ? 0.55 : 1.25) : 0,
+        cruiseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 150 : blueprint.type === "mothership" ? 80 : 130) * difficulty.objectSpeedMult : 0,
+        preferredRange: isEnemy ? (blueprint.type === "alienShip" ? 220 + rand() * 80 : blueprint.type === "mothership" ? 280 + rand() * 100 : 150 + rand() * 70) : 0,
+        nextShotAt: blueprint.type === "miniAlien"
+          ? state.time + 1.2 + rand() * 2.4
+          : blueprint.type === "alienShip"
+            ? state.time + 1.4 + rand() * 2.2
+            : blueprint.type === "mothership"
+              ? state.time + 2.2 + rand() * 1.8
+              : null,
         enemyWeapon,
         systemInfluence: spawnInfluence,
       };
+
+      if (blueprint.type === "mothership") {
+        spawnedObj.aggroLocked = true;
+        spawnedObj.aggroUntil = state.time + 99999;
+        spawnedObj.nextEscortAt = state.time + 6 + rand() * 4;
+        spawnedObj.escortCooldown = 5.6 + rand() * 3.2;
+        spawnedObj.escortWaveMin = 1;
+        spawnedObj.escortWaveMax = 2;
+      }
+
       state.objects.push(spawnedObj);
       return spawnedObj;
+    }
+
+    function spawnEscortNearMothership(mothership, rand) {
+      const escort = spawnObject({
+        rand,
+        forceType: "alienShip",
+        systemInterior: true,
+        spawnPadding: 40 + rand() * 90,
+      });
+      if (!escort || !Number.isFinite(mothership.worldX) || !Number.isFinite(mothership.worldY)) return escort;
+
+      const angle = rand() * Math.PI * 2;
+      const distance = mothership.size * (0.9 + rand() * 1.1);
+      escort.worldX = mothership.worldX + Math.cos(angle) * distance;
+      escort.worldY = mothership.worldY + Math.sin(angle) * distance;
+      const escortScreen = worldToScreen(escort.worldX, escort.worldY);
+      escort.x = escortScreen.x;
+      escort.y = escortScreen.y;
+      escort.vx = (mothership.vx || 0) * 0.5 + Math.cos(angle) * (40 + rand() * 70);
+      escort.vy = (mothership.vy || 0) * 0.5 + Math.sin(angle) * (40 + rand() * 70);
+      escort.aggroLocked = true;
+      escort.aggroUntil = state.time + 20;
+      return escort;
+    }
+
+    function spawnMothershipEncounter(rand) {
+      const mothership = spawnObject({
+        rand,
+        forceType: "mothership",
+        systemInterior: true,
+        spawnPadding: 120 + rand() * 170,
+      });
+      if (!mothership) return null;
+
+      const escortCount = 3 + Math.floor(rand() * 3);
+      for (let i = 0; i < escortCount; i += 1) {
+        spawnEscortNearMothership(mothership, rand);
+      }
+      return mothership;
+    }
+
+    function spawnFleetFormation(rand, options = {}) {
+      const type = options.type || (rand() < 0.55 ? "wedge" : "line");
+      const groupId = `fleet:${Math.floor(state.time * 10)}:${Math.floor(rand() * 100000)}`;
+      const baseAngle = Number.isFinite(options.baseAngle) ? options.baseAngle : spawnAngleFromSides(rand);
+      const spacing = Number.isFinite(options.spacing) ? options.spacing : (44 + rand() * 22);
+      const heading = baseAngle + Math.PI;
+      const speed = Number.isFinite(options.speed) ? options.speed : (90 + rand() * 70);
+
+      const offsets = [];
+      if (type === "line") {
+        offsets.push({ x: 0, y: 0 });
+        offsets.push({ x: -spacing, y: 0 });
+        offsets.push({ x: spacing, y: 0 });
+        if (rand() < 0.55) offsets.push({ x: -spacing * 2, y: 0 });
+        if (rand() < 0.55) offsets.push({ x: spacing * 2, y: 0 });
+      } else {
+        offsets.push({ x: 0, y: 0 });
+        offsets.push({ x: -spacing * 0.8, y: spacing * 0.55 });
+        offsets.push({ x: spacing * 0.8, y: spacing * 0.55 });
+        offsets.push({ x: -spacing * 1.55, y: spacing * 1.1 });
+        offsets.push({ x: spacing * 1.55, y: spacing * 1.1 });
+      }
+
+      const cosH = Math.cos(heading);
+      const sinH = Math.sin(heading);
+      const cosN = -sinH;
+      const sinN = cosH;
+
+      for (let i = 0; i < offsets.length; i += 1) {
+        const offset = offsets[i];
+        const kindRoll = rand();
+        const forceType = i === 0
+          ? (kindRoll < 0.75 ? "alienShip" : "miniAlien")
+          : (kindRoll < 0.55 ? "miniAlien" : "alienShip");
+        const spawn = spawnObject({
+          rand,
+          forceType,
+          systemInterior: true,
+          angle: baseAngle + (rand() - 0.5) * 0.08,
+          spawnPadding: 86 + rand() * 110,
+          initialVx: cosH * speed,
+          initialVy: sinH * speed,
+        });
+        if (!spawn) continue;
+
+        const shiftX = cosH * offset.y + cosN * offset.x;
+        const shiftY = sinH * offset.y + sinN * offset.x;
+        spawn.worldX += shiftX;
+        spawn.worldY += shiftY;
+        const sPos = worldToScreen(spawn.worldX, spawn.worldY);
+        spawn.x = sPos.x;
+        spawn.y = sPos.y;
+        spawn.patrolHeading = heading;
+        spawn.patrolSpeed = speed;
+        spawn.patrolUntil = state.time + 14 + rand() * 10;
+        spawn.groupId = groupId;
+      }
+    }
+
+    function spawnFactionEncounter(rand) {
+      const axis = rand() * Math.PI * 2;
+      const encounterType = rand() < 0.5 ? "crossfire" : "chase";
+      const groups = [
+        { name: "raider", angle: axis + Math.PI, speed: 95 + rand() * 55 },
+        { name: "scavenger", angle: encounterType === "crossfire" ? axis : axis + Math.PI + (rand() - 0.5) * 0.4, speed: 85 + rand() * 50 },
+      ];
+
+      for (const g of groups) {
+        const size = 2 + Math.floor(rand() * 3);
+        const baseAngle = g.angle;
+        for (let i = 0; i < size; i += 1) {
+          const forceType = rand() < 0.5 ? "alienShip" : "miniAlien";
+          const spawn = spawnObject({
+            rand,
+            forceType,
+            systemInterior: true,
+            angle: baseAngle + (rand() - 0.5) * 0.24,
+            spawnPadding: 90 + rand() * 130,
+            initialVx: Math.cos(g.angle) * g.speed,
+            initialVy: Math.sin(g.angle) * g.speed,
+          });
+          if (!spawn) continue;
+          spawn.faction = g.name;
+          spawn.patrolHeading = g.angle;
+          spawn.patrolSpeed = g.speed;
+          spawn.patrolUntil = state.time + 16 + rand() * 12;
+        }
+      }
     }
 
     function spawnChunkEncounter(cx, cy) {
@@ -461,9 +656,10 @@
       // Ambush: coordinated multi-wing enemy attack, pre-aggroed.
       // Drift-Feld: dense isotropic debris cloud - tight ring for visible density.
       // Schrottspur: linear wreckage trail along a clear axis.
+      // Meteorstrom: directed flow with high relative velocity.
       if (interstellarZone && rand() < 0.30) {
         const eventType = rand();
-        if (eventType < 0.33) {
+        if (eventType < 0.25) {
           // Ambush: 2-3 attack wings converging from different angles, enemies pre-aggroed.
           chunkEventMap.set(key, "ambush");
           const sideCount = 2 + Math.floor(rand() * 2);
@@ -486,7 +682,7 @@
               }
             }
           }
-        } else if (eventType < 0.66) {
+        } else if (eventType < 0.5) {
           // Drift-Feld: dense debris cloud - tight uniform ring so it reads as a wall.
           chunkEventMap.set(key, "drift");
           const fieldSize = 20 + Math.floor(rand() * 12);
@@ -500,7 +696,7 @@
               spawnPadding: -20 + rand() * 80,
             });
           }
-        } else {
+        } else if (eventType < 0.75) {
           // Schrottspur: dense debris along one straight axis - clearly directional.
           chunkEventMap.set(key, "trail");
           const trailAngle = rand() * Math.PI;
@@ -516,7 +712,48 @@
               spawnPadding: -10 + rand() * 160,
             });
           }
+        } else {
+          // Meteorstrom: one-way fast stream. Objects are spawned with directed velocity.
+          chunkEventMap.set(key, "meteor");
+          const flowAngle = rand() * Math.PI * 2;
+          const flowSpeed = 190 + rand() * 170;
+          const meteorCount = 12 + Math.floor(rand() * 10);
+          for (let i = 0; i < meteorCount; i += 1) {
+            const pick = rand();
+            const forcedType = pick < 0.54 ? "debris" : (pick < 0.84 ? "smallRock" : (pick < 0.95 ? "mediumRock" : "boulder"));
+            const vScale = 0.74 + rand() * 0.52;
+            spawnObject({
+              rand,
+              forceType: forcedType,
+              angle: flowAngle + Math.PI + (rand() - 0.5) * 0.42,
+              spawnPadding: -20 + rand() * 120,
+              initialVx: Math.cos(flowAngle) * flowSpeed * vScale,
+              initialVy: Math.sin(flowAngle) * flowSpeed * vScale,
+            });
+          }
         }
+      }
+
+      const mothershipChance = 0.055 + Math.min(0.04, distancePressure * 0.03) + (difficulty.id === "hard" ? 0.025 : 0);
+      if (interstellarZone && rand() < mothershipChance) {
+        spawnMothershipEncounter(rand);
+      }
+
+      const fleetChance = 0.18 + Math.min(0.12, distancePressure * 0.07);
+      if ((interstellarZone || !insideSystem) && rand() < fleetChance) {
+        chunkEventMap.set(key, "fleet");
+        spawnFleetFormation(rand, {
+          type: rand() < 0.6 ? "wedge" : "line",
+          baseAngle: spawnAngleFromSides(rand),
+          spacing: 42 + rand() * 24,
+          speed: 96 + rand() * 74,
+        });
+      }
+
+      const factionChance = interstellarZone ? 0.11 : 0.05;
+      if (rand() < factionChance) {
+        chunkEventMap.set(key, "faction");
+        spawnFactionEncounter(rand);
       }
 
       return true;
@@ -571,6 +808,42 @@
 
     function resetChunkSpawns() {
       spawnedChunkEncounters.clear();
+    }
+
+    function updateEliteEncounters() {
+      const livingMotherships = state.objects.filter((obj) => obj && obj.type === "mothership" && obj.hp > 0 && !obj.destroyed);
+      if (livingMotherships.length <= 0) return;
+
+      const rand = Math.random;
+      for (const mothership of livingMotherships) {
+        const escortCap = 7;
+        let activeEscortsNear = 0;
+        for (const obj of state.objects) {
+          if (!obj || obj.type !== "alienShip" || obj.hp <= 0 || obj.destroyed) continue;
+          const dx = (obj.worldX || 0) - (mothership.worldX || 0);
+          const dy = (obj.worldY || 0) - (mothership.worldY || 0);
+          if (dx * dx + dy * dy <= 2200 * 2200) activeEscortsNear += 1;
+        }
+
+        if (!Number.isFinite(mothership.nextEscortAt)) {
+          mothership.nextEscortAt = state.time + 5 + rand() * 4;
+        }
+        if (state.time < mothership.nextEscortAt) continue;
+        if (activeEscortsNear >= escortCap) {
+          mothership.nextEscortAt = state.time + 2 + rand() * 2;
+          continue;
+        }
+
+        const waveMin = Number.isFinite(mothership.escortWaveMin) ? mothership.escortWaveMin : 1;
+        const waveMax = Number.isFinite(mothership.escortWaveMax) ? mothership.escortWaveMax : 2;
+        const waveSize = waveMin + Math.floor(rand() * Math.max(1, waveMax - waveMin + 1));
+        const toSpawn = Math.max(1, Math.min(waveSize, escortCap - activeEscortsNear));
+        for (let i = 0; i < toSpawn; i += 1) {
+          spawnEscortNearMothership(mothership, rand);
+        }
+        const cooldown = Number.isFinite(mothership.escortCooldown) ? mothership.escortCooldown : 6.5;
+        mothership.nextEscortAt = state.time + cooldown * (0.85 + rand() * 0.3);
+      }
     }
 
     function spawnBoss(level) {
@@ -832,6 +1105,7 @@
       spawnEnemyProjectile,
       spawnEnemyFlameBurst,
       updateBoss,
+      updateEliteEncounters,
       getChunkEventMap,
     };
   }
