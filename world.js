@@ -95,6 +95,18 @@
       return Math.max(min, Math.min(max, raw));
     }
 
+    function pickOrbitSlotIndices(rand, maxSlots, desiredCount) {
+      const all = Array.from({ length: maxSlots }, (_, i) => i);
+      for (let i = all.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(rand() * (i + 1));
+        const t = all[i];
+        all[i] = all[j];
+        all[j] = t;
+      }
+      const count = Math.max(1, Math.min(maxSlots, desiredCount));
+      return all.slice(0, count).sort((a, b) => a - b);
+    }
+
     function getDecorativeSystemAnchor(cx, cy, layerIndex) {
       const cellSize = layerIndex === 0 ? 10 : 14;
       const cellX = Math.floor(cx / cellSize);
@@ -274,7 +286,7 @@
           return orbitalSpeedNearSun * Math.pow(ratio, -1.5) * localScale * orbitDirection;
         }
 
-        function addPlanetSubOrbits(planet) {
+        function addPlanetSubOrbits(planet, orbitZone) {
           const satelliteBase = 0.22 + rand() * 0.1;
           const satelliteRef = Math.max(18, planet.radius * 1.6);
           function satelliteSpeed(orbitRadius, scale = 1) {
@@ -283,10 +295,16 @@
             return satelliteBase * Math.pow(ratio, -1.5) * scale * orbitDirection;
           }
 
-          if (rand() < 0.72) {
-            const moonCount = rand() < 0.24 ? 2 : 1;
+          const isOuterZone = orbitZone === "outer";
+
+          if (isOuterZone ? rand() < 0.95 : rand() < 0.55) {
+            const moonCount = isOuterZone
+              ? 2 + Math.floor(rand() * 4)
+              : (rand() < 0.22 ? 2 : 1);
             for (let i = 0; i < moonCount; i += 1) {
-              const moonOrbitRadius = planet.radius * (2.4 + i * 0.85 + rand() * 0.9);
+              const moonOrbitRadius = planet.radius * (isOuterZone
+                ? (2.2 + i * 0.72 + rand() * 1)
+                : (2.8 + i * 0.95 + rand() * 0.9));
               background.push({
                 type: "planet",
                 drawOrder: 6,
@@ -300,15 +318,15 @@
                 orbitRadius: moonOrbitRadius,
                 orbitAngle: rand() * Math.PI * 2,
                 orbitSpeed: satelliteSpeed(moonOrbitRadius, 0.86 + rand() * 0.2),
-                radius: Math.max(8, planet.radius * (0.18 + rand() * 0.14)),
+                radius: Math.max(8, planet.radius * (isOuterZone ? (0.12 + rand() * 0.12) : (0.16 + rand() * 0.13))),
                 hue: Math.floor(rand() * 360),
                 isMoon: true,
               });
             }
           }
 
-          if (rand() < 0.66) {
-            const stationCount = rand() < 0.22 ? 2 : 1;
+          if (!isOuterZone && rand() < 0.78) {
+            const stationCount = rand() < 0.3 ? 2 : 1;
             const stationOrbitBase = planet.radius * (1.45 + rand() * 0.5);
             for (let i = 0; i < stationCount; i += 1) {
               const stationRadius = 11 + rand() * 8;
@@ -334,9 +352,9 @@
             }
           }
 
-          if (rand() < 0.54) {
-            const beltCount = 14 + Math.floor(rand() * 16);
-            const beltRadiusBase = planet.radius * (3.2 + rand() * 1.3);
+          if (isOuterZone ? rand() < 0.82 : rand() < 0.2) {
+            const beltCount = isOuterZone ? (24 + Math.floor(rand() * 26)) : (10 + Math.floor(rand() * 10));
+            const beltRadiusBase = planet.radius * (isOuterZone ? (2.5 + rand() * 1.2) : (3.3 + rand() * 1.2));
             for (let i = 0; i < beltCount; i += 1) {
               const jitter = (rand() - 0.5) * planet.radius * 0.95;
               const orbitRadius = Math.max(planet.radius * 2.2, beltRadiusBase + jitter);
@@ -352,42 +370,41 @@
                 orbitRadius,
                 orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.2,
                 orbitSpeed: satelliteSpeed(orbitRadius, 0.86 + rand() * 0.16),
-                radius: 2.4 + rand() * 4,
-                alpha: 0.42 + rand() * 0.34,
+                radius: isOuterZone ? (2 + rand() * 3.4) : (2.4 + rand() * 4),
+                alpha: isOuterZone ? (0.4 + rand() * 0.22) : (0.42 + rand() * 0.34),
               });
             }
           }
         }
 
         const orbitSlotCount = sampleGaussianOrbitCount(systemRand, 1, maxOrbitShells);
+        const selectedOrbitSlots = pickOrbitSlotIndices(systemRand, maxOrbitShells, orbitSlotCount);
         const shellBase = Math.max(orbitUnit * 1.55, sun.radius * 0.92);
         const shellSpacing = orbitUnit * 1.05;
         const minOrbitLaneGap = chunkSize;
         let lastPlanetRadius = 0;
         let lastOrbitRadius = shellBase - shellSpacing;
-        for (let slot = 0; slot < orbitSlotCount; slot += 1) {
-          const nearPlanePlanet = slot <= 1 || rand() < 0.2;
-          const shellScale = 1 - slot / Math.max(1, orbitSlotCount + 1);
-          const giantPlanet = nearPlanePlanet && rand() < 0.14;
-          const predictedPlanetRadius = giantPlanet
-            ? chunkSize * (0.42 + rand() * 0.34)
-            : (nearPlanePlanet
-              ? chunkSize * (0.08 + rand() * 0.2)
-              : chunkSize * (0.035 + rand() * 0.09)) * (0.84 + shellScale * 0.32);
+        for (const slotIndex of selectedOrbitSlots) {
+          const orbitZone = slotIndex < 5 ? "inner" : "outer";
+          const innerRocky = orbitZone === "inner";
+          const shellScale = 1 - slotIndex / Math.max(1, maxOrbitShells);
+          const predictedPlanetRadius = innerRocky
+            ? chunkSize * (0.06 + rand() * 0.14) * (0.9 + shellScale * 0.22)
+            : chunkSize * (0.18 + rand() * 0.4) * (0.94 + shellScale * 0.2);
           const minimumGap = Math.max(
             (lastPlanetRadius + predictedPlanetRadius) * 1.5,
             minOrbitLaneGap + lastPlanetRadius + predictedPlanetRadius,
           );
-          const shellRadius = shellBase + slot * shellSpacing;
+          const shellRadius = shellBase + slotIndex * shellSpacing;
           const orbitRadius = Math.max(shellRadius, lastOrbitRadius + minimumGap);
           if (orbitRadius + predictedPlanetRadius > maxSystemRadius) {
             break;
           }
           const slotAngle = rand() * Math.PI * 2;
-          const beltInsteadOfPlanet = slot > 0 && rand() < (slot >= 2 ? 0.38 : 0.26);
+          const beltInsteadOfPlanet = rand() < (innerRocky ? 0.22 : 0.32);
 
           if (beltInsteadOfPlanet) {
-            const beltCount = 18 + Math.floor(rand() * 18);
+            const beltCount = innerRocky ? (16 + Math.floor(rand() * 14)) : (24 + Math.floor(rand() * 24));
             for (let i = 0; i < beltCount; i += 1) {
               const jitter = (rand() - 0.5) * sun.radius * 0.36;
               const localOrbit = Math.max(sun.radius * 1.9, orbitRadius + jitter);
@@ -400,8 +417,8 @@
                 orbitRadius: localOrbit,
                 orbitAngle: slotAngle + (i / beltCount) * Math.PI * 2,
                 orbitSpeed: sunOrbitAngularSpeed(localOrbit, 0.9 + rand() * 0.16),
-                radius: 2.6 + rand() * 4.4,
-                alpha: 0.4 + rand() * 0.3,
+                radius: innerRocky ? (2.6 + rand() * 4.2) : (2 + rand() * 3.2),
+                alpha: innerRocky ? (0.4 + rand() * 0.3) : (0.34 + rand() * 0.24),
               });
             }
             lastOrbitRadius = orbitRadius;
@@ -411,22 +428,22 @@
           const planetRadius = predictedPlanetRadius;
           const planet = {
             type: "planet",
-            drawOrder: nearPlanePlanet ? 6 : 5,
+            drawOrder: innerRocky ? 6 : 5,
             parallax: SYSTEM_PARALLAX,
-            // Keep collision rules deterministic and easy to read in gameplay: near-plane planets are solid.
-            collidablePlane: nearPlanePlanet,
+            collidablePlane: innerRocky,
             orbitCx: sun.x,
             orbitCy: sun.y,
             orbitRadius,
             orbitAngle: slotAngle,
-            orbitSpeed: sunOrbitAngularSpeed(orbitRadius, nearPlanePlanet ? 1 : 0.92 + rand() * 0.14),
+            orbitSpeed: sunOrbitAngularSpeed(orbitRadius, innerRocky ? 1 : 0.86 + rand() * 0.12),
             radius: planetRadius,
-            hue: Math.floor(rand() * 360),
+            hue: innerRocky ? Math.floor(18 + rand() * 42) : Math.floor(165 + rand() * 120),
+            isGasGiant: !innerRocky,
           };
           planet.x = planet.orbitCx + Math.cos(planet.orbitAngle) * planet.orbitRadius;
           planet.y = planet.orbitCy + Math.sin(planet.orbitAngle) * planet.orbitRadius;
           background.push(planet);
-          addPlanetSubOrbits(planet);
+          addPlanetSubOrbits(planet, orbitZone);
           lastPlanetRadius = planetRadius;
           lastOrbitRadius = orbitRadius;
         }
