@@ -3,6 +3,13 @@
 ## Daily Reminder
 - [ ] At start of each work session: quickly review this file with user
 
+## Current Priority Queue
+- [x] P0: Finalize camera/encounter culling and spawn pressure for free-flight
+- [x] P0: Full QA pass for balancing and edge cases
+- [x] P1: Alien spawn quality pass (system-interior behavior, pacing, edge-density)
+- [x] P1: Discovery pacing baseline (clear system gaps, no long dead zones)
+- [x] P2: Visual polish pass after spawn/pacing lock (planets, nebulae, starfield)
+
 ## Core 4-Direction Migration
 - [x] Camera follow with soft lag / rubber-band feel
 - [x] Ship world-position as authoritative state
@@ -11,8 +18,8 @@
 - [x] Remove remaining screen-bound behavior (walls, edge ricochet assumptions)
 - [x] Boss fully world-space (movement, spawn, attacks)
 - [x] Convert remaining collision checks to world-space first
-- [ ] Finalize camera/encounter culling and spawn pressure for free-flight
-- [ ] Full QA pass for balancing and edge cases
+- [x] Finalize camera/encounter culling and spawn pressure for free-flight
+- [x] Full QA pass for balancing and edge cases
 
 ## Architecture Cleanup Backlog (Core-Adjacent)
 - [ ] Extract status-effects module (burn, acid, shield-break side effects)

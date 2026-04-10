@@ -57,6 +57,11 @@
       };
     }
 
+    function stableUnitFrom2(x, y, salt = 0) {
+      const v = Math.sin((x || 0) * 12.9898 + (y || 0) * 78.233 + salt * 37.719) * 43758.5453;
+      return v - Math.floor(v);
+    }
+
     function drawParallaxBackground() {
       if (!worldSystem || !cameraSystem) {
         for (const star of state.stars) {
@@ -73,12 +78,16 @@
       const deepStarCap = IS_COARSE_POINTER ? 220 : 360;
       const midStarCap = IS_COARSE_POINTER ? 140 : 240;
       const nearStarCap = IS_COARSE_POINTER ? 90 : 160;
-      const beltRockCap = IS_COARSE_POINTER ? 180 : 300;
+      const beltRockCap = IS_COARSE_POINTER ? 420 : 760;
+      const beltDustCap = IS_COARSE_POINTER ? 900 : 1600;
+      const beltBoulderCap = IS_COARSE_POINTER ? 90 : 170;
       let farStarCount = 0;
       let deepStarCount = 0;
       let midStarCount = 0;
       let nearStarCount = 0;
       let beltRockCount = 0;
+      let beltDustCount = 0;
+      let beltBoulderCount = 0;
 
       for (const obj of bgObjects) {
         const resolved = resolveBgWorldPosition(obj, state.time);
@@ -106,7 +115,12 @@
             if (nearStarCount > nearStarCap) continue;
           }
           if (pos.x < -6 || pos.x > WORLD.width + 6 || pos.y < -6 || pos.y > WORLD.height + 6) continue;
-          ctx.fillStyle = `rgba(186, 220, 255, ${obj.alpha || 0.5})`;
+          const starSeed = stableUnitFrom2(worldX, worldY, obj.size || 1);
+          const twinkle = 0.82 + (0.18 + starSeed * 0.12) * (0.5 + 0.5 * Math.sin(state.time * (0.6 + starSeed * 1.6) + starSeed * Math.PI * 2));
+          const starAlpha = Math.min(1, Math.max(0.05, (obj.alpha || 0.5) * twinkle));
+          const coolBias = 188 + Math.floor(starSeed * 28);
+          const warmShift = Math.floor((1 - starSeed) * 10);
+          ctx.fillStyle = `rgba(${coolBias + warmShift}, ${216 + Math.floor(starSeed * 20)}, 255, ${starAlpha})`;
           const size = obj.size || 1.5;
           ctx.fillRect(pos.x, pos.y, size, size);
           continue;
@@ -154,6 +168,24 @@
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
           ctx.fill();
+
+          const nebulaSeed = stableUnitFrom2(worldX, worldY, radius || 1);
+          const drift = state.time * (0.02 + nebulaSeed * 0.015);
+          const wispCount = 2 + Math.floor(nebulaSeed * 2);
+          for (let i = 0; i < wispCount; i += 1) {
+            const t = i / Math.max(1, wispCount - 1);
+            const ang = drift + nebulaSeed * Math.PI * 2 + i * 2.11;
+            const wispX = pos.x + Math.cos(ang) * radius * (0.16 + t * 0.18);
+            const wispY = pos.y + Math.sin(ang * 1.3) * radius * (0.12 + t * 0.16);
+            ctx.save();
+            ctx.translate(wispX, wispY);
+            ctx.rotate(ang * 0.4);
+            ctx.fillStyle = "rgba(198, 226, 255, 0.08)";
+            ctx.beginPath();
+            ctx.ellipse(0, 0, radius * (0.16 + t * 0.08), radius * (0.06 + t * 0.04), 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
           continue;
         }
 
@@ -209,6 +241,46 @@
           ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
           ctx.fill();
 
+          const lightCenter = resolveLocalOrbitCenter(obj, state.time);
+          const lightPos = cameraSystem.worldToScreen(lightCenter.x, lightCenter.y, obj.parallax, WORLD.width, WORLD.height);
+          const lightAngle = Math.atan2((lightPos.y || pos.y) - pos.y, (lightPos.x || pos.x) - pos.x);
+          const lx = Math.cos(lightAngle);
+          const ly = Math.sin(lightAngle);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+          ctx.clip();
+
+          const terminator = ctx.createLinearGradient(
+            pos.x - lx * radius,
+            pos.y - ly * radius,
+            pos.x + lx * radius,
+            pos.y + ly * radius
+          );
+          terminator.addColorStop(0, `rgba(6, 10, 20, ${0.34 * bodyAlpha})`);
+          terminator.addColorStop(0.52, "rgba(8, 12, 24, 0)");
+          terminator.addColorStop(1, "rgba(255, 248, 236, 0.06)");
+          ctx.fillStyle = terminator;
+          ctx.fillRect(pos.x - radius, pos.y - radius, radius * 2, radius * 2);
+
+          if (!isGasGiant) {
+            const planetSeed = stableUnitFrom2(obj.orbitCx || worldX, obj.orbitCy || worldY, radius || 1);
+            const patchCount = 3;
+            for (let i = 0; i < patchCount; i += 1) {
+              const t = i / patchCount;
+              const ang = planetSeed * Math.PI * 2 + i * 2.2 + state.time * 0.01;
+              const px = pos.x + Math.cos(ang) * radius * (0.18 + t * 0.22);
+              const py = pos.y + Math.sin(ang * 1.4) * radius * (0.12 + t * 0.2);
+              ctx.fillStyle = `hsla(${hue + 14}, 58%, 36%, ${0.14 * bodyAlpha})`;
+              ctx.beginPath();
+              ctx.ellipse(px, py, radius * (0.14 - t * 0.02), radius * (0.08 - t * 0.01), ang * 0.4, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          ctx.restore();
+
           if (isGasGiant) {
             ctx.save();
             ctx.beginPath();
@@ -263,6 +335,50 @@
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
           ctx.fill();
+          continue;
+        }
+
+        if (obj.type === "beltDust") {
+          beltDustCount += 1;
+          if (beltDustCount > beltDustCap) continue;
+          const dustRadius = Math.max(0.6, radius || 1);
+          ctx.fillStyle = `rgba(205, 224, 240, ${obj.alpha || 0.2})`;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, dustRadius, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+
+        if (obj.type === "beltBoulder") {
+          beltBoulderCount += 1;
+          if (beltBoulderCount > beltBoulderCap) continue;
+
+          const rr = Math.max(2.4, radius || 4.2);
+          const spin = Number.isFinite(obj.spin) ? obj.spin : 0;
+          const phase = Number.isFinite(obj.rotPhase) ? obj.rotPhase : 0;
+          const rot = phase + state.time * spin;
+          const alpha = Number.isFinite(obj.alpha) ? obj.alpha : 0.62;
+
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          ctx.rotate(rot);
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          for (let i = 0; i < 7; i += 1) {
+            const t = (i / 7) * Math.PI * 2;
+            const profile = 0.76 + Math.sin(i * 2.11 + phase * 0.7) * 0.16;
+            const px = Math.cos(t) * rr * profile;
+            const py = Math.sin(t) * rr * profile;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = "#8f9caf";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(218, 230, 244, 0.3)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
           continue;
         }
 
@@ -878,7 +994,7 @@
           continue;
         }
 
-        if (obj.type !== "beltRock" || !Number.isFinite(obj.orbitRadius)) continue;
+        if ((obj.type !== "beltRock" && obj.type !== "beltDust" && obj.type !== "beltBoulder") || !Number.isFinite(obj.orbitRadius)) continue;
         if ((obj.parallax || 1) < 0.95) continue;
 
         let centerX = Number.isFinite(obj.orbitCx) ? obj.orbitCx : obj.x;
@@ -1114,8 +1230,22 @@
 
       for (const p of state.particles) {
         ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
-        ctx.fillStyle = p.color;
-        ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
+        if (p.kind === "alienGoo") {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.kind === "alienShard") {
+          ctx.fillStyle = p.color;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((state.time * 7 + p.size) % (Math.PI * 2));
+          ctx.fillRect(-p.size * 0.5, -p.size * 0.2, p.size, p.size * 0.4);
+          ctx.restore();
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
+        }
       }
       ctx.globalAlpha = 1;
 

@@ -97,18 +97,23 @@
     }
 
     function isWithinGameplaySystem(worldX, worldY) {
-      if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return false;
+      return getGameplaySystemInfluence(worldX, worldY) >= 0.33;
+    }
+
+    function getGameplaySystemInfluence(worldX, worldY) {
+      if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return 0;
       const suns = getGameplaySuns();
-      if (suns.length <= 0) return false;
+      if (suns.length <= 0) return 0;
       const chunkSize = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
+      let influence = 0;
 
       for (const sun of suns) {
         const influenceRadius = Math.max(chunkSize * 7.8, sun.radius * 4.4);
-        if (Math.hypot(worldX - sun.x, worldY - sun.y) <= influenceRadius) {
-          return true;
-        }
+        const d = Math.hypot(worldX - sun.x, worldY - sun.y);
+        const t = Math.max(0, 1 - d / influenceRadius);
+        if (t > influence) influence = t;
       }
-      return false;
+      return influence;
     }
 
     function createEnemyBlueprint(rand, difficulty) {
@@ -138,10 +143,12 @@
         return createEnemyBlueprint(rand, difficulty);
       }
 
+      const systemInfluence = Math.max(0, Math.min(1, Number.isFinite(options.systemInfluence) ? options.systemInfluence : 0));
+
       const alienShipChance = difficulty.id === "easy" ? 0.06 : difficulty.id === "hard" ? 0.18 : 0.12;
       const miniAlienChance = difficulty.id === "easy" ? 0.11 : difficulty.id === "hard" ? 0.15 : 0.13;
-      const firstCut = miniAlienChance;
-      const secondCut = firstCut + alienShipChance;
+      const firstCut = miniAlienChance + systemInfluence * 0.22;
+      const secondCut = firstCut + alienShipChance + systemInfluence * 0.2;
 
       const r = rand();
       let type = "debris";
@@ -180,7 +187,7 @@
         collisionScale = 0.8;
         corners = 9;
       } else if (r < 0.79) {
-        type = "debris";
+        type = systemInfluence > 0.45 ? "smallRock" : "debris";
         size = 22 + rand() * 18;
         hp = 11;
         destructible = true;
@@ -259,11 +266,15 @@
       const probeX = focusX + Math.cos(angle) * probeRing;
       const probeY = focusY + Math.sin(angle) * probeRing;
       const probeWorld = screenToWorld(probeX, probeY);
+      const probeInfluence = getGameplaySystemInfluence(probeWorld.x, probeWorld.y);
       const systemInterior = options.systemInterior === true
-        || (options.systemInterior !== false && isWithinGameplaySystem(probeWorld.x, probeWorld.y));
+        || (options.systemInterior !== false && probeInfluence >= 0.33);
 
-      const forced = options.forceType && !systemInterior ? forcedObjectBlueprint(options.forceType, rand) : null;
-      const blueprint = forced || createObjectBlueprint(rand, difficulty, { systemInterior });
+      const forced = options.forceType && probeInfluence < 0.2 ? forcedObjectBlueprint(options.forceType, rand) : null;
+      const blueprint = forced || createObjectBlueprint(rand, difficulty, {
+        systemInterior,
+        systemInfluence: probeInfluence,
+      });
       const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
       const baseAggro = Math.min(WORLD.width, WORLD.height) * 0.5;
       const aggroRange = baseAggro * (0.8 + rand() * 0.4);
@@ -277,6 +288,7 @@
       const vy = 0;
       const rockProfile = blueprint.corners > 0 ? Array.from({ length: blueprint.corners }, () => 0.72 + rand() * 0.26) : null;
       const spawnWorld = screenToWorld(spawnX, spawnY);
+      const spawnInfluence = getGameplaySystemInfluence(spawnWorld.x, spawnWorld.y);
 
       state.objects.push({
         id: nextObjectId(),
@@ -308,6 +320,7 @@
         cruiseSpeed: isEnemy ? (blueprint.type === "alienShip" ? 150 : 130) * difficulty.objectSpeedMult : 0,
         preferredRange: isEnemy ? (blueprint.type === "alienShip" ? 220 + rand() * 80 : 150 + rand() * 70) : 0,
         nextShotAt: blueprint.type === "miniAlien" ? state.time + 1.2 + rand() * 2.4 : blueprint.type === "alienShip" ? state.time + 1.4 + rand() * 2.2 : null,
+        systemInfluence: spawnInfluence,
       });
     }
 
@@ -323,7 +336,8 @@
       const chunkSize = worldSystem && typeof worldSystem.chunkSize === "number" ? worldSystem.chunkSize : 960;
       const chunkCenterX = (cx + 0.5) * chunkSize;
       const chunkCenterY = (cy + 0.5) * chunkSize;
-      const insideSystem = isWithinGameplaySystem(chunkCenterX, chunkCenterY);
+      const centerInfluence = getGameplaySystemInfluence(chunkCenterX, chunkCenterY);
+      const insideSystem = centerInfluence >= 0.33;
       const baseObjects = insideSystem ? (difficulty.id === "hard" ? 2 : 1) : (difficulty.id === "hard" ? 3 : 2);
       const bonusObjects = Math.floor(distancePressure * (insideSystem ? 1 : (difficulty.id === "hard" ? 2 : 1)));
       const objectCount = 1 + Math.floor(rand() * (baseObjects + bonusObjects));
@@ -337,7 +351,7 @@
       }
 
       // Clustered asteroid fields are intentionally outside gameplay solar systems.
-      if (!insideSystem && rand() < 0.74) {
+      if (centerInfluence < 0.2 && rand() < 0.74) {
         const clusterCount = 1 + Math.floor(rand() * (distancePressure > 0.7 ? 2 : 1));
         for (let c = 0; c < clusterCount; c += 1) {
           const baseAngle = spawnAngleFromSides(rand);
@@ -379,14 +393,27 @@
       const effectiveY = Number.isFinite(cameraY) ? cameraY : (cameraSystem && typeof cameraSystem.getY === "function" ? cameraSystem.getY() : 0);
       const centerCx = chunkCoord(effectiveX);
       const centerCy = chunkCoord(effectiveY);
+      const difficulty = selectedDifficultyMode();
       const speed = state.ship ? Math.hypot(state.ship.vx || 0, state.ship.vy || 0) : 0;
       const dynamicRadius = Math.max(radius, speed > 420 ? 2 : radius);
+      const maxNewChunkSpawns = Math.max(1, (speed > 420 ? 4 : 2) + (difficulty.id === "hard" ? 1 : 0));
 
       pruneChunkEncounterCache(centerCx, centerCy);
 
+      const coords = [];
       for (let y = centerCy - dynamicRadius; y <= centerCy + dynamicRadius; y += 1) {
         for (let x = centerCx - dynamicRadius; x <= centerCx + dynamicRadius; x += 1) {
-          spawnChunkEncounter(x, y);
+          const manhattan = Math.abs(x - centerCx) + Math.abs(y - centerCy);
+          coords.push({ x, y, manhattan });
+        }
+      }
+      coords.sort((a, b) => a.manhattan - b.manhattan);
+
+      let spawnedNow = 0;
+      for (const entry of coords) {
+        if (spawnedNow >= maxNewChunkSpawns) break;
+        if (spawnChunkEncounter(entry.x, entry.y)) {
+          spawnedNow += 1;
         }
       }
     }

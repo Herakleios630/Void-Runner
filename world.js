@@ -57,7 +57,7 @@
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
     const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 240;
     const maxOrbitShells = 10;
-    const systemCellChunks = 14;
+    const systemCellChunks = 13;
     const SYSTEM_PARALLAX = 1;
 
     const activeChunks = new Map();
@@ -129,6 +129,7 @@
     }
 
     function resolveOrbitPosition(obj, atTime = 0) {
+      const ORBIT_SPEED_SCALE = 0.5;
       const hasParent = Number.isFinite(obj.parentOrbitCx) && Number.isFinite(obj.parentOrbitCy);
       let centerX = Number.isFinite(obj.orbitCx) ? obj.orbitCx : (Number.isFinite(obj.x) ? obj.x : 0);
       let centerY = Number.isFinite(obj.orbitCy) ? obj.orbitCy : (Number.isFinite(obj.y) ? obj.y : 0);
@@ -136,7 +137,7 @@
       if (hasParent) {
         const parentHasRadius = Number.isFinite(obj.parentOrbitRadius);
         if (parentHasRadius) {
-          const parentAngle = (obj.parentOrbitAngle || 0) + atTime * (obj.parentOrbitSpeed || 0);
+          const parentAngle = (obj.parentOrbitAngle || 0) + atTime * (obj.parentOrbitSpeed || 0) * ORBIT_SPEED_SCALE;
           centerX = obj.parentOrbitCx + Math.cos(parentAngle) * obj.parentOrbitRadius;
           centerY = obj.parentOrbitCy + Math.sin(parentAngle) * obj.parentOrbitRadius;
         } else {
@@ -146,7 +147,7 @@
       }
 
       if (Number.isFinite(obj.orbitRadius)) {
-        const angle = (obj.orbitAngle || 0) + atTime * (obj.orbitSpeed || 0);
+        const angle = (obj.orbitAngle || 0) + atTime * (obj.orbitSpeed || 0) * ORBIT_SPEED_SCALE;
         return {
           x: centerX + Math.cos(angle) * obj.orbitRadius,
           y: centerY + Math.sin(angle) * obj.orbitRadius,
@@ -275,7 +276,7 @@
         };
         background.push(sun);
 
-        const maxSystemRadius = chunkSize * 7.2;
+        const maxSystemRadius = chunkSize * 5.8;
 
         const orbitDirection = rand() < 0.5 ? -1 : 1;
         const orbitalSpeedNearSun = 0.095 + rand() * 0.05;
@@ -284,6 +285,132 @@
           const safeRadius = Math.max(1, orbitRadius);
           const ratio = safeRadius / referenceSunOrbit;
           return orbitalSpeedNearSun * Math.pow(ratio, -1.5) * localScale * orbitDirection;
+        }
+
+        function beltCountForDensity(orbitRadius, densityPer100 = 1.8, minCount = 20, maxCount = 260) {
+          const circumference = Math.max(1, 2 * Math.PI * Math.max(1, orbitRadius));
+          const count = Math.round((circumference / 100) * densityPer100);
+          return Math.max(minCount, Math.min(maxCount, count));
+        }
+
+        function addOrbitBeltParticles(options) {
+          const {
+            centerType,
+            center,
+            orbitRadius,
+            orbitAngle,
+            orbitSpeed,
+            parallax,
+            zone,
+            randFn,
+            orbitParent,
+          } = options;
+
+          const isOuter = zone === "outer";
+          const rockDensity = isOuter ? 1.65 : 2.35;
+          const dustDensity = isOuter ? 5.4 : 4.2;
+          const boulderDensity = isOuter ? 0.3 : 0.24;
+          const rockCount = beltCountForDensity(orbitRadius, rockDensity, isOuter ? 28 : 22, isOuter ? 420 : 340);
+          const dustCount = beltCountForDensity(orbitRadius, dustDensity, isOuter ? 70 : 46, isOuter ? 1080 : 860);
+          const boulderCount = beltCountForDensity(orbitRadius, boulderDensity, isOuter ? 6 : 5, isOuter ? 64 : 52);
+
+          for (let i = 0; i < rockCount; i += 1) {
+            const a = orbitAngle + (i / rockCount) * Math.PI * 2 + (randFn() - 0.5) * 0.16;
+            const localR = Math.max(1, orbitRadius + (randFn() - 0.5) * Math.max(12, orbitRadius * 0.05));
+            const base = {
+              type: "beltRock",
+              drawOrder: 6,
+              parallax,
+              orbitRadius: localR,
+              orbitAngle: a,
+              orbitSpeed: orbitSpeed * (0.92 + randFn() * 0.18),
+              radius: isOuter ? (1.8 + randFn() * 2.8) : (2.2 + randFn() * 3.8),
+              alpha: isOuter ? (0.34 + randFn() * 0.24) : (0.42 + randFn() * 0.3),
+            };
+
+            if (orbitParent) {
+              background.push({
+                ...base,
+                parentOrbitCx: orbitParent.cx,
+                parentOrbitCy: orbitParent.cy,
+                parentOrbitRadius: orbitParent.radius,
+                parentOrbitAngle: orbitParent.angle,
+                parentOrbitSpeed: orbitParent.speed,
+              });
+            } else if (centerType === "sun") {
+              background.push({
+                ...base,
+                orbitCx: center.x,
+                orbitCy: center.y,
+              });
+            }
+          }
+
+          for (let i = 0; i < dustCount; i += 1) {
+            const a = orbitAngle + (i / dustCount) * Math.PI * 2 + (randFn() - 0.5) * 0.24;
+            const localR = Math.max(1, orbitRadius + (randFn() - 0.5) * Math.max(20, orbitRadius * 0.07));
+            const baseDust = {
+              type: "beltDust",
+              drawOrder: 5,
+              parallax,
+              orbitRadius: localR,
+              orbitAngle: a,
+              orbitSpeed: orbitSpeed * (0.9 + randFn() * 0.22),
+              radius: isOuter ? (0.65 + randFn() * 1.25) : (0.8 + randFn() * 1.45),
+              alpha: isOuter ? (0.12 + randFn() * 0.2) : (0.15 + randFn() * 0.22),
+            };
+
+            if (orbitParent) {
+              background.push({
+                ...baseDust,
+                parentOrbitCx: orbitParent.cx,
+                parentOrbitCy: orbitParent.cy,
+                parentOrbitRadius: orbitParent.radius,
+                parentOrbitAngle: orbitParent.angle,
+                parentOrbitSpeed: orbitParent.speed,
+              });
+            } else if (centerType === "sun") {
+              background.push({
+                ...baseDust,
+                orbitCx: center.x,
+                orbitCy: center.y,
+              });
+            }
+          }
+
+          for (let i = 0; i < boulderCount; i += 1) {
+            const a = orbitAngle + (i / boulderCount) * Math.PI * 2 + (randFn() - 0.5) * 0.22;
+            const localR = Math.max(1, orbitRadius + (randFn() - 0.5) * Math.max(16, orbitRadius * 0.06));
+            const baseBoulder = {
+              type: "beltBoulder",
+              drawOrder: 7,
+              parallax,
+              orbitRadius: localR,
+              orbitAngle: a,
+              orbitSpeed: orbitSpeed * (0.84 + randFn() * 0.14),
+              radius: isOuter ? (3.6 + randFn() * 4.8) : (4.2 + randFn() * 5.8),
+              alpha: isOuter ? (0.44 + randFn() * 0.26) : (0.48 + randFn() * 0.26),
+              spin: (randFn() - 0.5) * 0.9,
+              rotPhase: randFn() * Math.PI * 2,
+            };
+
+            if (orbitParent) {
+              background.push({
+                ...baseBoulder,
+                parentOrbitCx: orbitParent.cx,
+                parentOrbitCy: orbitParent.cy,
+                parentOrbitRadius: orbitParent.radius,
+                parentOrbitAngle: orbitParent.angle,
+                parentOrbitSpeed: orbitParent.speed,
+              });
+            } else if (centerType === "sun") {
+              background.push({
+                ...baseBoulder,
+                orbitCx: center.x,
+                orbitCy: center.y,
+              });
+            }
+          }
         }
 
         function addPlanetSubOrbits(planet, orbitZone) {
@@ -353,27 +480,25 @@
           }
 
           if (isOuterZone ? rand() < 0.82 : rand() < 0.2) {
-            const beltCount = isOuterZone ? (24 + Math.floor(rand() * 26)) : (10 + Math.floor(rand() * 10));
             const beltRadiusBase = planet.radius * (isOuterZone ? (2.5 + rand() * 1.2) : (3.3 + rand() * 1.2));
-            for (let i = 0; i < beltCount; i += 1) {
-              const jitter = (rand() - 0.5) * planet.radius * 0.95;
-              const orbitRadius = Math.max(planet.radius * 2.2, beltRadiusBase + jitter);
-              background.push({
-                type: "beltRock",
-                drawOrder: 6,
-                parallax: SYSTEM_PARALLAX,
-                parentOrbitCx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
-                parentOrbitCy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
-                parentOrbitRadius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
-                parentOrbitAngle: Number.isFinite(planet.orbitAngle) ? planet.orbitAngle : 0,
-                parentOrbitSpeed: Number.isFinite(planet.orbitSpeed) ? planet.orbitSpeed : 0,
-                orbitRadius,
-                orbitAngle: (i / beltCount) * Math.PI * 2 + rand() * 0.2,
-                orbitSpeed: satelliteSpeed(orbitRadius, 0.86 + rand() * 0.16),
-                radius: isOuterZone ? (2 + rand() * 3.4) : (2.4 + rand() * 4),
-                alpha: isOuterZone ? (0.4 + rand() * 0.22) : (0.42 + rand() * 0.34),
-              });
-            }
+            const beltOrbitRadius = Math.max(planet.radius * 2.2, beltRadiusBase);
+            addOrbitBeltParticles({
+              centerType: "planet",
+              center: { x: planet.x, y: planet.y },
+              orbitRadius: beltOrbitRadius,
+              orbitAngle: rand() * Math.PI * 2,
+              orbitSpeed: satelliteSpeed(beltOrbitRadius, 0.86 + rand() * 0.16),
+              parallax: SYSTEM_PARALLAX,
+              zone: isOuterZone ? "outer" : "inner",
+              randFn: rand,
+              orbitParent: {
+                cx: Number.isFinite(planet.orbitCx) ? planet.orbitCx : planet.x,
+                cy: Number.isFinite(planet.orbitCy) ? planet.orbitCy : planet.y,
+                radius: Number.isFinite(planet.orbitRadius) ? planet.orbitRadius : 0,
+                angle: Number.isFinite(planet.orbitAngle) ? planet.orbitAngle : 0,
+                speed: Number.isFinite(planet.orbitSpeed) ? planet.orbitSpeed : 0,
+              },
+            });
           }
         }
 
@@ -406,23 +531,16 @@
           const beltInsteadOfPlanet = rand() < (innerRocky ? 0.22 : 0.32);
 
           if (beltInsteadOfPlanet) {
-            const beltCount = innerRocky ? (16 + Math.floor(rand() * 14)) : (24 + Math.floor(rand() * 24));
-            for (let i = 0; i < beltCount; i += 1) {
-              const jitter = (rand() - 0.5) * sun.radius * 0.36;
-              const localOrbit = Math.max(sun.radius * 1.9, orbitRadius + jitter);
-              background.push({
-                type: "beltRock",
-                drawOrder: 5,
-                parallax: SYSTEM_PARALLAX,
-                orbitCx: sun.x,
-                orbitCy: sun.y,
-                orbitRadius: localOrbit,
-                orbitAngle: slotAngle + (i / beltCount) * Math.PI * 2,
-                orbitSpeed: sunOrbitAngularSpeed(localOrbit, 0.9 + rand() * 0.16),
-                radius: innerRocky ? (2.6 + rand() * 4.2) : (2 + rand() * 3.2),
-                alpha: innerRocky ? (0.4 + rand() * 0.3) : (0.34 + rand() * 0.24),
-              });
-            }
+            addOrbitBeltParticles({
+              centerType: "sun",
+              center: { x: sun.x, y: sun.y },
+              orbitRadius,
+              orbitAngle: slotAngle,
+              orbitSpeed: sunOrbitAngularSpeed(orbitRadius, 0.9 + rand() * 0.16),
+              parallax: SYSTEM_PARALLAX,
+              zone: innerRocky ? "inner" : "outer",
+              randFn: rand,
+            });
             lastOrbitRadius = orbitRadius;
             continue;
           }
