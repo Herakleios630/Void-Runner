@@ -68,8 +68,23 @@
     }
 
     function maybeSpawnArmorPickup(obj) {
-      const asteroidTypes = ["smallRock", "mediumRock", "rockShard", "boulder"];
+      const asteroidTypes = ["smallRock", "mediumRock", "rockShard", "boulder", "goldAsteroid", "ironAsteroid"];
       if (!asteroidTypes.includes(obj.type)) return;
+
+      if (obj.type === "ironAsteroid") {
+        state.pickups.push({
+          type: "armor",
+          x: obj.x,
+          y: obj.y,
+          worldX: Number.isFinite(obj.worldX) ? obj.worldX : undefined,
+          worldY: Number.isFinite(obj.worldY) ? obj.worldY : undefined,
+          vx: obj.vx * 0.28,
+          vy: obj.vy * 0.28,
+          radius: 10,
+          life: 12,
+        });
+        return;
+      }
 
       const dropChance = obj.type === "mediumRock" ? 0.18 : obj.type === "boulder" ? 0.22 : 0.1;
       if (Math.random() > dropChance) return;
@@ -99,12 +114,22 @@
         if (!state.killStatsByType) state.killStatsByType = {};
         if (obj.enemy && obj.type) {
           state.killStatsByType[obj.type] = Number(state.killStatsByType[obj.type] || 0) + 1;
-        } else if (obj.type === "smallRock" || obj.type === "mediumRock" || obj.type === "boulder" || obj.type === "debris") {
+        } else if (
+          obj.type === "smallRock"
+          || obj.type === "mediumRock"
+          || obj.type === "boulder"
+          || obj.type === "debris"
+          || obj.type === "goldAsteroid"
+          || obj.type === "ironAsteroid"
+        ) {
           state.killStatsByType[obj.type] = Number(state.killStatsByType[obj.type] || 0) + 1;
         }
         const reward = getKillReward(reason, obj.type);
         if (reward > 0) {
           scoring.addPoints(reward);
+        }
+        if (obj.type === "goldAsteroid") {
+          scoring.addPoints(90);
         }
       }
 
@@ -114,7 +139,11 @@
 
       maybeSpawnArmorPickup(obj);
 
-      if (obj.type === "alienShip") {
+      if (obj.type === "mothership") {
+        createExplosion(obj.x, obj.y, "#ff6f8e", 40);
+        createExplosion(obj.x, obj.y, "#ffd17a", 26);
+        spawnAlienDeathFx(obj, "ship");
+      } else if (obj.type === "alienShip") {
         createExplosion(obj.x, obj.y, "#9eff7f", 28);
         createExplosion(obj.x, obj.y, "#ffb36a", 16);
         spawnAlienDeathFx(obj, "ship");

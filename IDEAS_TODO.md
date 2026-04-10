@@ -68,27 +68,27 @@
 - [x] Missionen nur ausserhalb von Level-Up/Boss-Choice Overlays aktualisieren
 - [x] I-Bildschirm: erweiterte Run-Statistiken (erkundete Chunks, Kills pro Gegnertyp, Top-Speed, Distanz)
 - [x] Comets: freie Kometenbahnen durch mehrere Chunks (elliptisch/hyperbolisch), mit Schweif-VFX
-- [ ] Comets: seltene Stern-Orbits mit sehr grossem Radius (deutlich langsamer fern der Sonne)
-- [ ] Rogue planet / brown dwarf (sehr selten): grosses, dunkles Objekt ohne lokales Planetensystem
-- [ ] Derelict stations / Wracks als erkundbare Background-Makroobjekte (optional mit Loot-Events)
-- [ ] Ion storms / plasma clouds als raeumliche Wetterzonen (Sicht + Projektilverhalten beeinflussen)
-- [ ] Debris streams / meteor showers als gerichtete, temporale Flow-Objekte
-- [ ] Mutterschiffe/Traegerschiffe: grosse Schiffe als seltene Elite-Begegnung
-- [ ] Mutterschiffe/Traegerschiffe: Eskorte aus 3-5 normalen Schiffen beim Spawn
-- [ ] Mutterschiffe/Traegerschiffe: spawnen neue Schiffe bis das Mutterschiff zerstoert ist
-- [ ] Spezial-Asteroiden: Gold-Asteroid (Bonus-Punkte)
-- [ ] Spezial-Asteroiden: Eisen-Asteroid (garantierter Panzerungs-Drop)
+- [x] Comets: seltene Stern-Orbits mit sehr grossem Radius (deutlich langsamer fern der Sonne)
+- [x] Rogue planet / brown dwarf (sehr selten): grosses, dunkles Objekt ohne lokales Planetensystem
+- [x] Derelict stations / Wracks als erkundbare Background-Makroobjekte (optional mit Loot-Events)
+- [x] Ion storms / plasma clouds als raeumliche Wetterzonen (Sicht + Projektilverhalten beeinflussen)
+- [x] Debris streams / meteor showers als gerichtete, temporale Flow-Objekte
+- [x] Mutterschiffe/Traegerschiffe: grosse Schiffe als seltene Elite-Begegnung
+- [x] Mutterschiffe/Traegerschiffe: Eskorte aus 3-5 normalen Schiffen beim Spawn
+- [x] Mutterschiffe/Traegerschiffe: spawnen neue Schiffe bis das Mutterschiff zerstoert ist
+- [x] Spezial-Asteroiden: Gold-Asteroid (Bonus-Punkte)
+- [x] Spezial-Asteroiden: Eisen-Asteroid (garantierter Panzerungs-Drop)
 - [x] High-detail procedural planets (bands, craters, rim light, atmospheric scattering)
 - [x] Rich nebula rendering (layered noise, color palettes, wisps, depth fade)
 - [x] Improved starfield quality (twinkle variance, color temperature, density falloff)
 - [x] Cinematic background composition rules per chunk (avoid flat empty scenes)
-- [ ] Larger playable area / viewport fill (use much more of browser window)
-- [ ] Enemy fleets/formations per chunk (coordinated groups)
-- [ ] Dynamic faction encounters and roaming patrol groups
-- [ ] Black hole in parallax layer 2 with gravity pull zone
-- [ ] Black hole event horizon that swallows entities crossing threshold
-- [ ] Distortion VFX/accretion ring for black holes
-- [ ] Optional: black hole influence on player ship (tunable)
+- [x] Larger playable area / viewport fill (use much more of browser window)
+- [x] Enemy fleets/formations per chunk (coordinated groups)
+- [x] Dynamic faction encounters and roaming patrol groups
+- [x] Black hole in parallax layer 2 with gravity pull zone
+- [x] Black hole event horizon that swallows entities crossing threshold
+- [x] Distortion VFX/accretion ring for black holes
+- [x] Optional: black hole influence on player ship (tunable)
 - [x] Space stations orbiting planets
 - [x] No free-floating station hazards (stations only as planet orbits)
 - [x] Asteroid groups/fields as clustered encounters

@@ -126,6 +126,9 @@ const GAMEPLAY_TUNING = (window.VoidTuning && window.VoidTuning.GAMEPLAY) || {
     spawnIntensityPerBoss: 0.2,
     spawnIntensityCap: 1.25,
   },
+  blackHole: {
+    playerInfluenceEnabled: true,
+  },
 };
 
 const DESTROY_REASONS = (window.VoidTuning && window.VoidTuning.DESTROY_REASONS) || {
@@ -163,10 +166,13 @@ const state = {
   killStatsByType: {
     miniAlien: 0,
     alienShip: 0,
+    mothership: 0,
     smallRock: 0,
     mediumRock: 0,
     boulder: 0,
     debris: 0,
+    goldAsteroid: 0,
+    ironAsteroid: 0,
   },
   runStats: {
     distanceWU: 0,
@@ -1710,35 +1716,102 @@ function applyWorldSize(newWidth, newHeight) {
 }
 
 function fitMobileViewport() {
-  if (!IS_COARSE_POINTER) {
-    if (stageWrapEl) {
-      stageWrapEl.style.removeProperty("width");
-      stageWrapEl.style.removeProperty("height");
-    }
-    return;
-  }
-
   const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
   const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   const hudVisible = hudEl ? window.getComputedStyle(hudEl).display !== "none" : false;
   const hudHeight = hudVisible && hudEl ? hudEl.offsetHeight : 0;
+  const notesVisible = notesEl ? window.getComputedStyle(notesEl).display !== "none" : false;
+  const notesHeight = notesVisible && notesEl ? notesEl.offsetHeight : 0;
 
-  const horizontalSpace = Math.max(260, viewportWidth - 8);
-  const verticalSpace = Math.max(150, viewportHeight - hudHeight - 18);
+  const sideInset = IS_COARSE_POINTER ? 8 : 18;
+  const verticalInset = IS_COARSE_POINTER ? 18 : 28;
 
-  let nextWidth = horizontalSpace;
+  const horizontalSpace = Math.max(420, viewportWidth - sideInset * 2);
+  const verticalSpace = Math.max(240, viewportHeight - hudHeight - notesHeight - verticalInset);
+
+  const maxDesktopWidth = IS_COARSE_POINTER ? 1280 : 1860;
+  const maxDesktopHeight = IS_COARSE_POINTER ? 900 : 1060;
+  const usableWidth = Math.min(horizontalSpace, maxDesktopWidth);
+  const usableHeight = Math.min(verticalSpace, maxDesktopHeight);
+
+  let nextWidth = usableWidth;
   let nextHeight = Math.floor(nextWidth / BASE_WORLD.aspect);
 
-  if (nextHeight > verticalSpace) {
-    nextHeight = verticalSpace;
+  if (nextHeight > usableHeight) {
+    nextHeight = usableHeight;
     nextWidth = Math.floor(nextHeight * BASE_WORLD.aspect);
   }
 
-  applyWorldSize(Math.max(260, Math.floor(nextWidth)), Math.max(150, Math.floor(nextHeight)));
+  applyWorldSize(Math.max(420, Math.floor(nextWidth)), Math.max(240, Math.floor(nextHeight)));
 
   if (stageWrapEl) {
     stageWrapEl.style.width = `${WORLD.width}px`;
     stageWrapEl.style.height = `${WORLD.height}px`;
+  }
+}
+
+function applyBlackHoleEntityEffects(dt) {
+  if (dt <= 0) return;
+  const zones = typeof worldSystem.getBlackHoleZones === "function" ? worldSystem.getBlackHoleZones() : [];
+  if (!zones || zones.length === 0) return;
+
+  for (const zone of zones) {
+    const gravityR = zone.gravityRadius || 220;
+    const horizonR = zone.eventHorizonRadius || 28;
+    const gravityPull = zone.gravityPull || 220;
+    const parallax = zone.parallax || 0.3;
+
+    const applyPull = (entity, lifeProp = null) => {
+      if (!entity) return;
+      if (lifeProp && entity[lifeProp] <= 0) return;
+      if (!Number.isFinite(entity.worldX) || !Number.isFinite(entity.worldY)) return;
+      if (!Number.isFinite(entity.vx) || !Number.isFinite(entity.vy)) return;
+
+      const dx = zone.x - entity.worldX;
+      const dy = zone.y - entity.worldY;
+      const d = Math.hypot(dx, dy);
+      if (d <= horizonR) {
+        if (lifeProp) entity[lifeProp] = 0;
+        return;
+      }
+      if (d > gravityR) return;
+
+      const t = Math.max(0, 1 - d / gravityR);
+      const nx = dx / Math.max(1, d);
+      const ny = dy / Math.max(1, d);
+      const pull = gravityPull * (0.16 + t * 1.18) * dt * Math.max(0.25, parallax);
+      entity.vx += nx * pull;
+      entity.vy += ny * pull;
+    };
+
+    for (const obj of state.objects) {
+      if (!obj || obj.hp <= 0 || obj.destroyed) continue;
+      const dx = zone.x - (obj.worldX || 0);
+      const dy = zone.y - (obj.worldY || 0);
+      const d = Math.hypot(dx, dy);
+      if (d <= horizonR + (obj.collisionRadius || 8) * 0.25) {
+        destroyObject(obj, DESTROY_REASONS.COLLISION);
+        continue;
+      }
+      applyPull(obj);
+    }
+
+    for (const bullet of state.bullets) applyPull(bullet, "life");
+    for (const missile of state.missiles) applyPull(missile, "life");
+    for (const burst of state.plasmaBursts) applyPull(burst, "life");
+    for (const proj of state.bossProjectiles) applyPull(proj, "life");
+
+    for (const pickup of state.pickups) {
+      if (!pickup || pickup.life <= 0 || !Number.isFinite(pickup.worldX) || !Number.isFinite(pickup.worldY)) continue;
+      const dx = zone.x - pickup.worldX;
+      const dy = zone.y - pickup.worldY;
+      const d = Math.hypot(dx, dy);
+      if (d <= horizonR + (pickup.radius || 8) * 0.2) {
+        pickup.life = 0;
+        continue;
+      }
+      applyPull(pickup, "life");
+    }
   }
 }
 
@@ -1971,10 +2044,13 @@ function resetGame() {
   state.shipHitsTaken = 0;
   state.killStatsByType.miniAlien = 0;
   state.killStatsByType.alienShip = 0;
+  state.killStatsByType.mothership = 0;
   state.killStatsByType.smallRock = 0;
   state.killStatsByType.mediumRock = 0;
   state.killStatsByType.boulder = 0;
   state.killStatsByType.debris = 0;
+  state.killStatsByType.goldAsteroid = 0;
+  state.killStatsByType.ironAsteroid = 0;
   state.runStats.distanceWU = 0;
   state.runStats.topSpeedWU = 0;
   state.runStats.exploredChunks = Object.create(null);
@@ -2709,6 +2785,43 @@ function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
 
 }
 
+function applyIonStormToProjectiles(dt) {
+  if (dt <= 0) return;
+  const zones = typeof worldSystem.getIonStormZones === "function" ? worldSystem.getIonStormZones() : [];
+  if (!zones || zones.length === 0) return;
+
+  const projectileGroups = [state.bullets, state.missiles, state.plasmaBursts, state.bossProjectiles];
+  for (const group of projectileGroups) {
+    if (!group || group.length === 0) continue;
+    for (const proj of group) {
+      if (!proj) continue;
+      const wx = Number.isFinite(proj.worldX) ? proj.worldX : null;
+      const wy = Number.isFinite(proj.worldY) ? proj.worldY : null;
+      if (!Number.isFinite(wx) || !Number.isFinite(wy) || !Number.isFinite(proj.vx) || !Number.isFinite(proj.vy)) continue;
+
+      for (const zone of zones) {
+        const hitRadius = zone.hazardRadius || 150;
+        const dx = wx - zone.x;
+        const dy = wy - zone.y;
+        const d = Math.hypot(dx, dy);
+        if (d > hitRadius || d <= 0.0001) continue;
+
+        const t = Math.max(0, 1 - d / hitRadius);
+        const nx = -dy / d;
+        const ny = dx / d;
+        const drift = (zone.projectileDrift || 32) * (0.2 + t * 0.85) * dt;
+        proj.vx += nx * drift;
+        proj.vy += ny * drift;
+
+        const damp = Math.max(0.9, 1 - 0.08 * t * dt * 60);
+        proj.vx *= damp;
+        proj.vy *= damp;
+        break;
+      }
+    }
+  }
+}
+
 function update(dt, now) {
   if (!state.running) return;
 
@@ -2742,6 +2855,16 @@ function update(dt, now) {
   }
 
   if (!hazardInteractions.handleShipToxicNebula(ship, dt)) {
+    return;
+  }
+
+  if (!hazardInteractions.handleShipIonStorm(ship, dt)) {
+    return;
+  }
+
+  if (!hazardInteractions.handleShipBlackHoles(ship, dt, {
+    playerInfluence: !GAMEPLAY_TUNING.blackHole || GAMEPLAY_TUNING.blackHole.playerInfluenceEnabled !== false,
+  })) {
     return;
   }
 
@@ -2787,6 +2910,9 @@ function update(dt, now) {
   // === COMBAT PHASE ===
   const perfCombatStart = performance.now();
   runSpawnPhase(dt, difficulty, cameraX, cameraY);
+  if (typeof encounters.updateEliteEncounters === "function") {
+    encounters.updateEliteEncounters(dt);
+  }
 
   encounters.updateBoss(dt);
 
@@ -2845,11 +2971,14 @@ function update(dt, now) {
       }
     }
 
-    if (obj.type === "alienShip" && obj.aggroLocked && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
+    if ((obj.type === "alienShip" || obj.type === "mothership") && obj.aggroLocked && obj.nextShotAt !== null && state.time >= obj.nextShotAt) {
       const dxShip = (ship.worldX || 0) - (obj.worldX || 0);
       const dyShip = (ship.worldY || 0) - (obj.worldY || 0);
       const distShip = Math.hypot(dxShip, dyShip);
-      if (distShip > Math.max(WORLD.width, WORLD.height) * GAMEPLAY_TUNING.enemyCombat.shipFireMaxDistViewportMult) {
+      const fireDistMult = obj.type === "mothership"
+        ? GAMEPLAY_TUNING.enemyCombat.shipFireMaxDistViewportMult * 1.35
+        : GAMEPLAY_TUNING.enemyCombat.shipFireMaxDistViewportMult;
+      if (distShip > Math.max(WORLD.width, WORLD.height) * fireDistMult) {
         obj.nextShotAt = state.time
           + GAMEPLAY_TUNING.enemyCombat.shipOutOfRangeDelayMin
           + Math.random() * GAMEPLAY_TUNING.enemyCombat.shipOutOfRangeDelayRand;
@@ -2866,7 +2995,9 @@ function update(dt, now) {
       if (tryUseDrillOnObject(obj)) {
         continue;
       }
-      const objDamage = obj.type === "boulder" || obj.type === "mediumRock" ? 2 : 1;
+      const objDamage = obj.type === "mothership"
+        ? 3
+        : (obj.type === "boulder" || obj.type === "mediumRock" || obj.type === "ironAsteroid" ? 2 : 1);
       if (!hitShip("physical", objDamage)) {
         setGameOver();
         return;
@@ -2882,6 +3013,8 @@ function update(dt, now) {
   }
 
   projectileResolver.resolveBulletsMovement(dt, cameraX, cameraY);
+  applyIonStormToProjectiles(dt);
+  applyBlackHoleEntityEffects(dt);
   projectileResolver.resolveBulletTargets();
   projectileResolver.resolveMissiles(dt, cameraX, cameraY);
   if (!projectileResolver.resolveBossProjectiles(dt, cameraX, cameraY, ship)) {
