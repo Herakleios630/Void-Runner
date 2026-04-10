@@ -57,9 +57,9 @@
     const unloadRadius = typeof options.unloadRadius === "number" ? options.unloadRadius : activeRadius + 1;
     const orbitUnit = typeof options.orbitUnit === "number" ? options.orbitUnit : 180;
     const maxOrbitShells = 10;
-    const minSunOrbitDistance = 22;
+    const minSunOrbitDistance = 14;
     const minSunDistanceWorld = orbitUnit * minSunOrbitDistance;
-    const sunCandidateChance = 0.05;
+    const sunCandidateChance = 0.14;
 
     const activeChunks = new Map();
 
