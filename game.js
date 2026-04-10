@@ -67,6 +67,10 @@ const {
   setMusicEnabled,
   getMusicEnabled,
   toggleMusicEnabled,
+  setMusicVolume,
+  getMusicVolume,
+  setSfxVolume,
+  getSfxVolume,
 } = window.VoidAudio;
 const { createWorldSystem } = window.VoidWorld;
 const { createCameraSystem } = window.VoidCamera;
@@ -150,6 +154,10 @@ const state = {
   lastAimTapAt: -999,
   score: 0,
   kills: 0,
+  killStatsByType: {
+    miniAlien: 0,
+    alienShip: 0,
+  },
   time: 0,
   realNow: performance.now() / 1000,
   level: 1,
@@ -283,6 +291,17 @@ const state = {
     frameTotal: 0,
   },
   statusBarsMode: 0,
+  options: {
+    missionToastEnabled: true,
+    musicVolume: 1.0,
+    sfxVolume: 1.0,
+  },
+  missionToast: {
+    text: "",
+    subText: "",
+    startedAt: 0,
+    showUntil: 0,
+  },
   missions: {
     serial: 0,
     active: null,
@@ -333,6 +352,10 @@ const MISSION_TYPES = {
   TRAVEL: "travel",
   SURVIVE: "survive",
 };
+const MISSION_ENEMY_CLASS_DEFS = [
+  { type: "miniAlien", label: "Mini-Aliens", minTarget: 8, targetSpan: 8, rewardFactor: 9 },
+  { type: "alienShip", label: "Alien-Schiffe", minTarget: 5, targetSpan: 6, rewardFactor: 12 },
+];
 
 const MAX_WEAPON_SLOTS = 3;
 const WEAPON_LEVEL_MILESTONES = [5, 10, 15, 20];
@@ -390,6 +413,13 @@ function missionTitle(type) {
 function missionProgressValue(mission) {
   if (!mission) return 0;
   if (mission.type === MISSION_TYPES.DESTROY) {
+    if (mission.targetEnemyType) {
+      const byType = state.killStatsByType || {};
+      const startByType = mission.startKillsByType || {};
+      const current = Number(byType[mission.targetEnemyType] || 0);
+      const baseline = Number(startByType[mission.targetEnemyType] || 0);
+      return Math.max(0, current - baseline);
+    }
     return Math.max(0, state.kills - mission.startKills);
   }
   return mission.progress || 0;
@@ -400,7 +430,7 @@ function missionDeterministicRand(seedBase) {
   return x - Math.floor(x);
 }
 
-function assignNextMission(now = state.time) {
+function assignNextMission(now = state.time, showToast = false) {
   const serial = (state.missions.serial || 0) + 1;
   state.missions.serial = serial;
 
@@ -413,41 +443,76 @@ function assignNextMission(now = state.time) {
   else if (missionRoll > 0.67) type = MISSION_TYPES.SURVIVE;
 
   let target = 8;
+  let title = missionTitle(type);
+  let targetEnemyType = null;
+  let targetEnemyLabel = null;
+  let rewardFactor = type === MISSION_TYPES.DESTROY ? 9 : type === MISSION_TYPES.TRAVEL ? 11 : 7;
+
   if (type === MISSION_TYPES.DESTROY) {
-    target = 8 + Math.floor(targetRoll * 8);
+    const classRoll = missionDeterministicRand(seedBase + 9.13);
+    const classIndex = Math.min(
+      MISSION_ENEMY_CLASS_DEFS.length - 1,
+      Math.floor(classRoll * MISSION_ENEMY_CLASS_DEFS.length),
+    );
+    const classDef = MISSION_ENEMY_CLASS_DEFS[classIndex];
+    targetEnemyType = classDef.type;
+    targetEnemyLabel = classDef.label;
+    title = `Zerstoere ${classDef.label}`;
+    target = classDef.minTarget + Math.floor(targetRoll * classDef.targetSpan);
+    rewardFactor = classDef.rewardFactor;
   } else if (type === MISSION_TYPES.TRAVEL) {
     target = 6 + Math.floor(targetRoll * 7);
   } else {
     target = 35 + Math.floor(targetRoll * 35);
   }
 
-  const rewardScore = Math.round(80 + target * (type === MISSION_TYPES.DESTROY ? 9 : type === MISSION_TYPES.TRAVEL ? 11 : 7));
+  const rewardScore = Math.round(80 + target * rewardFactor);
 
   state.missions.active = {
     id: `mission-${serial}`,
     type,
-    title: missionTitle(type),
+    title,
     unit: missionUnitLabel(type),
     target,
     progress: 0,
     rewardScore,
     startKills: state.kills,
+    startKillsByType: {
+      miniAlien: Number((state.killStatsByType && state.killStatsByType.miniAlien) || 0),
+      alienShip: Number((state.killStatsByType && state.killStatsByType.alienShip) || 0),
+    },
+    targetEnemyType,
+    targetEnemyLabel,
     completed: false,
     completedUntil: 0,
     startedAt: now,
   };
+
+  if (showToast && state.options && state.options.missionToastEnabled !== false) {
+    const m = state.missions.active;
+    const toastDuration = 4.0;
+    const unitStr = m.unit === "Chunks" || m.unit === "Sek"
+      ? `${m.target} ${m.unit}`
+      : `${m.target} ${m.unit}`;
+    state.missionToast = {
+      text: m.title,
+      subText: `Ziel: ${unitStr}  |  +${m.rewardScore} Pkt`,
+      startedAt: now,
+      showUntil: now + toastDuration,
+    };
+  }
 }
 
 function updateMissions(dt, movedWorldDistance) {
   const mission = state.missions.active;
   if (!mission) {
-    assignNextMission(state.time);
+    assignNextMission(state.time, true);
     return;
   }
 
   if (mission.completed) {
     if (state.time >= mission.completedUntil) {
-      assignNextMission(state.time);
+      assignNextMission(state.time, true);
     }
     return;
   }
@@ -1268,6 +1333,8 @@ function resetGame() {
   state.levelUpPending = false;
   state.score = 0;
   state.kills = 0;
+  state.killStatsByType.miniAlien = 0;
+  state.killStatsByType.alienShip = 0;
   state.time = 0;
   state.realNow = performance.now() / 1000;
   state.level = 1;
@@ -1415,7 +1482,7 @@ function resetGame() {
   }
 
   progression.initializeWeaponLevelsFromLoadout();
-  assignNextMission(0);
+  assignNextMission(0, true);
 
   overlay.classList.add("hidden");
   setPauseIndicatorVisible(false);
@@ -1522,13 +1589,14 @@ function showPauseOverlay() {
     <h1>Pause</h1>
     <p>Spiel pausiert</p>
     <button data-action="resume">Fortsetzen</button>
+    <button data-action="open-options" data-back="manual-pause">Optionen</button>
     <button data-action="restart">Neu starten</button>
     <button data-action="open-ship-select">Raumschiff wechseln</button>
   `;
 }
 
 function togglePause() {
-  if (state.pauseReason === "difficulty-select" || state.pauseReason === "ship-select" || state.pauseReason === "levelup" || state.pauseReason === "bossreward" || state.pauseReason === "gameover") {
+  if (state.pauseReason === "menu" || state.pauseReason === "options" || state.pauseReason === "difficulty-select" || state.pauseReason === "ship-select" || state.pauseReason === "levelup" || state.pauseReason === "bossreward" || state.pauseReason === "gameover") {
     return;
   }
 
@@ -2177,7 +2245,7 @@ function gameLoop(nowMs) {
   const overlayHidden = overlay.classList.contains("hidden");
   const inSelectionState = state.pauseReason === "difficulty-select" || state.pauseReason === "ship-select";
   const recoverableNoShip = !state.ship && overlayHidden && (state.pauseReason === "running" || inSelectionState);
-  const recoverableStopped = !state.running && overlayHidden && (state.pauseReason === "running" || inSelectionState);
+  const recoverableStopped = !state.running && overlayHidden && (state.pauseReason === "running" || inSelectionState) && state.pauseReason !== "menu" && state.pauseReason !== "options";
 
   if (recoverableNoShip || recoverableStopped) {
     resetGame();
@@ -2200,6 +2268,63 @@ function gameLoop(nowMs) {
   requestAnimationFrame(gameLoop);
 }
 function handleOverlayAction(actionNode) {
+  if (actionNode.dataset.action === "open-diff-select") {
+    menus.showDifficultySelectionMenu();
+    return;
+  }
+
+  if (actionNode.dataset.action === "open-options") {
+    const backAction = actionNode.dataset.back || "main-menu";
+    menus.showOptionsMenu(backAction);
+    return;
+  }
+
+  if (actionNode.dataset.action === "set-statusbars-mode") {
+    const mode = Number(actionNode.dataset.mode);
+    if (Number.isFinite(mode)) state.statusBarsMode = mode;
+    // Persist current slider state so values survive the re-render
+    const musicSlider = overlay.querySelector("#musicVolumeSlider");
+    const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
+    const toastToggle = overlay.querySelector("#missionToastToggle");
+    if (musicSlider) state.options.musicVolume = Math.max(0, Math.min(1, Number(musicSlider.value) / 100));
+    if (sfxSlider) state.options.sfxVolume = Math.max(0, Math.min(1, Number(sfxSlider.value) / 100));
+    if (toastToggle) state.options.missionToastEnabled = toastToggle.checked;
+    const backAction = actionNode.dataset.back || "main-menu";
+    menus.showOptionsMenu(backAction);
+    return;
+  }
+
+  if (actionNode.dataset.action === "apply-options") {
+    const musicSlider = overlay.querySelector("#musicVolumeSlider");
+    const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
+    const toastToggle = overlay.querySelector("#missionToastToggle");
+    if (musicSlider) {
+      const v = Math.max(0, Math.min(1, Number(musicSlider.value) / 100));
+      state.options.musicVolume = v;
+      if (typeof setMusicVolume === "function") setMusicVolume(v);
+    }
+    if (sfxSlider) {
+      const v = Math.max(0, Math.min(1, Number(sfxSlider.value) / 100));
+      state.options.sfxVolume = v;
+      if (typeof setSfxVolume === "function") setSfxVolume(v);
+    }
+    if (toastToggle) {
+      state.options.missionToastEnabled = toastToggle.checked;
+    }
+    const backAction = actionNode.dataset.back || "main-menu";
+    if (backAction === "manual-pause") {
+      showPauseOverlay();
+    } else {
+      menus.showMainLandingMenu();
+    }
+    return;
+  }
+
+  if (actionNode.dataset.action === "open-main-menu") {
+    menus.showMainLandingMenu();
+    return;
+  }
+
   if (actionNode.dataset.action === "seed-randomize") {
     state.worldSeed = generateWorldSeed();
     menus.showDifficultySelectionMenu();
@@ -2418,7 +2543,7 @@ const inputSystem = createInputSystem({
   onOverlayAction: handleOverlayAction,
 });
 
-menus.showDifficultySelectionMenu();
+menus.showMainLandingMenu();
 playMusicCategory("menu");
 inputSystem.setup();
 worldSystem.update(0, 0);

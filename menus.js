@@ -28,6 +28,74 @@
       return DIFFICULTY_MODES[state.selectedDifficultyId] || DIFFICULTY_MODES.medium;
     }
 
+    function showMainLandingMenu() {
+      state.running = false;
+      state.pauseReason = "menu";
+      setPauseIndicatorVisible(false);
+      if (typeof playMusicCategory === "function") {
+        playMusicCategory("menu");
+      }
+      overlay.classList.remove("hidden");
+      overlay.innerHTML = `
+        <h1>Void Runner</h1>
+        <p style="color:#b8d8f8;">Prozedurales Weltraum-Abenteuer</p>
+        <div style="display:grid;gap:12px;width:min(92vw,340px);margin:24px auto 0;">
+          <button data-action="open-diff-select" style="padding:14px 28px;font-size:17px;">Spiel starten</button>
+          <button data-action="open-options" data-back="main-menu" style="padding:11px 28px;">Optionen</button>
+        </div>
+        <p style="margin-top:28px;font-size:12px;color:#6a98c0;">WASD/Pfeile = Schub &nbsp;|&nbsp; LMB/Space = Schiessen &nbsp;|&nbsp; ESC = Pause</p>
+      `;
+    }
+
+    function showOptionsMenu(backAction) {
+      state.running = false;
+      state.pauseReason = "options";
+      setPauseIndicatorVisible(false);
+      const opts = state.options || {};
+      const musicVolPct = Math.round((opts.musicVolume !== undefined ? opts.musicVolume : 1) * 100);
+      const sfxVolPct = Math.round((opts.sfxVolume !== undefined ? opts.sfxVolume : 1) * 100);
+      const toastEnabled = opts.missionToastEnabled !== false;
+      const statusBarsMode = state.statusBarsMode || 0;
+      const modeLabels = ["Aus", "Nur Spieler", "Nur Gegner", "Beide"];
+
+      overlay.classList.remove("hidden");
+      overlay.innerHTML = `
+        <h1>Optionen</h1>
+        <div style="width:min(92vw,460px);display:grid;gap:20px;text-align:left;">
+          <div>
+            <label style="display:block;margin-bottom:6px;color:#d0e8ff;">Musik-Lautstaerke: <strong id="musicVolLabel">${musicVolPct}%</strong></label>
+            <input type="range" id="musicVolumeSlider" min="0" max="100" value="${musicVolPct}" style="width:100%;accent-color:#67f2ff;" />
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:6px;color:#d0e8ff;">Sound-Effekte: <strong id="sfxVolLabel">${sfxVolPct}%</strong></label>
+            <input type="range" id="sfxVolumeSlider" min="0" max="100" value="${sfxVolPct}" style="width:100%;accent-color:#67f2ff;" />
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="missionToastToggle" ${toastEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+            <label for="missionToastToggle" style="color:#d0e8ff;cursor:pointer;">Missions-Popup anzeigen</label>
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:8px;color:#d0e8ff;">Lebensbalken-Modus</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              ${modeLabels.map((label, i) => `<button data-action="set-statusbars-mode" data-mode="${i}" data-back="${backAction}" style="padding:7px 16px;${statusBarsMode === i ? "border-color:rgba(103,242,255,0.9);background:rgba(103,242,255,0.14);" : ""}">${label}</button>`).join("")}
+            </div>
+          </div>
+          <button data-action="apply-options" data-back="${backAction}" style="padding:12px 20px;margin-top:4px;">Speichern &amp; Zurueck</button>
+        </div>
+      `;
+
+      const musicSlider = overlay.querySelector("#musicVolumeSlider");
+      const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
+      const musicLabel = overlay.querySelector("#musicVolLabel");
+      const sfxLabel = overlay.querySelector("#sfxVolLabel");
+      if (musicSlider && musicLabel) {
+        musicSlider.addEventListener("input", () => { musicLabel.textContent = `${musicSlider.value}%`; });
+      }
+      if (sfxSlider && sfxLabel) {
+        sfxSlider.addEventListener("input", () => { sfxLabel.textContent = `${sfxSlider.value}%`; });
+      }
+    }
+
     function showDifficultySelectionMenu() {
       state.running = false;
       state.pauseReason = "difficulty-select";
@@ -102,6 +170,8 @@
     }
 
     return {
+      showMainLandingMenu,
+      showOptionsMenu,
       showDifficultySelectionMenu,
       showShipSelectionMenu,
     };
