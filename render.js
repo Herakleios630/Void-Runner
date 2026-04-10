@@ -21,6 +21,7 @@
     let miniMapOrbitRings = [];
     let miniMapBeltRings = [];
     let miniMapToxicZones = [];
+    let miniMapWormholes = [];
     const visualTuning = (window.VoidTuning && window.VoidTuning.VISUAL) || {};
     const STAR_VISIBILITY = Number.isFinite(visualTuning.starVisibility)
       ? Math.max(0.45, Math.min(2.5, visualTuning.starVisibility))
@@ -1359,6 +1360,7 @@
 
       const bgObjects = typeof worldSystem.getBackgroundObjects === "function" ? worldSystem.getBackgroundObjects() : [];
       const toxicZones = typeof worldSystem.getToxicNebulaZones === "function" ? worldSystem.getToxicNebulaZones() : [];
+      const wormholes = typeof worldSystem.getWormholePortals === "function" ? worldSystem.getWormholePortals() : [];
       const planetPoints = [];
       const orbitRings = new Map();
       const beltRings = new Map();
@@ -1426,6 +1428,7 @@
       miniMapOrbitRings = Array.from(orbitRings.values()).slice(0, 80);
       miniMapBeltRings = Array.from(beltRings.values()).slice(0, 40);
       miniMapToxicZones = toxicZones.slice(0, 36);
+      miniMapWormholes = wormholes.slice(0, 24);
     }
 
     function drawMiniMap() {
@@ -1543,6 +1546,27 @@
         ctx.fill();
       }
 
+      const wormholeBudget = Math.min(
+        miniMapWormholes.length,
+        Math.max(2, Math.floor(miniMapWormholes.length * (1 - scannerJam * 0.5)))
+      );
+      for (let i = 0; i < wormholeBudget; i += 1) {
+        const wormhole = miniMapWormholes[i];
+        if (!wormhole) continue;
+        const p = project(wormhole.x, wormhole.y);
+        if (!p.visible) continue;
+        const rr = Math.max(1.8, Math.min(3.8, ((wormhole.radius || 24) / worldSpan) * mapSize * 2.2));
+        ctx.strokeStyle = "rgba(130, 218, 255, 0.95)";
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(168, 235, 255, 0.85)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(1, rr * 0.36), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       if (scannerJam > 0.06) {
         ctx.fillStyle = `rgba(15, 42, 24, ${(0.1 + scannerJam * 0.28).toFixed(3)})`;
         ctx.fillRect(mapX + 1, mapY + 1, mapSize - 2, mapSize - 2);
@@ -1562,6 +1586,10 @@
       if (miniMapToxicZones.length > 0) {
         ctx.fillStyle = "rgba(142, 255, 164, 0.85)";
         ctx.fillText("TOXIC=GREEN", mapX + 7, mapY + mapSize - 8);
+      }
+      if (miniMapWormholes.length > 0) {
+        ctx.fillStyle = "rgba(166, 236, 255, 0.88)";
+        ctx.fillText("WORMHOLE=CYAN", mapX + 92, mapY + mapSize - 8);
       }
       if (scannerJam > 0.25) {
         ctx.fillStyle = "rgba(170, 244, 170, 0.9)";
