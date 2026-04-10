@@ -2552,6 +2552,26 @@ function gameLoop(nowMs) {
   const dt = Math.min(0.033, now - lastTime);
   lastTime = now;
 
+  // Fail-safe: recover from broken startup states where no ship got initialized.
+  if (!state.ship && state.pauseReason === "running") {
+    resetGame();
+  }
+
+  if (!state.ship && state.pauseReason === "difficulty-select" && overlay.classList.contains("hidden")) {
+    resetGame();
+  }
+
+  if (state.ship) {
+    if (!Number.isFinite(state.ship.worldX) || !Number.isFinite(state.ship.worldY)) {
+      state.ship.worldX = state.world.playerX || 0;
+      state.ship.worldY = state.world.playerY || 0;
+    }
+    if (!Number.isFinite(state.ship.x) || !Number.isFinite(state.ship.y)) {
+      state.ship.x = WORLD.width * 0.5;
+      state.ship.y = WORLD.height * 0.5;
+    }
+  }
+
   update(dt, now);
   renderer.draw();
 

@@ -225,6 +225,11 @@
         state.mouseInCanvas = true;
       });
 
+      window.addEventListener("mousemove", (event) => {
+        if (IS_COARSE_POINTER) return;
+        setAimFromClient(event.clientX, event.clientY);
+      });
+
       canvas.addEventListener("mouseenter", () => {
         state.mouseInCanvas = true;
       });
