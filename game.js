@@ -1896,18 +1896,8 @@ function runSpawnPhase(dt, difficulty, cameraX, cameraY) {
     state.lastSpawn = dynamicSpawn * maxSpawnsPerFrame;
   }
 
-  state.lastEdgeSpawn += dt;
-  const dynamicEdgeSpawn = Math.max(1.2, state.edgeSpawnInterval / Math.max(1, intensity * 0.82 * difficulty.edgeSpawnRateMult));
-  let edgeSpawnsThisFrame = 0;
-  const maxEdgeSpawnsPerFrame = 3;
-  while (state.lastEdgeSpawn >= dynamicEdgeSpawn && edgeSpawnsThisFrame < maxEdgeSpawnsPerFrame) {
-    state.lastEdgeSpawn -= dynamicEdgeSpawn;
-    encounters.spawnEdgeHazard();
-    edgeSpawnsThisFrame += 1;
-  }
-  if (state.lastEdgeSpawn > dynamicEdgeSpawn * maxEdgeSpawnsPerFrame) {
-    state.lastEdgeSpawn = dynamicEdgeSpawn * maxEdgeSpawnsPerFrame;
-  }
+  // Legacy edge hazards disabled for core free-flight orbit systems.
+  state.lastEdgeSpawn = 0;
 }
 
 function update(dt, now) {
