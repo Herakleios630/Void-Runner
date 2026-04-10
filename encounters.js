@@ -134,10 +134,55 @@
       };
     }
 
+    function forcedObjectBlueprint(type, rand) {
+      if (type === "smallRock") {
+        return {
+          type,
+          size: 11 + rand() * 12,
+          hp: 3,
+          destructible: true,
+          collisionScale: 0.78,
+          corners: 8,
+        };
+      }
+      if (type === "mediumRock") {
+        return {
+          type,
+          size: 24 + rand() * 14,
+          hp: 5,
+          destructible: true,
+          collisionScale: 0.8,
+          corners: 9,
+        };
+      }
+      if (type === "boulder") {
+        return {
+          type,
+          size: 36 + rand() * 28,
+          hp: 999,
+          destructible: false,
+          collisionScale: 0.82,
+          corners: 11,
+        };
+      }
+      if (type === "debris") {
+        return {
+          type,
+          size: 22 + rand() * 18,
+          hp: 999,
+          destructible: false,
+          collisionScale: 0.76,
+          corners: 8,
+        };
+      }
+      return null;
+    }
+
     function spawnObject(options = {}) {
       const rand = typeof options.rand === "function" ? options.rand : Math.random;
       const difficulty = selectedDifficultyMode();
-      const blueprint = createObjectBlueprint(rand, difficulty);
+      const forced = options.forceType ? forcedObjectBlueprint(options.forceType, rand) : null;
+      const blueprint = forced || createObjectBlueprint(rand, difficulty);
       const isEnemy = blueprint.type === "miniAlien" || blueprint.type === "alienShip";
       const baseAggro = Math.min(WORLD.width, WORLD.height) * 0.5;
       const aggroRange = baseAggro * (0.8 + rand() * 0.4);
@@ -287,6 +332,25 @@
           rand,
           spawnPadding: 40 + rand() * 90,
         });
+      }
+
+      // Clustered asteroid fields: deterministic per chunk for stronger spatial identity.
+      if (rand() < 0.74) {
+        const clusterCount = 1 + Math.floor(rand() * (distancePressure > 0.7 ? 2 : 1));
+        for (let c = 0; c < clusterCount; c += 1) {
+          const baseAngle = spawnAngleFromSides(rand);
+          const clusterSize = 4 + Math.floor(rand() * 5);
+          for (let i = 0; i < clusterSize; i += 1) {
+            const pick = rand();
+            const forcedType = pick < 0.52 ? "smallRock" : pick < 0.84 ? "mediumRock" : pick < 0.95 ? "debris" : "boulder";
+            spawnObject({
+              rand,
+              forceType,
+              angle: baseAngle + (rand() - 0.5) * 0.6,
+              spawnPadding: 55 + rand() * 130,
+            });
+          }
+        }
       }
 
       const hazardChance = Math.min(0.88, (difficulty.id === "hard" ? 0.72 : 0.55) + distancePressure * 0.12);

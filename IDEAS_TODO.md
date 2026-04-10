@@ -19,9 +19,9 @@
 - [ ] Black hole event horizon that swallows entities crossing threshold
 - [ ] Distortion VFX/accretion ring for black holes
 - [ ] Optional: black hole influence on player ship (tunable)
-- [ ] Space stations orbiting planets
-- [ ] Asteroid groups/fields as clustered encounters
-- [ ] Dense asteroid belts around planets
+- [x] Space stations orbiting planets
+- [x] Asteroid groups/fields as clustered encounters
+- [x] Dense asteroid belts around planets
 - [ ] Enemy aggro + pursuit tuning pass (engage radius, follow persistence, speed)
 
 ## Notes
