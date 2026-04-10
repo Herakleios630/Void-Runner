@@ -25,6 +25,7 @@ const hazardStatusEl = document.getElementById("hazardStatus");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
 const musicStatusEl = document.getElementById("musicStatus");
+const missionStatusEl = document.getElementById("missionStatus");
 const pauseIndicatorEl = document.getElementById("pauseIndicator");
 const joystickAreaEl = document.getElementById("joystickArea");
 const joyBaseEl = document.getElementById("joyBase");
@@ -281,6 +282,11 @@ const state = {
     cleanup: 0,
     frameTotal: 0,
   },
+  statusBarsMode: 0,
+  missions: {
+    serial: 0,
+    active: null,
+  },
 };
 
 const UPGRADE_WEIGHTS = {
@@ -322,6 +328,11 @@ const UPGRADE_WEIGHTS = {
 };
 
 const BOSS_VARIANTS = ["tentacle", "warship", "carrier"];
+const MISSION_TYPES = {
+  DESTROY: "destroy",
+  TRAVEL: "travel",
+  SURVIVE: "survive",
+};
 
 const MAX_WEAPON_SLOTS = 3;
 const WEAPON_LEVEL_MILESTONES = [5, 10, 15, 20];
@@ -362,6 +373,116 @@ function activeWeaponSlotsCount() {
 
 function canUnlockNewWeapon() {
   return activeWeaponSlotsCount() < MAX_WEAPON_SLOTS;
+}
+
+function missionUnitLabel(type) {
+  if (type === MISSION_TYPES.DESTROY) return "Kills";
+  if (type === MISSION_TYPES.TRAVEL) return "Chunks";
+  return "Sek";
+}
+
+function missionTitle(type) {
+  if (type === MISSION_TYPES.DESTROY) return "Zerstoere Gegner";
+  if (type === MISSION_TYPES.TRAVEL) return "Reise durch den Sektor";
+  return "Ueberlebe";
+}
+
+function missionProgressValue(mission) {
+  if (!mission) return 0;
+  if (mission.type === MISSION_TYPES.DESTROY) {
+    return Math.max(0, state.kills - mission.startKills);
+  }
+  return mission.progress || 0;
+}
+
+function missionDeterministicRand(seedBase) {
+  const x = Math.sin(seedBase * 12.9898 + 78.233) * 43758.5453123;
+  return x - Math.floor(x);
+}
+
+function assignNextMission(now = state.time) {
+  const serial = (state.missions.serial || 0) + 1;
+  state.missions.serial = serial;
+
+  const seedBase = (state.worldSeed || 1) * 0.001 + serial * 17.131;
+  const missionRoll = missionDeterministicRand(seedBase);
+  const targetRoll = missionDeterministicRand(seedBase + 3.71);
+
+  let type = MISSION_TYPES.TRAVEL;
+  if (missionRoll < 0.34) type = MISSION_TYPES.DESTROY;
+  else if (missionRoll > 0.67) type = MISSION_TYPES.SURVIVE;
+
+  let target = 8;
+  if (type === MISSION_TYPES.DESTROY) {
+    target = 8 + Math.floor(targetRoll * 8);
+  } else if (type === MISSION_TYPES.TRAVEL) {
+    target = 6 + Math.floor(targetRoll * 7);
+  } else {
+    target = 35 + Math.floor(targetRoll * 35);
+  }
+
+  const rewardScore = Math.round(80 + target * (type === MISSION_TYPES.DESTROY ? 9 : type === MISSION_TYPES.TRAVEL ? 11 : 7));
+
+  state.missions.active = {
+    id: `mission-${serial}`,
+    type,
+    title: missionTitle(type),
+    unit: missionUnitLabel(type),
+    target,
+    progress: 0,
+    rewardScore,
+    startKills: state.kills,
+    completed: false,
+    completedUntil: 0,
+    startedAt: now,
+  };
+}
+
+function updateMissions(dt, movedWorldDistance) {
+  const mission = state.missions.active;
+  if (!mission) {
+    assignNextMission(state.time);
+    return;
+  }
+
+  if (mission.completed) {
+    if (state.time >= mission.completedUntil) {
+      assignNextMission(state.time);
+    }
+    return;
+  }
+
+  if (mission.type === MISSION_TYPES.TRAVEL) {
+    const chunkSize = worldSystem.chunkSize || WORLD_CHUNK_SIZE || 960;
+    mission.progress += Math.max(0, movedWorldDistance / chunkSize);
+  } else if (mission.type === MISSION_TYPES.SURVIVE) {
+    mission.progress += dt;
+  }
+
+  const value = missionProgressValue(mission);
+  if (value < mission.target) return;
+
+  mission.completed = true;
+  mission.completedUntil = state.time + 2.2;
+  scoring.addPoints(mission.rewardScore);
+}
+
+function missionHudText() {
+  const mission = state.missions.active;
+  if (!mission) return "Mission: -";
+
+  if (mission.completed) {
+    return `Mission abgeschlossen: +${mission.rewardScore} Punkte`;
+  }
+
+  const value = missionProgressValue(mission);
+  const shown = mission.unit === "Chunks" || mission.unit === "Sek"
+    ? value.toFixed(1)
+    : `${Math.floor(value)}`;
+  const targetShown = mission.unit === "Chunks" || mission.unit === "Sek"
+    ? mission.target.toFixed(1)
+    : `${mission.target}`;
+  return `Mission: ${mission.title} ${shown}/${targetShown} ${mission.unit} (+${mission.rewardScore})`;
 }
 
 const BOSS_LOOT_DEFS = [
@@ -1175,6 +1296,8 @@ function resetGame() {
   state.bossRewardPending = false;
   state.pendingBossRewards = [];
   state.bossLootTaken = {};
+  state.missions.serial = 0;
+  state.missions.active = null;
   worldSystem.setSeed(state.worldSeed);
   encounters.resetChunkSpawns();
   state.world.playerX = 0;
@@ -1292,6 +1415,7 @@ function resetGame() {
   }
 
   progression.initializeWeaponLevelsFromLoadout();
+  assignNextMission(0);
 
   overlay.classList.add("hidden");
   setPauseIndicatorVisible(false);
@@ -1351,6 +1475,10 @@ function refreshHud() {
   }
   if (musicStatusEl) {
     musicStatusEl.textContent = state.musicEnabled ? "An (M)" : "Aus (M)";
+  }
+
+  if (missionStatusEl) {
+    missionStatusEl.textContent = missionHudText();
   }
 
   if (!state.shield.unlocked) {
@@ -1824,6 +1952,8 @@ function update(dt, now) {
   }
 
   const ship = state.ship;
+  const beforeMoveWorldX = Number.isFinite(ship.worldX) ? ship.worldX : 0;
+  const beforeMoveWorldY = Number.isFinite(ship.worldY) ? ship.worldY : 0;
   
   // === MOVEMENT PHASE ===
   const perfMovementStart = performance.now();
@@ -1846,6 +1976,9 @@ function update(dt, now) {
   if (!hazardInteractions.handleShipWormholes(ship, cameraX, cameraY)) {
     return;
   }
+
+  const movedDistance = Math.hypot(ship.worldX - beforeMoveWorldX, ship.worldY - beforeMoveWorldY);
+  updateMissions(dt, movedDistance);
 
   const desktopAutoShooting = state.desktopAutoFire && !IS_COARSE_POINTER && state.mouseInCanvas;
   if (input.shooting || desktopAutoShooting) weapons.shootAtCursor(now);
@@ -2146,6 +2279,10 @@ function handleOverlayAction(actionNode) {
   }
 }
 
+function cycleStatusBarsMode() {
+  state.statusBarsMode = ((state.statusBarsMode || 0) + 1) % 4;
+}
+
 function debugTeleportNearNearestWormhole() {
   if (!state.debugHitboxes || !state.ship) return;
 
@@ -2274,6 +2411,9 @@ const inputSystem = createInputSystem({
   },
   onToggleShipInfo: () => {
     debugTools.toggleShipInfo();
+  },
+  onToggleStatusBars: () => {
+    cycleStatusBarsMode();
   },
   onOverlayAction: handleOverlayAction,
 });

@@ -1609,6 +1609,88 @@
       }
     }
 
+    function drawStatusTrackLine(x, y, width, pct, color) {
+      const clamped = Math.max(0, Math.min(1, pct));
+      ctx.strokeStyle = "rgba(7, 12, 24, 0.7)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - width * 0.5, y);
+      ctx.lineTo(x + width * 0.5, y);
+      ctx.stroke();
+
+      if (clamped <= 0) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - width * 0.5, y);
+      ctx.lineTo(x - width * 0.5 + width * clamped, y);
+      ctx.stroke();
+    }
+
+    function drawEntityStatusBars(x, y, baseWidth, values) {
+      const rows = [];
+      if (values.hp !== null && values.hp !== undefined) rows.push({ pct: values.hp, color: "rgba(255, 102, 102, 0.95)" });
+      if (values.armor !== null && values.armor !== undefined) rows.push({ pct: values.armor, color: "rgba(178, 184, 194, 0.95)" });
+      if (values.shield !== null && values.shield !== undefined) rows.push({ pct: values.shield, color: "rgba(112, 196, 255, 0.95)" });
+      if (rows.length <= 0) return;
+
+      const width = Math.max(16, baseWidth);
+      const gap = 4;
+      let yLine = y;
+      for (const row of rows) {
+        drawStatusTrackLine(x, yLine, width, row.pct, row.color);
+        yLine += gap;
+      }
+    }
+
+    function drawCombatStatusBars() {
+      const mode = state.statusBarsMode || 0;
+      if (mode === 0) return;
+
+      const showPlayer = mode === 1 || mode === 3;
+      const showEnemies = mode === 2 || mode === 3;
+
+      if (showPlayer && state.ship) {
+        const ship = state.ship;
+        const hpPct = ship.maxHp > 0 ? ship.hp / ship.maxHp : 0;
+        const armorPct = ship.maxArmor > 0 ? ship.armor / ship.maxArmor : 0;
+        const shieldPct = state.shield.maxCharges > 0 ? state.shield.integrity / state.shield.maxCharges : 0;
+        const barY = ship.y + ship.radius + 8;
+        drawEntityStatusBars(ship.x, barY, ship.radius * 2.2, {
+          hp: hpPct,
+          armor: armorPct,
+          shield: state.shield.unlocked ? shieldPct : 0,
+        });
+      }
+
+      if (showEnemies) {
+        for (const obj of state.objects) {
+          if (!obj || !obj.enemy || obj.destroyed || obj.hp <= 0) continue;
+          const maxHp = Number.isFinite(obj.maxHp) && obj.maxHp > 0 ? obj.maxHp : null;
+          if (!maxHp) continue;
+          const hpPct = obj.hp / maxHp;
+          const armorPct = Number.isFinite(obj.maxArmor) && obj.maxArmor > 0 ? (obj.armor || 0) / obj.maxArmor : null;
+          const shieldPct = Number.isFinite(obj.maxShield) && obj.maxShield > 0 ? (obj.shield || 0) / obj.maxShield : null;
+          const barY = obj.y + obj.collisionRadius + 6;
+          drawEntityStatusBars(obj.x, barY, obj.size * 2, {
+            hp: hpPct,
+            armor: armorPct,
+            shield: shieldPct,
+          });
+        }
+
+        if (state.bossActive && state.boss && state.boss.maxHp > 0 && state.boss.hp > 0) {
+          const boss = state.boss;
+          const barY = boss.y + boss.collisionRadius + 10;
+          drawEntityStatusBars(boss.x, barY, boss.size * 1.9, {
+            hp: boss.hp / boss.maxHp,
+            armor: null,
+            shield: null,
+          });
+        }
+      }
+    }
+
     function draw() {
       burnVfxSpriteCount = 0;
       ctx.clearRect(0, 0, WORLD.width, WORLD.height);
@@ -1697,6 +1779,8 @@
       if (state.ship) {
         drawShip(state.ship);
       }
+
+      drawCombatStatusBars();
 
       ctx.strokeStyle = "#ff8e4f";
       ctx.lineWidth = 1.5;

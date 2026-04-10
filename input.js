@@ -25,6 +25,7 @@
       onBalanceTuneUp,
       onBalanceTuneReset,
       onToggleShipInfo,
+      onToggleStatusBars,
       onOverlayAction,
     } = deps;
 
@@ -220,7 +221,11 @@
           onToggleShipInfo();
         }
 
-        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyN", "KeyO", "KeyT", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
+        if (event.code === "KeyV" && !event.repeat) {
+          onToggleStatusBars();
+        }
+
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyP", "Escape", "KeyM", "KeyN", "KeyO", "KeyT", "KeyV", "KeyB", "BracketLeft", "BracketRight", "Minus", "Equal", "NumpadAdd", "NumpadSubtract", "Digit0", "Numpad0"].includes(event.code)) {
           event.preventDefault();
         }
 

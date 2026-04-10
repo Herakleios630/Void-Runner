@@ -49,7 +49,8 @@
 - [x] Giftige Nebelwolken: klare Telegraphs/Farbcode und Gegenmassnahmen als spaetere Upgrades
 - [x] Wurmloecher: Sprung zu weit entfernten Weltkoordinaten (stabile Ein-/Austrittspaare, seed-deterministisch)
 - [x] HIGH PRIORITY: Mini-Map zeigt Chunk-Koordinaten mit Spawn-Ursprung (0,0)
-- [ ] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
+- [x] Statusbalken unter Spieler/Gegnern (HP/Panzerung/Schild) mit V-Mode-Cycle (aus, Spieler, Gegner, beide)
+- [x] Missionen-System (leichtgewichtig): aktive Mission + Fortschritt + Belohnung
 - [ ] Missionstyp: Zerstoere X bestimmte Gegnerklassen (z. B. miniAlien, alienShip)
 - [ ] Missionstyp: Zerstoere X Objektklassen (smallRock, mediumRock, boulder, debris)
 - [ ] Missionstyp: Lege Y Distanz in Weltkoordinaten zurueck
@@ -82,8 +83,6 @@
 - [x] Improved starfield quality (twinkle variance, color temperature, density falloff)
 - [x] Cinematic background composition rules per chunk (avoid flat empty scenes)
 - [ ] Larger playable area / viewport fill (use much more of browser window)
-- [ ] Multiplayer co-op mode (online)
-- [ ] Multiplayer PvP / versus arena mode
 - [ ] Enemy fleets/formations per chunk (coordinated groups)
 - [ ] Dynamic faction encounters and roaming patrol groups
 - [ ] Black hole in parallax layer 2 with gravity pull zone
@@ -98,6 +97,8 @@
 - [x] Planet depth readability via atmosphere thickness by layer
 - [x] Rear-layer suns (max 1 per chunk, varied stellar colors)
 - [x] Early-game level-up pacing retune (avoid immediate level-up)
+- [ ] Multiplayer co-op mode (online)
+- [ ] Multiplayer PvP / versus arena mode
 
 ## Notes
 - Add new ideas as checklist items here so they can be tracked and checked off.
