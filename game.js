@@ -2019,8 +2019,14 @@ function update(dt, now) {
       const disengageRange = obj.disengageRange || engageRange * 1.7;
       const memoryWindow = 2.8;
       const targetRange = obj.preferredRange || 190;
+      const visibleAggroMargin = 90;
+      const inVisibleAggroBand =
+        obj.x >= -visibleAggroMargin &&
+        obj.x <= WORLD.width + visibleAggroMargin &&
+        obj.y >= -visibleAggroMargin &&
+        obj.y <= WORLD.height + visibleAggroMargin;
 
-      if (!obj.aggroLocked && distToShip <= engageRange) {
+      if (!obj.aggroLocked && inVisibleAggroBand && distToShip <= engageRange) {
         obj.aggroLocked = true;
         obj.aggroUntil = state.time + memoryWindow;
       }
