@@ -34,6 +34,23 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 2. Auf Spiel starten klicken.
 3. Optional im Schwierigkeitsmenue den Welt-Seed setzen (oder zufaellig generieren), um Welten reproduzierbar zu machen.
 
+## Multiplayer (erste Version)
+- Diese erste Version synchronisiert Spielerposition/-rotation zwischen Browsern ueber WebSocket.
+- Gameplay ist noch lokal autoritativ (MVP), Gegner/Progression werden noch nicht serverseitig synchronisiert.
+
+### Server starten
+1. In [server/package.json](server/package.json) Verzeichnis wechseln: `cd server`
+2. Abhaengigkeiten installieren: `npm install`
+3. Server starten: `npm start`
+
+### Multiplayer-Client starten
+- Spiel im Browser mit Query-Parametern aufrufen:
+- `index.html?mp=1&ws=ws://localhost:8080&room=alpha&name=Pilot1`
+- Zweiten Browser/Tab mit anderem Namen starten, z. B. `name=Pilot2`.
+
+### Singleplayer
+- Standard ohne `mp=1` bleibt unveraendert Singleplayer.
+
 ## Eigene Grafiken (Sprites)
 - Das Spiel laedt optional Bilder ueber [assets.js](assets.js).
 - Lege deine Dateien in den Ordner [assets/README.md](assets/README.md) nach den dort genannten Dateinamen.

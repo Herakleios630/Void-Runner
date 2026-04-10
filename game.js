@@ -29,6 +29,7 @@ const distanceStatEl = document.getElementById("distanceStat");
 const shieldStatusEl = document.getElementById("shieldStatus");
 const rocketStatusEl = document.getElementById("rocketStatus");
 const musicStatusEl = document.getElementById("musicStatus");
+const mpStatusEl = document.getElementById("mpStatus");
 const missionWidgetTitleEl = document.getElementById("missionWidgetTitle");
 const missionWidgetProgressEl = document.getElementById("missionWidgetProgress");
 const pauseIndicatorEl = document.getElementById("pauseIndicator");
@@ -100,6 +101,7 @@ const { createPickupSimulationSystem } = window.VoidPickupSimulation;
 const { createBossCombatSystem } = window.VoidBossCombat;
 const { createFlightControlSystem } = window.VoidFlightControl;
 const { createDebugToolsSystem } = window.VoidDebugTools;
+const { createMultiplayerSystem } = window.VoidMultiplayer || {};
 
 const GAMEPLAY_TUNING = (window.VoidTuning && window.VoidTuning.GAMEPLAY) || {
   world: {
@@ -321,6 +323,12 @@ const state = {
     missionFailExtraTimeLimit: false,
     missionFailExtraHitLimit: false,
     missionFailExtraNoHit: false,
+  },
+  multiplayer: {
+    enabled: false,
+    connected: false,
+    roomId: "solo",
+    remoteCount: 0,
   },
   missionToast: {
     text: "",
@@ -1862,6 +1870,20 @@ const cameraSystem = createCameraSystem({
   lookSmoothing: 0.16,
 });
 
+const multiplayerSystem = typeof createMultiplayerSystem === "function"
+  ? createMultiplayerSystem({
+    onStatusChange: (status) => {
+      state.multiplayer.enabled = Boolean(status && status.enabled);
+      state.multiplayer.connected = Boolean(status && status.connected);
+      state.multiplayer.roomId = (status && status.roomId) || "solo";
+      state.multiplayer.remoteCount = Math.max(0, Number((status && status.remoteCount) || 0));
+      if (state.running || state.pauseReason !== "menu") {
+        refreshHud();
+      }
+    },
+  })
+  : null;
+
 function reloadRate() {
   const base = state.shipStats ? state.shipStats.reloadRate : 1;
   const buff = state.missionRewardBuff;
@@ -2272,6 +2294,15 @@ function refreshHud() {
   }
   if (musicStatusEl) {
     musicStatusEl.textContent = state.musicEnabled ? "An (M)" : "Aus (M)";
+  }
+  if (mpStatusEl) {
+    if (!state.multiplayer.enabled) {
+      mpStatusEl.textContent = "SP";
+    } else if (!state.multiplayer.connected) {
+      mpStatusEl.textContent = "Verbinden...";
+    } else {
+      mpStatusEl.textContent = `Online (${state.multiplayer.remoteCount + 1})`;
+    }
   }
   if (exploredChunksStatEl) {
     exploredChunksStatEl.textContent = `${Math.max(0, state.runStats.exploredChunksCount || 0)}`;
@@ -2872,6 +2903,10 @@ function update(dt, now) {
     return;
   }
 
+  if (multiplayerSystem) {
+    multiplayerSystem.update(dt, now, ship);
+  }
+
   const movedDistance = Math.hypot(ship.worldX - beforeMoveWorldX, ship.worldY - beforeMoveWorldY);
   updateRunStats(movedDistance, Math.hypot(ship.vx || 0, ship.vy || 0));
   if (!areMissionUpdatesBlockedByOverlay()) {
@@ -3061,6 +3096,45 @@ function update(dt, now) {
   state.perfCounters.frameTotal = perfCleanupEnd - perfStart;
 }
 
+function drawRemotePlayers() {
+  if (!multiplayerSystem || !cameraSystem) return;
+  const remotes = multiplayerSystem.getRemotePlayers();
+  if (!Array.isArray(remotes) || remotes.length === 0) return;
+
+  for (const remote of remotes) {
+    const pos = cameraSystem.worldToScreen(remote.x, remote.y, 1, WORLD.width, WORLD.height);
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+    if (pos.x < -80 || pos.x > WORLD.width + 80 || pos.y < -80 || pos.y > WORLD.height + 80) continue;
+
+    const angle = Number.isFinite(remote.angle) ? remote.angle : 0;
+    const r = 14;
+    const noseX = pos.x + Math.cos(angle) * r;
+    const noseY = pos.y + Math.sin(angle) * r;
+    const leftX = pos.x + Math.cos(angle + 2.45) * (r * 0.78);
+    const leftY = pos.y + Math.sin(angle + 2.45) * (r * 0.78);
+    const rightX = pos.x + Math.cos(angle - 2.45) * (r * 0.78);
+    const rightY = pos.y + Math.sin(angle - 2.45) * (r * 0.78);
+
+    ctx.beginPath();
+    ctx.moveTo(noseX, noseY);
+    ctx.lineTo(leftX, leftY);
+    ctx.lineTo(rightX, rightY);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(140, 235, 255, 0.82)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(230, 250, 255, 0.95)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (remote.name) {
+      ctx.fillStyle = "rgba(235, 248, 255, 0.95)";
+      ctx.font = "12px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(remote.name, pos.x, pos.y - 18);
+    }
+  }
+}
+
 const renderer = createRenderer({
   ctx,
   state,
@@ -3105,6 +3179,7 @@ function gameLoop(nowMs) {
 
   update(dt, now);
   renderer.draw();
+  drawRemotePlayers();
 
   requestAnimationFrame(gameLoop);
 }
@@ -3433,4 +3508,9 @@ if (window.matchMedia) {
     orientationMedia.addListener(scheduleMobileViewportFit);
   }
 }
+window.addEventListener("beforeunload", () => {
+  if (multiplayerSystem && typeof multiplayerSystem.disconnect === "function") {
+    multiplayerSystem.disconnect();
+  }
+});
 requestAnimationFrame(gameLoop);
