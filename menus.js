@@ -60,6 +60,7 @@
       const wsDefault = defaults.wsUrl || `${window.location.protocol === "https:" ? "wss" : "ws"}://${wsHost}:8080`;
       const pilotDefault = defaults.localName || `pilot-${Math.floor(Math.random() * 9999).toString().padStart(4, "0")}`;
       const roomDefault = defaults.roomId || "alpha";
+      const colorDefault = (typeof defaults.shipColor === "string" && /^#[0-9a-fA-F]{6}$/.test(defaults.shipColor)) ? defaults.shipColor : "#8cecff";
 
       overlay.classList.remove("hidden");
       overlay.innerHTML = `
@@ -77,6 +78,10 @@
           <label style="display:grid;gap:6px;">
             <span style="color:#d0e8ff;">Server-URL (ws/wss)</span>
             <input id="mpServerUrl" value="${wsDefault}" style="padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(7,20,42,0.8);color:#eef8ff;" />
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="color:#d0e8ff;">Schiff-Farbe</span>
+            <input id="mpShipColor" type="color" value="${colorDefault}" style="height:38px;padding:4px 6px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(7,20,42,0.8);" />
           </label>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
             <button data-action="multiplayer-join" style="padding:12px 22px;">Join / Host Raum</button>
@@ -116,7 +121,8 @@
           const me = p.id === selfId ? " (Du)" : "";
           const readyText = p.ready ? "Bereit" : "Nicht bereit";
           const readyColor = p.ready ? "#9dffd0" : "#ffd1ad";
-          return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(9,23,46,0.48);"><span>${p.name}${tag}${me}</span><span style="color:${readyColor};">${readyText}</span></div>`;
+          const swatch = (typeof p.shipColor === "string" && /^#[0-9a-fA-F]{6}$/.test(p.shipColor)) ? p.shipColor : "#8cecff";
+          return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(9,23,46,0.48);"><span style="display:flex;align-items:center;gap:8px;"><span style="display:inline-block;width:11px;height:11px;border-radius:999px;background:${swatch};box-shadow:0 0 0 1px rgba(220,240,255,0.35);"></span>${p.name}${tag}${me}</span><span style="color:${readyColor};">${readyText}</span></div>`;
         }).join("")
         : `<div style="padding:8px 10px;border-radius:8px;background:rgba(9,23,46,0.48);color:#9ec8e9;">Warte auf Spieler...</div>`;
 
@@ -180,6 +186,8 @@
       const sfxVolPct = Math.round((opts.sfxVolume !== undefined ? opts.sfxVolume : 1) * 100);
       const toastEnabled = opts.missionToastEnabled !== false;
       const dailyChallengesEnabled = opts.dailyRunChallengesEnabled === true;
+      const offscreenAlliesEnabled = opts.offscreenAllyIndicatorsEnabled !== false;
+      const allyHighlightEnabled = opts.allyHighlightEnabled !== false;
       const failTimeExtraEnabled = opts.missionFailExtraTimeLimit === true;
       const failHitExtraEnabled = opts.missionFailExtraHitLimit === true;
       const failNoHitExtraEnabled = opts.missionFailExtraNoHit === true;
@@ -205,6 +213,14 @@
           <div style="display:flex;align-items:center;gap:10px;">
             <input type="checkbox" id="dailyChallengeToggle" ${dailyChallengesEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
             <label for="dailyChallengeToggle" style="color:#d0e8ff;cursor:pointer;">Tages-/Run-Challenges aktivieren</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="offscreenAlliesToggle" ${offscreenAlliesEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+            <label for="offscreenAlliesToggle" style="color:#d0e8ff;cursor:pointer;">Offscreen-Teamindikatoren anzeigen</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="allyHighlightToggle" ${allyHighlightEnabled ? "checked" : ""} style="width:18px;height:18px;accent-color:#67f2ff;" />
+            <label for="allyHighlightToggle" style="color:#d0e8ff;cursor:pointer;">Team-Schiffe mit Glow/Outline hervorheben</label>
           </div>
           <div style="padding:10px 12px;border:1px solid rgba(255,255,255,0.18);border-radius:10px;background:rgba(9,23,46,0.45);display:grid;gap:8px;">
             <div style="font-weight:600;color:#d9ecff;">Missionen: zusaetzliche Fail-Conditions</div>

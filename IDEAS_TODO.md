@@ -4,6 +4,7 @@
 - [ ] At start of each work session: quickly review this file with user
 
 ## Current Priority Queue
+- [ ] P1: Boss mechanics redesign pass (movement stability, arena behavior, attack readability)
 - [x] P0: Finalize camera/encounter culling and spawn pressure for free-flight
 - [x] P0: Full QA pass for balancing and edge cases
 - [x] P1: Alien spawn quality pass (system-interior behavior, pacing, edge-density)
@@ -99,6 +100,8 @@
 - [x] Early-game level-up pacing retune (avoid immediate level-up)
 - [ ] Multiplayer co-op mode (online)
 - [ ] Multiplayer PvP / versus arena mode
+- [ ] Long-term ship silhouette pass by class archetype (e.g. carrier more rectangular)
+- [ ] Long-term art pipeline: replace placeholder ship visuals with PNG sprite set
 
 ## Multiplayer Implementation Roadmap
 - [x] Multiplayer MVP basis: WebSocket server + remote ship snapshots
@@ -124,9 +127,9 @@
 - [ ] Define determinism constraints (seed behavior, chunk transitions, spawn/re-spawn rules)
 
 ### P0 - Combat Visibility/Readability Sync
-- [ ] Sync all combat VFX between players (shots, impacts, explosions, DoT visuals, buff/debuff visuals)
-- [ ] Ensure remote weapon orientation is shown independently from hull orientation
-- [ ] Add net-debug overlay toggle for snapshot age, packet loss hints, and authority source markers
+- [x] Sync all combat VFX between players (shots, impacts, explosions, DoT visuals, buff/debuff visuals)
+- [x] Ensure remote weapon orientation is shown independently from hull orientation
+- [x] Add net-debug overlay toggle for snapshot age, packet loss hints, and authority source markers
 
 ### P0 - Test Sandbox Seed
 - [ ] Seed `1` special mode: full world generation but enemies are passive (no movement, no shooting)

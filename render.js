@@ -1018,6 +1018,9 @@
       const aimAngle = Math.atan2(input.mouseY - ship.y, input.mouseX - ship.x);
       const model = selectedShipModel();
       const shipSprite = getSprite(`ship.${model.id}`) || getSprite("ship.default");
+      const mpColor = state.multiplayer && state.multiplayer.enabled && typeof state.multiplayer.shipColor === "string"
+        ? state.multiplayer.shipColor
+        : null;
 
       ctx.save();
       ctx.translate(ship.x, ship.y);
@@ -1065,6 +1068,16 @@
         ctx.arc(-6, 0, 5, 0, Math.PI * 2);
         ctx.fillStyle = model.colorB;
         ctx.fill();
+      }
+
+      if (mpColor && /^#[0-9a-f]{6}$/i.test(mpColor)) {
+        ctx.save();
+        ctx.globalCompositeOperation = "source-atop";
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = mpColor;
+        const tintSize = ship.radius * 3.2;
+        ctx.fillRect(-tintSize * 0.5, -tintSize * 0.5, tintSize, tintSize);
+        ctx.restore();
       }
 
       if (state.weapon.cannonUnlocked) {
@@ -1576,6 +1589,59 @@
       ctx.font = "14px Trebuchet MS";
       ctx.fillText("DEBUG HITBOXES: ON", 22, 33);
 
+      ctx.restore();
+    }
+
+    function drawNetDebugOverlay() {
+      if (!state.running || !state.debugNetOverlay) return;
+
+      const mp = state.multiplayer || {};
+      const health = (typeof mp.snapshotHealth === "string" ? mp.snapshotHealth : "no-data").toLowerCase();
+      const healthColor = health === "good"
+        ? "#79ff9a"
+        : (health === "warn" ? "#ffd266" : (health === "lost" ? "#ff7f7f" : "#9eb5d8"));
+      const authority = mp.authorityMode || "solo";
+      const ageMs = Math.max(0, Number(mp.snapshotAgeMs || 0));
+      const hz = Math.max(0, Number(mp.snapshotHz || 0));
+      const snapshots = Math.max(0, Number(mp.snapshotCount || 0));
+      const remotes = Math.max(0, Number(mp.remoteCount || 0));
+      const reconcileWU = Math.max(0, Number(mp.reconcileErrorWU || 0));
+      const reconcileSnaps = Math.max(0, Number(mp.reconcileSnapCount || 0));
+
+      const lines = [
+        "NET DEBUG [J]",
+        `authority: ${authority}`,
+        `ws: ${mp.connected ? "online" : "offline"} | remotes: ${remotes}`,
+        `snapshot age: ${ageMs.toFixed(0)} ms | rate: ${hz.toFixed(1)} hz`,
+        `snapshot health: ${health} | total: ${snapshots}`,
+        `reconcile err: ${reconcileWU.toFixed(1)} wu | snaps: ${reconcileSnaps}`,
+      ];
+
+      const panelX = 14;
+      const panelW = 350;
+      const lineH = 16;
+      const panelH = 12 + lines.length * lineH;
+      const panelY = Math.max(14, WORLD.height - panelH - 14);
+
+      ctx.save();
+      ctx.fillStyle = "rgba(8, 18, 34, 0.84)";
+      ctx.fillRect(panelX, panelY, panelW, panelH);
+      ctx.strokeStyle = "rgba(126, 176, 255, 0.5)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelW - 1, panelH - 1);
+
+      ctx.font = "12px monospace";
+      ctx.fillStyle = "#dceaff";
+      for (let i = 0; i < lines.length; i += 1) {
+        const y = panelY + 14 + i * lineH;
+        if (i === 4) {
+          ctx.fillStyle = healthColor;
+          ctx.fillText(lines[i], panelX + 10, y);
+          ctx.fillStyle = "#dceaff";
+        } else {
+          ctx.fillText(lines[i], panelX + 10, y);
+        }
+      }
       ctx.restore();
     }
 
@@ -2359,6 +2425,7 @@
       }
 
       drawMissionToast();
+      drawNetDebugOverlay();
       drawDebugOverlay();
       drawMobileCanvasHud();
     }

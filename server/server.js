@@ -4,6 +4,9 @@ const crypto = require("crypto");
 const port = Number.parseInt(process.env.PORT || "8080", 10);
 const tickMs = 50;
 const staleSeconds = 5;
+const maxPlayerSpeed = 1200;
+const maxTravelBase = 240;
+const maxTravelPerSecond = 1500;
 
 const wss = new WebSocketServer({ port });
 const clients = new Map();
@@ -23,6 +26,51 @@ function safeJsonParse(input) {
   }
 }
 
+function sanitizeIncomingState(msg, prevState, nowSec) {
+  const rawX = Number.isFinite(msg.x) ? msg.x : 0;
+  const rawY = Number.isFinite(msg.y) ? msg.y : 0;
+  let vx = Number.isFinite(msg.vx) ? msg.vx : 0;
+  let vy = Number.isFinite(msg.vy) ? msg.vy : 0;
+
+  const speed = Math.hypot(vx, vy);
+  if (speed > maxPlayerSpeed && speed > 0.0001) {
+    const scale = maxPlayerSpeed / speed;
+    vx *= scale;
+    vy *= scale;
+  }
+
+  let x = rawX;
+  let y = rawY;
+  if (prevState && Number.isFinite(prevState.x) && Number.isFinite(prevState.y) && Number.isFinite(prevState.lastStateAt)) {
+    const dt = Math.max(0.016, Math.min(0.35, nowSec - prevState.lastStateAt));
+    const maxTravel = maxTravelBase + maxTravelPerSecond * dt;
+    const dx = rawX - prevState.x;
+    const dy = rawY - prevState.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxTravel && dist > 0.0001) {
+      const scale = maxTravel / dist;
+      x = prevState.x + dx * scale;
+      y = prevState.y + dy * scale;
+    }
+  }
+
+  return {
+    t: Number.isFinite(msg.t) ? msg.t : 0,
+    lastStateAt: nowSec,
+    x,
+    y,
+    vx,
+    vy,
+    angle: Number.isFinite(msg.angle) ? msg.angle : 0,
+    aimAngle: Number.isFinite(msg.aimAngle) ? msg.aimAngle : null,
+    hp: Number.isFinite(msg.hp) ? msg.hp : null,
+    maxHp: Number.isFinite(msg.maxHp) ? msg.maxHp : null,
+    acidActive: Boolean(msg.acidActive),
+    invulnActive: Boolean(msg.invulnActive),
+    shieldActive: Boolean(msg.shieldActive),
+  };
+}
+
 function getRoomPlayers(roomId) {
   const result = [];
   const now = Date.now() / 1000;
@@ -33,6 +81,7 @@ function getRoomPlayers(roomId) {
     result.push({
       id: client.id,
       name: client.name,
+      shipColor: client.shipColor || "#8cecff",
       x: client.state.x,
       y: client.state.y,
       vx: client.state.vx,
@@ -41,6 +90,9 @@ function getRoomPlayers(roomId) {
       aimAngle: client.state.aimAngle,
       hp: client.state.hp,
       maxHp: client.state.maxHp,
+      acidActive: client.state.acidActive,
+      invulnActive: client.state.invulnActive,
+      shieldActive: client.state.shieldActive,
     });
   }
   return result;
@@ -106,6 +158,13 @@ function normalizePilotName(value) {
   return safe || "Pilot";
 }
 
+function normalizeShipColor(value) {
+  if (typeof value !== "string") return "#8cecff";
+  const safe = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(safe)) return safe;
+  return "#8cecff";
+}
+
 function ensureRoomHost(roomId) {
   const room = ensureRoom(roomId);
   const roomClients = getRoomClientEntries(roomId);
@@ -137,6 +196,7 @@ function getRoomState(roomId) {
   const players = roomClients.map((entry) => ({
     id: entry.id,
     name: entry.name,
+    shipColor: entry.shipColor || "#8cecff",
     ready: Boolean(entry.ready),
     connected: true,
   }));
@@ -297,6 +357,7 @@ wss.on("connection", (ws) => {
   clients.set(ws, {
     id,
     name: "Pilot",
+    shipColor: "#8cecff",
     roomId: "alpha",
     ready: false,
     state: null,
@@ -319,6 +380,7 @@ wss.on("connection", (ws) => {
 
     if (msg.type === "join") {
       client.name = normalizePilotName(msg.name);
+      client.shipColor = normalizeShipColor(msg.shipColor);
       moveClientToRoom(client, msg.roomId);
       return;
     }
@@ -379,11 +441,21 @@ wss.on("connection", (ws) => {
       const hostWs = findClientSocketById(client.roomId, room.hostId);
       if (!hostWs) return;
 
+      const senderState = client.state
+        ? {
+          x: Number.isFinite(client.state.x) ? client.state.x : 0,
+          y: Number.isFinite(client.state.y) ? client.state.y : 0,
+          vx: Number.isFinite(client.state.vx) ? client.state.vx : 0,
+          vy: Number.isFinite(client.state.vy) ? client.state.vy : 0,
+        }
+        : null;
+
       sendJson(hostWs, {
         type: "player_action",
         roomId: client.roomId,
         senderId: client.id,
         action,
+        senderState,
         t: Date.now() / 1000,
       });
       return;
@@ -391,18 +463,7 @@ wss.on("connection", (ws) => {
 
     if (msg.type === "state") {
       const nowSec = Date.now() / 1000;
-      client.state = {
-        t: Number.isFinite(msg.t) ? msg.t : 0,
-        lastStateAt: nowSec,
-        x: Number.isFinite(msg.x) ? msg.x : 0,
-        y: Number.isFinite(msg.y) ? msg.y : 0,
-        vx: Number.isFinite(msg.vx) ? msg.vx : 0,
-        vy: Number.isFinite(msg.vy) ? msg.vy : 0,
-        angle: Number.isFinite(msg.angle) ? msg.angle : 0,
-        aimAngle: Number.isFinite(msg.aimAngle) ? msg.aimAngle : null,
-        hp: Number.isFinite(msg.hp) ? msg.hp : null,
-        maxHp: Number.isFinite(msg.maxHp) ? msg.maxHp : null,
-      };
+      client.state = sanitizeIncomingState(msg, client.state, nowSec);
     }
   });
 

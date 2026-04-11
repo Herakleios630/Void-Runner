@@ -16,6 +16,7 @@
       enabled: enabledByQuery,
       roomId: query.get("room") || "alpha",
       localName: query.get("name") || `pilot-${Math.floor(Math.random() * 9999).toString().padStart(4, "0")}`,
+      shipColor: query.get("color") || "#8cecff",
       wsUrl: query.get("ws") || defaultUrl,
       ws: null,
       connected: false,
@@ -36,7 +37,20 @@
       sendAccumulator: 0,
       lastSentAt: 0,
       lastActionSentAt: 0,
+      lastSnapshotAt: 0,
+      snapshotIntervalAvg: 0,
+      snapshotCount: 0,
+      selfServerState: null,
     };
+
+    function classifySnapshotHealth(ageSec, avgIntervalSec) {
+      if (!Number.isFinite(ageSec) || ageSec <= 0 || !Number.isFinite(avgIntervalSec) || avgIntervalSec <= 0) {
+        return "no-data";
+      }
+      if (ageSec <= avgIntervalSec * 2.2) return "good";
+      if (ageSec <= avgIntervalSec * 4.2) return "warn";
+      return "lost";
+    }
 
     function roomConfigToken(config) {
       if (!config || typeof config !== "object") return "";
@@ -58,6 +72,13 @@
     }
 
     function emitStatus() {
+      const nowSec = performance.now() / 1000;
+      const snapshotAgeSec = state.lastSnapshotAt > 0 ? Math.max(0, nowSec - state.lastSnapshotAt) : 0;
+      const avgInterval = Number.isFinite(state.snapshotIntervalAvg) && state.snapshotIntervalAvg > 0
+        ? state.snapshotIntervalAvg
+        : 0;
+      const snapshotHz = avgInterval > 0 ? (1 / avgInterval) : 0;
+
       if (typeof options.onStatusChange === "function") {
         options.onStatusChange({
           enabled: state.enabled,
@@ -65,10 +86,15 @@
           selfId: state.selfId,
           roomId: state.roomId,
           localName: state.localName,
+          shipColor: state.shipColor,
           roomPhase: state.roomPhase,
           localReady: state.localReady,
           remoteCount: state.remotePlayers.length,
           wsUrl: state.wsUrl,
+          snapshotAgeMs: snapshotAgeSec * 1000,
+          snapshotHz,
+          snapshotHealth: classifySnapshotHealth(snapshotAgeSec, avgInterval),
+          snapshotCount: state.snapshotCount,
         });
       }
     }
@@ -99,10 +125,14 @@
         name: p.name || "Pilot",
         ready: Boolean(p.ready),
         connected: p.connected !== false,
+        shipColor: typeof p.shipColor === "string" ? p.shipColor : "#8cecff",
       }));
 
       const selfEntry = state.lobbyPlayers.find((p) => p.id === state.selfId);
       state.localReady = Boolean(selfEntry && selfEntry.ready);
+      if (selfEntry && typeof selfEntry.shipColor === "string" && /^#[0-9a-f]{6}$/i.test(selfEntry.shipColor)) {
+        state.shipColor = selfEntry.shipColor.toLowerCase();
+      }
       if (payload.config) {
         notifyRoomConfig(payload.config);
       }
@@ -130,12 +160,43 @@
       return safe;
     }
 
+    function sanitizeShipColor(value) {
+      if (typeof value !== "string") return state.shipColor;
+      const safe = value.trim().toLowerCase();
+      if (/^#[0-9a-f]{6}$/.test(safe)) return safe;
+      return state.shipColor;
+    }
+
     function applySnapshot(payload) {
       if (!payload || !Array.isArray(payload.players)) return;
       const now = performance.now() / 1000;
+      if (state.lastSnapshotAt > 0) {
+        const gap = Math.max(0, now - state.lastSnapshotAt);
+        if (gap > 0 && gap < 2) {
+          if (state.snapshotIntervalAvg <= 0) {
+            state.snapshotIntervalAvg = gap;
+          } else {
+            state.snapshotIntervalAvg = state.snapshotIntervalAvg * 0.82 + gap * 0.18;
+          }
+        }
+      }
+      state.lastSnapshotAt = now;
+      state.snapshotCount += 1;
+
       const remotes = [];
       for (const p of payload.players) {
-        if (!p || !p.id || p.id === state.selfId) continue;
+        if (!p || !p.id) continue;
+        if (p.id === state.selfId) {
+          state.selfServerState = {
+            x: Number.isFinite(p.x) ? p.x : 0,
+            y: Number.isFinite(p.y) ? p.y : 0,
+            vx: Number.isFinite(p.vx) ? p.vx : 0,
+            vy: Number.isFinite(p.vy) ? p.vy : 0,
+            angle: Number.isFinite(p.angle) ? p.angle : 0,
+            seenAt: now,
+          };
+          continue;
+        }
         remotes.push({
           id: p.id,
           name: p.name || "Pilot",
@@ -147,6 +208,10 @@
           aimAngle: Number.isFinite(p.aimAngle) ? p.aimAngle : null,
           hp: Number.isFinite(p.hp) ? p.hp : null,
           maxHp: Number.isFinite(p.maxHp) ? p.maxHp : null,
+          shipColor: typeof p.shipColor === "string" ? p.shipColor : "#8cecff",
+          acidActive: Boolean(p.acidActive),
+          invulnActive: Boolean(p.invulnActive),
+          shieldActive: Boolean(p.shieldActive),
           seenAt: now,
         });
       }
@@ -190,6 +255,7 @@
             type: "join",
             roomId: state.roomId,
             name: state.localName,
+            shipColor: state.shipColor,
           }));
         };
 
@@ -270,9 +336,18 @@
 
           if (msg.type === "player_action") {
             if (msg && msg.action && typeof msg.action === "object" && typeof msg.senderId === "string") {
+              const senderState = msg && msg.senderState && typeof msg.senderState === "object"
+                ? {
+                  x: Number.isFinite(msg.senderState.x) ? msg.senderState.x : 0,
+                  y: Number.isFinite(msg.senderState.y) ? msg.senderState.y : 0,
+                  vx: Number.isFinite(msg.senderState.vx) ? msg.senderState.vx : 0,
+                  vy: Number.isFinite(msg.senderState.vy) ? msg.senderState.vy : 0,
+                }
+                : null;
               state.incomingPlayerActions.push({
                 senderId: msg.senderId,
                 action: msg.action,
+                senderState,
                 t: Number.isFinite(msg.t) ? msg.t : 0,
               });
             }
@@ -311,6 +386,10 @@
       state.lastRoomConfigToken = null;
       state.worldState = null;
       state.incomingPlayerActions = [];
+      state.lastSnapshotAt = 0;
+      state.snapshotIntervalAvg = 0;
+      state.snapshotCount = 0;
+      state.selfServerState = null;
       emitStatus();
       emitLobby();
     }
@@ -320,12 +399,14 @@
       const nextEnabled = next.enabled === undefined ? state.enabled : Boolean(next.enabled);
       const nextRoom = next.roomId === undefined ? state.roomId : sanitizeRoomId(next.roomId);
       const nextName = next.localName === undefined ? state.localName : sanitizePilotName(next.localName);
+      const nextColor = next.shipColor === undefined ? state.shipColor : sanitizeShipColor(next.shipColor);
       const nextUrl = next.wsUrl === undefined ? state.wsUrl : sanitizeWsUrl(next.wsUrl);
 
-      const connectionChanged = nextRoom !== state.roomId || nextName !== state.localName || nextUrl !== state.wsUrl;
+      const connectionChanged = nextRoom !== state.roomId || nextName !== state.localName || nextColor !== state.shipColor || nextUrl !== state.wsUrl;
 
       state.roomId = nextRoom;
       state.localName = nextName;
+      state.shipColor = nextColor;
       state.wsUrl = nextUrl;
       state.enabled = nextEnabled;
 
@@ -340,6 +421,10 @@
         state.lastRoomConfigToken = null;
         state.worldState = null;
         state.incomingPlayerActions = [];
+        state.lastSnapshotAt = 0;
+        state.snapshotIntervalAvg = 0;
+        state.snapshotCount = 0;
+        state.selfServerState = null;
         closeSocket();
         emitStatus();
         emitLobby();
@@ -357,6 +442,10 @@
         state.lastRoomConfigToken = null;
         state.worldState = null;
         state.incomingPlayerActions = [];
+        state.lastSnapshotAt = 0;
+        state.snapshotIntervalAvg = 0;
+        state.snapshotCount = 0;
+        state.selfServerState = null;
         state.reconnectAt = 0;
         closeSocket();
         connect();
@@ -510,7 +599,11 @@
       return state.worldState;
     }
 
-    function update(dt, nowSec, ship) {
+    function getSelfServerState() {
+      return state.selfServerState ? { ...state.selfServerState } : null;
+    }
+
+    function update(dt, nowSec, ship, visuals = null) {
       if (!state.enabled) return;
 
       if (!state.ws && state.reconnectAt > 0 && nowSec >= state.reconnectAt) {
@@ -536,10 +629,15 @@
         y: Number.isFinite(ship.worldY) ? ship.worldY : 0,
         vx: Number.isFinite(ship.vx) ? ship.vx : 0,
         vy: Number.isFinite(ship.vy) ? ship.vy : 0,
-        angle: Math.atan2(Number.isFinite(ship.vy) ? ship.vy : 0, (Number.isFinite(ship.vx) ? ship.vx : 0) || 0.001),
+        angle: Number.isFinite(ship.angle)
+          ? ship.angle
+          : Math.atan2(Number.isFinite(ship.vy) ? ship.vy : 0, (Number.isFinite(ship.vx) ? ship.vx : 0) || 0.001),
         aimAngle: Number.isFinite(ship.aimAngle) ? ship.aimAngle : null,
         hp: Number.isFinite(ship.hp) ? ship.hp : null,
         maxHp: Number.isFinite(ship.maxHp) ? ship.maxHp : null,
+        acidActive: Boolean(visuals && visuals.acidActive),
+        invulnActive: Boolean(visuals && visuals.invulnActive),
+        shieldActive: Boolean(visuals && visuals.shieldActive),
       };
 
       try {
@@ -581,6 +679,7 @@
       getRemotePlayers,
       getLobbyState,
       getWorldState,
+      getSelfServerState,
       consumePlayerActions,
       isHost,
       shouldMirrorWorld,
@@ -590,10 +689,18 @@
         selfId: state.selfId,
         roomId: state.roomId,
         localName: state.localName,
+        shipColor: state.shipColor,
         roomPhase: state.roomPhase,
         localReady: state.localReady,
         remoteCount: state.remotePlayers.length,
         wsUrl: state.wsUrl,
+        snapshotAgeMs: state.lastSnapshotAt > 0 ? Math.max(0, (performance.now() / 1000 - state.lastSnapshotAt) * 1000) : 0,
+        snapshotHz: state.snapshotIntervalAvg > 0 ? (1 / state.snapshotIntervalAvg) : 0,
+        snapshotHealth: classifySnapshotHealth(
+          state.lastSnapshotAt > 0 ? Math.max(0, (performance.now() / 1000) - state.lastSnapshotAt) : 0,
+          state.snapshotIntervalAvg,
+        ),
+        snapshotCount: state.snapshotCount,
       }),
     };
   }

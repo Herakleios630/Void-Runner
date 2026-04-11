@@ -62,6 +62,8 @@ const input = {
   mouseY: WORLD.height * 0.5,
 };
 
+const SETTINGS_STORAGE_KEY = "void-runner.settings.v1";
+
 const IS_COARSE_POINTER = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
 const spriteAssets = window.VoidAssets || null;
 const { SHIP_MODELS, DIFFICULTY_MODES } = window.VoidConfig;
@@ -131,6 +133,17 @@ const GAMEPLAY_TUNING = (window.VoidTuning && window.VoidTuning.GAMEPLAY) || {
   blackHole: {
     playerInfluenceEnabled: true,
   },
+  multiplayer: {
+    reconciliation: {
+      staleStateMaxAgeSec: 0.4,
+      predictionLeadSec: 0.12,
+      minErrorWU: 7,
+      hardSnapWU: 320,
+      errorDecayPerFrame: 0.92,
+      positionLerpRate: 6.6,
+      velocityLerpRate: 4.8,
+    },
+  },
 };
 
 const DESTROY_REASONS = (window.VoidTuning && window.VoidTuning.DESTROY_REASONS) || {
@@ -153,6 +166,7 @@ const state = {
   gameOver: false,
   pauseReason: "menu",
   debugHitboxes: false,
+  debugNetOverlay: false,
   showShipInfo: false,
   selectedDifficultyId: "medium",
   selectedShipId: "scout",
@@ -320,6 +334,8 @@ const state = {
     musicVolume: 1.0,
     sfxVolume: 1.0,
     dailyRunChallengesEnabled: false,
+    offscreenAllyIndicatorsEnabled: true,
+    allyHighlightEnabled: true,
     missionFailExtraTimeLimit: false,
     missionFailExtraHitLimit: false,
     missionFailExtraNoHit: false,
@@ -329,8 +345,16 @@ const state = {
     connected: false,
     roomId: "solo",
     localName: "Pilot",
+    shipColor: "#8cecff",
     wsUrl: "",
     remoteCount: 0,
+    snapshotAgeMs: 0,
+    snapshotHz: 0,
+    snapshotHealth: "no-data",
+    snapshotCount: 0,
+    authorityMode: "solo",
+    reconcileErrorWU: 0,
+    reconcileSnapCount: 0,
     lastAppliedWorldT: -1,
     lastMirrorFireActionAt: 0,
     remoteCannonLastById: {},
@@ -359,6 +383,76 @@ const state = {
     active: null,
   },
 };
+
+function persistClientSettings() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const payload = {
+      statusBarsMode: Number.isFinite(state.statusBarsMode) ? state.statusBarsMode : 0,
+      options: {
+        missionToastEnabled: state.options.missionToastEnabled !== false,
+        musicVolume: Math.max(0, Math.min(1, Number(state.options.musicVolume || 1))),
+        sfxVolume: Math.max(0, Math.min(1, Number(state.options.sfxVolume || 1))),
+        dailyRunChallengesEnabled: state.options.dailyRunChallengesEnabled === true,
+        offscreenAllyIndicatorsEnabled: state.options.offscreenAllyIndicatorsEnabled !== false,
+        allyHighlightEnabled: state.options.allyHighlightEnabled !== false,
+        missionFailExtraTimeLimit: state.options.missionFailExtraTimeLimit === true,
+        missionFailExtraHitLimit: state.options.missionFailExtraHitLimit === true,
+        missionFailExtraNoHit: state.options.missionFailExtraNoHit === true,
+      },
+      multiplayer: {
+        shipColor: (typeof state.multiplayer.shipColor === "string" && /^#[0-9a-f]{6}$/i.test(state.multiplayer.shipColor))
+          ? state.multiplayer.shipColor
+          : "#8cecff",
+      },
+    };
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    // Ignore persistence failures in restricted/private browsing contexts.
+  }
+}
+
+function loadClientSettings() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return;
+
+    if (Number.isFinite(data.statusBarsMode)) {
+      state.statusBarsMode = Math.max(0, Math.min(3, Math.floor(data.statusBarsMode)));
+    }
+
+    const opts = data.options && typeof data.options === "object" ? data.options : null;
+    if (opts) {
+      if (typeof opts.missionToastEnabled === "boolean") state.options.missionToastEnabled = opts.missionToastEnabled;
+      if (Number.isFinite(opts.musicVolume)) state.options.musicVolume = Math.max(0, Math.min(1, Number(opts.musicVolume)));
+      if (Number.isFinite(opts.sfxVolume)) state.options.sfxVolume = Math.max(0, Math.min(1, Number(opts.sfxVolume)));
+      if (typeof opts.dailyRunChallengesEnabled === "boolean") state.options.dailyRunChallengesEnabled = opts.dailyRunChallengesEnabled;
+      if (typeof opts.offscreenAllyIndicatorsEnabled === "boolean") state.options.offscreenAllyIndicatorsEnabled = opts.offscreenAllyIndicatorsEnabled;
+      if (typeof opts.allyHighlightEnabled === "boolean") state.options.allyHighlightEnabled = opts.allyHighlightEnabled;
+      if (typeof opts.missionFailExtraTimeLimit === "boolean") state.options.missionFailExtraTimeLimit = opts.missionFailExtraTimeLimit;
+      if (typeof opts.missionFailExtraHitLimit === "boolean") state.options.missionFailExtraHitLimit = opts.missionFailExtraHitLimit;
+      if (typeof opts.missionFailExtraNoHit === "boolean") state.options.missionFailExtraNoHit = opts.missionFailExtraNoHit;
+    }
+
+    const mp = data.multiplayer && typeof data.multiplayer === "object" ? data.multiplayer : null;
+    if (mp && typeof mp.shipColor === "string" && /^#[0-9a-f]{6}$/i.test(mp.shipColor)) {
+      state.multiplayer.shipColor = mp.shipColor;
+    }
+  } catch (err) {
+    // Ignore corrupted settings payloads.
+  }
+}
+
+loadClientSettings();
+if (typeof setMusicVolume === "function") {
+  setMusicVolume(state.options.musicVolume);
+}
+if (typeof setSfxVolume === "function") {
+  setSfxVolume(state.options.sfxVolume);
+}
 
 const UPGRADE_WEIGHTS = {
   shield_core: 7,
@@ -1909,8 +2003,13 @@ const multiplayerSystem = typeof createMultiplayerSystem === "function"
       state.multiplayer.connected = Boolean(status && status.connected);
       state.multiplayer.roomId = (status && status.roomId) || "solo";
       state.multiplayer.localName = (status && status.localName) || "Pilot";
+      state.multiplayer.shipColor = (status && status.shipColor) || state.multiplayer.shipColor || "#8cecff";
       state.multiplayer.wsUrl = (status && status.wsUrl) || "";
       state.multiplayer.remoteCount = Math.max(0, Number((status && status.remoteCount) || 0));
+      state.multiplayer.snapshotAgeMs = Math.max(0, Number((status && status.snapshotAgeMs) || 0));
+      state.multiplayer.snapshotHz = Math.max(0, Number((status && status.snapshotHz) || 0));
+      state.multiplayer.snapshotHealth = (status && status.snapshotHealth) || "no-data";
+      state.multiplayer.snapshotCount = Math.max(0, Number((status && status.snapshotCount) || 0));
       if (state.running || state.pauseReason !== "menu") {
         refreshHud();
       }
@@ -3341,10 +3440,16 @@ function processRemotePlayerActions(nowSec, cameraX, cameraY) {
   for (const packet of actions) {
     if (!packet || !packet.senderId || !packet.action) continue;
     const remote = remoteById.get(packet.senderId);
-    if (!remote) continue;
-
-    const shipWorldX = Number.isFinite(remote.x) ? remote.x : 0;
-    const shipWorldY = Number.isFinite(remote.y) ? remote.y : 0;
+    const fallbackState = packet && packet.senderState && typeof packet.senderState === "object"
+      ? packet.senderState
+      : null;
+    const shipWorldX = remote && Number.isFinite(remote.x)
+      ? remote.x
+      : (fallbackState && Number.isFinite(fallbackState.x) ? fallbackState.x : null);
+    const shipWorldY = remote && Number.isFinite(remote.y)
+      ? remote.y
+      : (fallbackState && Number.isFinite(fallbackState.y) ? fallbackState.y : null);
+    if (!Number.isFinite(shipWorldX) || !Number.isFinite(shipWorldY)) continue;
     const aimWorldX = Number.isFinite(packet.action.aimWorldX) ? packet.action.aimWorldX : shipWorldX;
     const aimWorldY = Number.isFinite(packet.action.aimWorldY) ? packet.action.aimWorldY : shipWorldY;
     const dx = aimWorldX - shipWorldX;
@@ -3515,6 +3620,60 @@ function resolveMirrorShipInteractions(ship) {
   return true;
 }
 
+function reconcileClientShipWithServer(ship, dt, cameraX, cameraY) {
+  const reconcileTuning = (GAMEPLAY_TUNING.multiplayer && GAMEPLAY_TUNING.multiplayer.reconciliation) || {};
+  const staleStateMaxAgeSec = Number.isFinite(reconcileTuning.staleStateMaxAgeSec) ? reconcileTuning.staleStateMaxAgeSec : 0.4;
+  const predictionLeadSec = Number.isFinite(reconcileTuning.predictionLeadSec) ? reconcileTuning.predictionLeadSec : 0.12;
+  const minErrorWU = Number.isFinite(reconcileTuning.minErrorWU) ? reconcileTuning.minErrorWU : 0.8;
+  const hardSnapWU = Number.isFinite(reconcileTuning.hardSnapWU) ? reconcileTuning.hardSnapWU : 240;
+  const errorDecayPerFrame = Number.isFinite(reconcileTuning.errorDecayPerFrame) ? reconcileTuning.errorDecayPerFrame : 0.92;
+  const positionLerpRate = Number.isFinite(reconcileTuning.positionLerpRate) ? reconcileTuning.positionLerpRate : 8.8;
+  const velocityLerpRate = Number.isFinite(reconcileTuning.velocityLerpRate) ? reconcileTuning.velocityLerpRate : 6.2;
+
+  state.multiplayer.reconcileErrorWU = Math.max(0, Number(state.multiplayer.reconcileErrorWU || 0) * errorDecayPerFrame);
+  if (!state.multiplayer.enabled || !multiplayerSystem) return;
+  if (typeof multiplayerSystem.isHost === "function" && multiplayerSystem.isHost()) return;
+  if (typeof multiplayerSystem.getSelfServerState !== "function") return;
+  if (!Number.isFinite(dt) || dt <= 0) return;
+
+  const serverState = multiplayerSystem.getSelfServerState();
+  if (!serverState) return;
+  const age = Math.max(0, state.realNow - (Number.isFinite(serverState.seenAt) ? serverState.seenAt : state.realNow));
+  if (age > staleStateMaxAgeSec) return;
+
+  const predictionAge = Math.min(predictionLeadSec, age);
+  const targetX = (Number.isFinite(serverState.x) ? serverState.x : 0) + (Number.isFinite(serverState.vx) ? serverState.vx : 0) * predictionAge;
+  const targetY = (Number.isFinite(serverState.y) ? serverState.y : 0) + (Number.isFinite(serverState.vy) ? serverState.vy : 0) * predictionAge;
+  const dx = targetX - (Number.isFinite(ship.worldX) ? ship.worldX : 0);
+  const dy = targetY - (Number.isFinite(ship.worldY) ? ship.worldY : 0);
+  const dist = Math.hypot(dx, dy);
+  state.multiplayer.reconcileErrorWU = dist;
+  if (dist < minErrorWU) return;
+
+  if (dist > hardSnapWU) {
+    ship.worldX = targetX;
+    ship.worldY = targetY;
+    state.multiplayer.reconcileSnapCount = Math.max(0, Number(state.multiplayer.reconcileSnapCount || 0)) + 1;
+  } else {
+    const alpha = 1 - Math.exp(-dt * positionLerpRate);
+    ship.worldX += dx * alpha;
+    ship.worldY += dy * alpha;
+  }
+
+  const velAlpha = 1 - Math.exp(-dt * velocityLerpRate);
+  ship.vx = (Number.isFinite(ship.vx) ? ship.vx : 0)
+    + ((Number.isFinite(serverState.vx) ? serverState.vx : 0) - (Number.isFinite(ship.vx) ? ship.vx : 0)) * velAlpha;
+  ship.vy = (Number.isFinite(ship.vy) ? ship.vy : 0)
+    + ((Number.isFinite(serverState.vy) ? serverState.vy : 0) - (Number.isFinite(ship.vy) ? ship.vy : 0)) * velAlpha;
+
+  state.world.playerX = ship.worldX;
+  state.world.playerY = ship.worldY;
+
+  const correctedScreen = projectWorldToScreen(ship.worldX, ship.worldY, cameraX, cameraY);
+  ship.x = correctedScreen.x;
+  ship.y = correctedScreen.y;
+}
+
 function applyIonStormToProjectiles(dt) {
   if (dt <= 0) return;
   const zones = typeof worldSystem.getIonStormZones === "function" ? worldSystem.getIonStormZones() : [];
@@ -3562,6 +3721,9 @@ function update(dt, now) {
     && multiplayerSystem
     && typeof multiplayerSystem.shouldMirrorWorld === "function"
     && multiplayerSystem.shouldMirrorWorld();
+  state.multiplayer.authorityMode = !state.multiplayer.enabled
+    ? "solo"
+    : (mirrorSharedWorld ? "client-mirror" : (isMultiplayerHost() ? "host-authority" : "client-local"));
 
   state.time += dt;
   if (!hostSpectating && !mirrorSharedWorld) {
@@ -3612,8 +3774,14 @@ function update(dt, now) {
   }
 
   if (multiplayerSystem) {
-    multiplayerSystem.update(dt, now, ship);
+    multiplayerSystem.update(dt, now, ship, {
+      acidActive: Number.isFinite(ship.acidUntil) && ship.acidUntil > state.time,
+      invulnActive: Number.isFinite(ship.invulnUntil) && ship.invulnUntil > state.time,
+      shieldActive: Boolean(state.shield.unlocked && state.shield.charges > 0),
+    });
   }
+
+  reconcileClientShipWithServer(ship, dt, cameraX, cameraY);
 
   if (mirrorSharedWorld) {
     queueMirrorClientActions(now);
@@ -3851,14 +4019,80 @@ function drawRemotePlayers() {
   if (!multiplayerSystem || !cameraSystem) return;
   const remotes = multiplayerSystem.getRemotePlayers();
   if (!Array.isArray(remotes) || remotes.length === 0) return;
+  const offscreenIndicatorsEnabled = !state.options || state.options.offscreenAllyIndicatorsEnabled !== false;
+  const allyHighlightEnabled = !state.options || state.options.allyHighlightEnabled !== false;
+
+  function resolveRemoteColor(remote) {
+    const color = remote && typeof remote.shipColor === "string" ? remote.shipColor : "";
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : "#8cecff";
+  }
+
+  function drawOffscreenAllyIndicator(remote, pos) {
+    const cx = WORLD.width * 0.5;
+    const cy = WORLD.height * 0.5;
+    const dx = pos.x - cx;
+    const dy = pos.y - cy;
+    const distScreen = Math.hypot(dx, dy);
+    if (distScreen <= 0.0001) return;
+
+    const nx = dx / distScreen;
+    const ny = dy / distScreen;
+    const inset = 30;
+    const radiusX = Math.max(20, WORLD.width * 0.5 - inset);
+    const radiusY = Math.max(20, WORLD.height * 0.5 - inset);
+    const t = 1 / Math.max(Math.abs(nx) / radiusX, Math.abs(ny) / radiusY);
+    const px = cx + nx * t;
+    const py = cy + ny * t;
+    const a = Math.atan2(ny, nx);
+    const allyColor = resolveRemoteColor(remote);
+
+    ctx.save();
+    if (allyHighlightEnabled) {
+      ctx.shadowColor = allyColor;
+      ctx.shadowBlur = 14;
+    }
+    ctx.fillStyle = allyColor;
+    ctx.strokeStyle = "rgba(230, 247, 255, 0.95)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(px + Math.cos(a) * 11, py + Math.sin(a) * 11);
+    ctx.lineTo(px + Math.cos(a + 2.42) * 6.5, py + Math.sin(a + 2.42) * 6.5);
+    ctx.lineTo(px + Math.cos(a - 2.42) * 6.5, py + Math.sin(a - 2.42) * 6.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const ship = state.ship;
+    const distWorld = ship && Number.isFinite(ship.worldX) && Number.isFinite(ship.worldY)
+      ? Math.hypot((Number.isFinite(remote.x) ? remote.x : 0) - ship.worldX, (Number.isFinite(remote.y) ? remote.y : 0) - ship.worldY)
+      : 0;
+    const name = remote.name || "ALLY";
+    ctx.font = "12px Trebuchet MS";
+    ctx.fillStyle = "rgba(196, 236, 255, 0.96)";
+    ctx.fillText(
+      `${name} ${Math.floor(distWorld)} WU`,
+      Math.max(8, Math.min(WORLD.width - 170, px - 52)),
+      Math.max(18, Math.min(WORLD.height - 10, py - 11))
+    );
+    ctx.restore();
+  }
 
   for (const remote of remotes) {
     const pos = cameraSystem.worldToScreen(remote.x, remote.y, 1, WORLD.width, WORLD.height);
     if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
-    if (pos.x < -80 || pos.x > WORLD.width + 80 || pos.y < -80 || pos.y > WORLD.height + 80) continue;
+    if (pos.x < -3200 || pos.x > WORLD.width + 3200 || pos.y < -3200 || pos.y > WORLD.height + 3200) continue;
+
+    const onScreen = pos.x >= 0 && pos.x <= WORLD.width && pos.y >= 0 && pos.y <= WORLD.height;
+    if (!onScreen) {
+      if (offscreenIndicatorsEnabled) {
+        drawOffscreenAllyIndicator(remote, pos);
+      }
+      continue;
+    }
 
     const angle = Number.isFinite(remote.angle) ? remote.angle : 0;
     const aimAngle = Number.isFinite(remote.aimAngle) ? remote.aimAngle : angle;
+    const allyColor = resolveRemoteColor(remote);
     const r = 14;
     const noseX = pos.x + Math.cos(angle) * r;
     const noseY = pos.y + Math.sin(angle) * r;
@@ -3872,7 +4106,15 @@ function drawRemotePlayers() {
     ctx.lineTo(leftX, leftY);
     ctx.lineTo(rightX, rightY);
     ctx.closePath();
-    ctx.fillStyle = "rgba(140, 235, 255, 0.82)";
+    if (allyHighlightEnabled) {
+      ctx.save();
+      ctx.strokeStyle = allyColor;
+      ctx.globalAlpha = 0.36;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = allyColor;
     ctx.fill();
     ctx.strokeStyle = "rgba(230, 250, 255, 0.95)";
     ctx.lineWidth = 2;
@@ -3884,6 +4126,22 @@ function drawRemotePlayers() {
     ctx.moveTo(pos.x, pos.y);
     ctx.lineTo(pos.x + Math.cos(aimAngle) * (r + 10), pos.y + Math.sin(aimAngle) * (r + 10));
     ctx.stroke();
+
+    if (remote.shieldActive || remote.invulnActive) {
+      const pulse = 1 + Math.sin(state.time * 9 + pos.x * 0.01) * 0.06;
+      ctx.strokeStyle = remote.invulnActive ? "rgba(255, 233, 156, 0.92)" : "rgba(132, 230, 255, 0.88)";
+      ctx.lineWidth = remote.invulnActive ? 2.4 : 1.8;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (r + 8) * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (remote.acidActive) {
+      ctx.fillStyle = "rgba(120, 255, 130, 0.22)";
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, r + 6 + Math.sin(state.time * 11 + pos.y * 0.02) * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     if (remote.name) {
       ctx.fillStyle = "rgba(235, 248, 255, 0.95)";
@@ -3958,6 +4216,7 @@ function handleOverlayAction(actionNode) {
       : {
         roomId: state.multiplayer.roomId || "alpha",
         localName: state.multiplayer.localName || "Pilot",
+        shipColor: state.multiplayer.shipColor || "#8cecff",
         wsUrl: state.multiplayer.wsUrl || `${window.location.protocol === "https:" ? "wss" : "ws"}://${wsHost}:8080`,
       };
     menus.showMultiplayerMenu(defaults);
@@ -3968,17 +4227,22 @@ function handleOverlayAction(actionNode) {
     const nameEl = overlay.querySelector("#mpPilotName");
     const roomEl = overlay.querySelector("#mpRoomName");
     const wsEl = overlay.querySelector("#mpServerUrl");
+    const colorEl = overlay.querySelector("#mpShipColor");
 
     const localName = nameEl ? nameEl.value : "Pilot";
     const roomId = roomEl ? roomEl.value : "alpha";
     const wsHost = (window.location.hostname && window.location.hostname.trim()) || "localhost";
     const wsUrl = wsEl ? wsEl.value : `${window.location.protocol === "https:" ? "wss" : "ws"}://${wsHost}:8080`;
+    const shipColor = colorEl ? colorEl.value : (state.multiplayer.shipColor || "#8cecff");
+    state.multiplayer.shipColor = shipColor;
+    persistClientSettings();
 
     if (multiplayerSystem && typeof multiplayerSystem.configure === "function") {
       multiplayerSystem.configure({
         enabled: true,
         localName,
         roomId,
+        shipColor,
         wsUrl,
       });
       if (typeof multiplayerSystem.setReady === "function") {
@@ -4046,6 +4310,7 @@ function handleOverlayAction(actionNode) {
       : {
         roomId: state.multiplayer.roomId || "alpha",
         localName: state.multiplayer.localName || "Pilot",
+        shipColor: state.multiplayer.shipColor || "#8cecff",
         wsUrl: state.multiplayer.wsUrl || `${window.location.protocol === "https:" ? "wss" : "ws"}://${wsHost}:8080`,
       };
     menus.showMultiplayerMenu(defaults);
@@ -4074,6 +4339,8 @@ function handleOverlayAction(actionNode) {
     const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
     const toastToggle = overlay.querySelector("#missionToastToggle");
     const dailyChallengeToggle = overlay.querySelector("#dailyChallengeToggle");
+    const offscreenAlliesToggle = overlay.querySelector("#offscreenAlliesToggle");
+    const allyHighlightToggle = overlay.querySelector("#allyHighlightToggle");
     const failTimeToggle = overlay.querySelector("#missionFailTimeToggle");
     const failHitToggle = overlay.querySelector("#missionFailHitToggle");
     const failNoHitToggle = overlay.querySelector("#missionFailNoHitToggle");
@@ -4081,9 +4348,12 @@ function handleOverlayAction(actionNode) {
     if (sfxSlider) state.options.sfxVolume = Math.max(0, Math.min(1, Number(sfxSlider.value) / 100));
     if (toastToggle) state.options.missionToastEnabled = toastToggle.checked;
     if (dailyChallengeToggle) state.options.dailyRunChallengesEnabled = dailyChallengeToggle.checked;
+    if (offscreenAlliesToggle) state.options.offscreenAllyIndicatorsEnabled = offscreenAlliesToggle.checked;
+    if (allyHighlightToggle) state.options.allyHighlightEnabled = allyHighlightToggle.checked;
     if (failTimeToggle) state.options.missionFailExtraTimeLimit = failTimeToggle.checked;
     if (failHitToggle) state.options.missionFailExtraHitLimit = failHitToggle.checked;
     if (failNoHitToggle) state.options.missionFailExtraNoHit = failNoHitToggle.checked;
+    persistClientSettings();
     const backAction = actionNode.dataset.back || "main-menu";
     menus.showOptionsMenu(backAction);
     return;
@@ -4094,6 +4364,8 @@ function handleOverlayAction(actionNode) {
     const sfxSlider = overlay.querySelector("#sfxVolumeSlider");
     const toastToggle = overlay.querySelector("#missionToastToggle");
     const dailyChallengeToggle = overlay.querySelector("#dailyChallengeToggle");
+    const offscreenAlliesToggle = overlay.querySelector("#offscreenAlliesToggle");
+    const allyHighlightToggle = overlay.querySelector("#allyHighlightToggle");
     const failTimeToggle = overlay.querySelector("#missionFailTimeToggle");
     const failHitToggle = overlay.querySelector("#missionFailHitToggle");
     const failNoHitToggle = overlay.querySelector("#missionFailNoHitToggle");
@@ -4113,6 +4385,12 @@ function handleOverlayAction(actionNode) {
     if (dailyChallengeToggle) {
       state.options.dailyRunChallengesEnabled = dailyChallengeToggle.checked;
     }
+    if (offscreenAlliesToggle) {
+      state.options.offscreenAllyIndicatorsEnabled = offscreenAlliesToggle.checked;
+    }
+    if (allyHighlightToggle) {
+      state.options.allyHighlightEnabled = allyHighlightToggle.checked;
+    }
     if (failTimeToggle) {
       state.options.missionFailExtraTimeLimit = failTimeToggle.checked;
     }
@@ -4122,6 +4400,7 @@ function handleOverlayAction(actionNode) {
     if (failNoHitToggle) {
       state.options.missionFailExtraNoHit = failNoHitToggle.checked;
     }
+    persistClientSettings();
     const backAction = actionNode.dataset.back || "main-menu";
     if (backAction === "manual-pause") {
       showPauseOverlay();
@@ -4403,6 +4682,9 @@ const inputSystem = createInputSystem({
   },
   onToggleStatusBars: () => {
     cycleStatusBarsMode();
+  },
+  onToggleNetDebug: () => {
+    state.debugNetOverlay = !state.debugNetOverlay;
   },
   onOverlayAction: handleOverlayAction,
 });
