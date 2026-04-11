@@ -5,7 +5,7 @@
 - Avoid opening multiple Copilot-heavy VS Code windows on the same repo at the same time.
 - This repo includes `.copilotignore` to exclude heavy non-code assets from indexing.
 
-# Void Runner
+# THAUMOR
 
 Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit, Maus-Zielen und Schiessen.
 
@@ -37,16 +37,28 @@ Seitwaerts scrollender Space-Arcade-Roguelike-Shooter mit Raumschiff, Traegheit,
 ## Multiplayer (erste Version)
 - Diese erste Version synchronisiert Spielerposition/-rotation zwischen Browsern ueber WebSocket.
 - Gameplay ist noch lokal autoritativ (MVP), Gegner/Progression werden noch nicht serverseitig synchronisiert.
+- Multiplayer-Flow ist jetzt im Startmenue integriert (kein URL-Query-Zwang mehr): Multiplayer -> Raum beitreten -> Lobby (Ready/Start).
 
 ### Server starten
 1. In [server/package.json](server/package.json) Verzeichnis wechseln: `cd server`
 2. Abhaengigkeiten installieren: `npm install`
 3. Server starten: `npm start`
 
+### Windows Helper-Skript (empfohlen)
+- Aus dem Projekt-Root starten: `./start-mp-server.ps1`
+- Optional anderer Port: `./start-mp-server.ps1 -Port 8090`
+- Wenn 8080 belegt ist, waehlt das Skript automatisch den naechsten freien Port (z. B. 8081).
+- Exakten Port erzwingen (sonst Fehler bei Belegung): `./start-mp-server.ps1 -Port 8080 -StrictPort`
+- Das Skript findet Node automatisch und installiert Abhaengigkeiten bei Bedarf.
+
 ### Multiplayer-Client starten
-- Spiel im Browser mit Query-Parametern aufrufen:
-- `index.html?mp=1&ws=ws://localhost:8080&room=alpha&name=Pilot1`
-- Zweiten Browser/Tab mit anderem Namen starten, z. B. `name=Pilot2`.
+- Spiel normal starten und im Hauptmenue auf `Multiplayer` klicken.
+- Pilot-Name, Raumname und Server-URL eintragen, dann `Join / Host Raum`.
+- In der Lobby `Bereit` setzen; Host startet den Run, wenn alle bereit sind.
+
+### Hinweis zum Hosting
+- GitHub/Git speichert nur den Code, hostet aber keinen dauerhaft laufenden Node-WebSocket-Server.
+- Fuer echtes Online-Multiplayer muss der Serverprozess auf einem erreichbaren Rechner laufen (eigener PC, VPS oder Cloud-Host).
 
 ### Singleplayer
 - Standard ohne `mp=1` bleibt unveraendert Singleplayer.

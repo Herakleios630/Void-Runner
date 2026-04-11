@@ -1859,59 +1859,138 @@
       }
 
       const mission = state.missions && state.missions.active;
-      if (mission && mission.type === "special-target" && !mission.completed && !mission.failed) {
-        const targetObj = state.objects.find((obj) => obj && obj.id === mission.specialTargetObjectId && !obj.destroyed && obj.hp > 0);
-        if (targetObj && Number.isFinite(targetObj.worldX) && Number.isFinite(targetObj.worldY)) {
-          const target = project(targetObj.worldX, targetObj.worldY);
-          const dist = Math.hypot((targetObj.worldX || 0) - centerX, (targetObj.worldY || 0) - centerY);
+      function drawMissionMapIndicator(targetWorldX, targetWorldY, style) {
+        if (!Number.isFinite(targetWorldX) || !Number.isFinite(targetWorldY)) return;
 
-          if (target.visible) {
-            const r = 4.4;
-            ctx.save();
-            ctx.strokeStyle = "rgba(255, 120, 106, 0.98)";
-            ctx.fillStyle = "rgba(255, 120, 106, 0.35)";
-            ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.moveTo(target.x, target.y - r);
-            ctx.lineTo(target.x + r, target.y);
-            ctx.lineTo(target.x, target.y + r);
-            ctx.lineTo(target.x - r, target.y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-          } else {
-            const dx = (targetObj.worldX || 0) - centerX;
-            const dy = (targetObj.worldY || 0) - centerY;
-            const len = Math.hypot(dx, dy) || 1;
-            const nx = dx / len;
-            const ny = dy / len;
-            const inset = 10;
-            const px = Math.max(mapX + inset, Math.min(mapX + mapSize - inset, mapX + mapSize * 0.5 + nx * (mapSize * 0.5 - inset)));
-            const py = Math.max(mapY + inset, Math.min(mapY + mapSize - inset, mapY + mapSize * 0.5 + ny * (mapSize * 0.5 - inset)));
-            const a = Math.atan2(ny, nx);
-            const tip = 6;
-            const wing = 4;
+        const target = project(targetWorldX, targetWorldY);
+        const dist = Math.hypot(targetWorldX - centerX, targetWorldY - centerY);
+        const strokeColor = style.stroke || "rgba(255,255,255,0.95)";
+        const fillColor = style.fill || "rgba(255,255,255,0.35)";
+        const textColor = style.text || "rgba(255,255,255,0.95)";
+        const label = style.label || "TARGET";
 
-            ctx.save();
-            ctx.fillStyle = "rgba(255, 120, 106, 0.95)";
-            ctx.strokeStyle = "rgba(255, 222, 216, 0.95)";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(px + Math.cos(a) * tip, py + Math.sin(a) * tip);
-            ctx.lineTo(px + Math.cos(a + 2.45) * wing, py + Math.sin(a + 2.45) * wing);
-            ctx.lineTo(px + Math.cos(a - 2.45) * wing, py + Math.sin(a - 2.45) * wing);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
+        if (target.visible) {
+          const r = 4.8;
+          ctx.save();
+          ctx.strokeStyle = strokeColor;
+          ctx.fillStyle = fillColor;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(target.x, target.y - r);
+          ctx.lineTo(target.x + r, target.y);
+          ctx.lineTo(target.x, target.y + r);
+          ctx.lineTo(target.x - r, target.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          const dx = targetWorldX - centerX;
+          const dy = targetWorldY - centerY;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = dx / len;
+          const ny = dy / len;
+          const inset = 10;
+          const px = Math.max(mapX + inset, Math.min(mapX + mapSize - inset, mapX + mapSize * 0.5 + nx * (mapSize * 0.5 - inset)));
+          const py = Math.max(mapY + inset, Math.min(mapY + mapSize - inset, mapY + mapSize * 0.5 + ny * (mapSize * 0.5 - inset)));
+          const a = Math.atan2(ny, nx);
+          const tip = 6;
+          const wing = 4;
+
+          ctx.save();
+          ctx.fillStyle = strokeColor;
+          ctx.strokeStyle = textColor;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(px + Math.cos(a) * tip, py + Math.sin(a) * tip);
+          ctx.lineTo(px + Math.cos(a + 2.45) * wing, py + Math.sin(a + 2.45) * wing);
+          ctx.lineTo(px + Math.cos(a - 2.45) * wing, py + Math.sin(a - 2.45) * wing);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.fillStyle = textColor;
+        ctx.font = "11px Trebuchet MS";
+        ctx.fillText(`${label} ${Math.floor(dist)} WU`, mapX + 7, mapY + mapSize - 21);
+      }
+
+      if (mission && !mission.completed && !mission.failed) {
+        if (mission.type === "special-target") {
+          const targetObj = state.objects.find((obj) => obj && obj.id === mission.specialTargetObjectId && !obj.destroyed && obj.hp > 0);
+          if (targetObj && Number.isFinite(targetObj.worldX) && Number.isFinite(targetObj.worldY)) {
+            drawMissionMapIndicator(targetObj.worldX, targetObj.worldY, {
+              stroke: "rgba(255, 120, 106, 0.95)",
+              fill: "rgba(255, 120, 106, 0.35)",
+              text: "rgba(255, 168, 158, 0.95)",
+              label: "TARGET",
+            });
           }
-
-          ctx.fillStyle = "rgba(255, 168, 158, 0.95)";
-          ctx.font = "11px Trebuchet MS";
-          ctx.fillText(`TARGET ${Math.floor(dist)} WU`, mapX + 7, mapY + mapSize - 21);
+        } else if (mission.type === "reach-zone" && Number.isFinite(mission.targetWorldX) && Number.isFinite(mission.targetWorldY)) {
+          drawMissionMapIndicator(mission.targetWorldX, mission.targetWorldY, {
+            stroke: "rgba(118, 224, 255, 0.97)",
+            fill: "rgba(118, 224, 255, 0.32)",
+            text: "rgba(188, 241, 255, 0.96)",
+            label: "ZONE",
+          });
         }
       }
+    }
+
+    function drawMissionDirectionArrow() {
+      const mission = state.missions && state.missions.active;
+      if (!mission || mission.completed || mission.failed) return;
+      if (mission.type !== "reach-zone") return;
+      if (!state.ship || !Number.isFinite(state.ship.worldX) || !Number.isFinite(state.ship.worldY)) return;
+      if (!Number.isFinite(mission.targetWorldX) || !Number.isFinite(mission.targetWorldY)) return;
+
+      const dx = mission.targetWorldX - state.ship.worldX;
+      const dy = mission.targetWorldY - state.ship.worldY;
+      const dist = Math.hypot(dx, dy);
+      if (dist <= Math.max(0, mission.target || 0)) return;
+
+      const screenTarget = cameraSystem.worldToScreen(mission.targetWorldX, mission.targetWorldY, 1, WORLD.width, WORLD.height);
+      const onScreen = screenTarget.x >= 0 && screenTarget.x <= WORLD.width && screenTarget.y >= 0 && screenTarget.y <= WORLD.height;
+      if (onScreen) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(118, 224, 255, 0.96)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(screenTarget.x, screenTarget.y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      const nx = dx / dist;
+      const ny = dy / dist;
+      const cx = WORLD.width * 0.5;
+      const cy = WORLD.height * 0.5;
+      const inset = 26;
+      const radiusX = Math.max(20, WORLD.width * 0.5 - inset);
+      const radiusY = Math.max(20, WORLD.height * 0.5 - inset);
+      const t = 1 / Math.max(Math.abs(nx) / radiusX, Math.abs(ny) / radiusY);
+      const px = cx + nx * t;
+      const py = cy + ny * t;
+      const a = Math.atan2(ny, nx);
+
+      ctx.save();
+      ctx.fillStyle = "rgba(118, 224, 255, 0.98)";
+      ctx.strokeStyle = "rgba(228, 249, 255, 0.95)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(px + Math.cos(a) * 12, py + Math.sin(a) * 12);
+      ctx.lineTo(px + Math.cos(a + 2.42) * 7, py + Math.sin(a + 2.42) * 7);
+      ctx.lineTo(px + Math.cos(a - 2.42) * 7, py + Math.sin(a - 2.42) * 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = "12px Trebuchet MS";
+      ctx.fillStyle = "rgba(194, 243, 255, 0.96)";
+      ctx.fillText(`ZONE ${Math.floor(dist)} WU`, Math.max(10, Math.min(WORLD.width - 140, px - 48)), Math.max(20, Math.min(WORLD.height - 14, py - 12)));
+      ctx.restore();
     }
 
     function drawStatusTrackLine(x, y, width, pct, color) {
@@ -2263,6 +2342,7 @@
       }
 
       drawMiniMap();
+      drawMissionDirectionArrow();
 
       if (state.ship && (state.ship.scannerJam || 0) > 0.12) {
         const jam = Math.max(0, Math.min(0.9, state.ship.scannerJam || 0));

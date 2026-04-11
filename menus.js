@@ -37,13 +37,137 @@
       }
       overlay.classList.remove("hidden");
       overlay.innerHTML = `
-        <h1>Void Runner</h1>
+        <h1>THAUMOR</h1>
         <p style="color:#b8d8f8;">Prozedurales Weltraum-Abenteuer</p>
         <div style="display:grid;gap:12px;width:min(92vw,340px);margin:24px auto 0;">
-          <button data-action="open-diff-select" style="padding:14px 28px;font-size:17px;">Spiel starten</button>
+          <button data-action="open-diff-select" style="padding:14px 28px;font-size:17px;">Singleplayer</button>
+          <button data-action="open-multiplayer-menu" style="padding:14px 28px;font-size:17px;">Multiplayer</button>
           <button data-action="open-options" data-back="main-menu" style="padding:11px 28px;">Optionen</button>
         </div>
         <p style="margin-top:28px;font-size:12px;color:#6a98c0;">WASD/Pfeile = Schub &nbsp;|&nbsp; LMB/Space = Schiessen &nbsp;|&nbsp; ESC = Pause</p>
+      `;
+    }
+
+    function showMultiplayerMenu(defaults = {}) {
+      state.running = false;
+      state.pauseReason = "menu";
+      setPauseIndicatorVisible(false);
+      if (typeof playMusicCategory === "function") {
+        playMusicCategory("menu");
+      }
+
+      const wsHost = (window.location.hostname && window.location.hostname.trim()) || "localhost";
+      const wsDefault = defaults.wsUrl || `${window.location.protocol === "https:" ? "wss" : "ws"}://${wsHost}:8080`;
+      const pilotDefault = defaults.localName || `pilot-${Math.floor(Math.random() * 9999).toString().padStart(4, "0")}`;
+      const roomDefault = defaults.roomId || "alpha";
+
+      overlay.classList.remove("hidden");
+      overlay.innerHTML = `
+        <h1>Multiplayer</h1>
+        <p>Verbinde dich mit einem Server und trete einem Raum bei.</p>
+        <div style="width:min(92vw,460px);display:grid;gap:12px;text-align:left;">
+          <label style="display:grid;gap:6px;">
+            <span style="color:#d0e8ff;">Pilot-Name</span>
+            <input id="mpPilotName" value="${pilotDefault}" maxlength="24" style="padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(7,20,42,0.8);color:#eef8ff;" />
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="color:#d0e8ff;">Raumname</span>
+            <input id="mpRoomName" value="${roomDefault}" maxlength="32" style="padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(7,20,42,0.8);color:#eef8ff;" />
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="color:#d0e8ff;">Server-URL (ws/wss)</span>
+            <input id="mpServerUrl" value="${wsDefault}" style="padding:9px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(7,20,42,0.8);color:#eef8ff;" />
+          </label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+            <button data-action="multiplayer-join" style="padding:12px 22px;">Join / Host Raum</button>
+            <button data-action="open-main-menu" style="padding:12px 22px;">Zurueck</button>
+          </div>
+          <div style="font-size:12px;color:#9ec8e9;">Tipp: Gleicher Raumname = gleicher Raum. Der erste Spieler ist automatisch Host fuer den Raum.</div>
+        </div>
+      `;
+    }
+
+    function showMultiplayerLobby(status = {}, lobby = {}) {
+      state.running = false;
+      state.pauseReason = "multiplayer-lobby";
+      setPauseIndicatorVisible(false);
+      if (typeof playMusicCategory === "function") {
+        playMusicCategory("menu");
+      }
+
+      const roomId = lobby.roomId || status.roomId || "alpha";
+      const players = Array.isArray(lobby.players) ? lobby.players : [];
+      const selfId = lobby.selfId || status.selfId || null;
+      const hostId = lobby.hostId || null;
+      const connected = Boolean(status.connected);
+      const localReady = Boolean(lobby.localReady);
+      const canStart = Boolean(lobby.canStart);
+      const phase = lobby.phase || status.roomPhase || "lobby";
+      const isHost = Boolean(selfId && hostId && selfId === hostId);
+      const stateText = !connected
+        ? "Verbinde..."
+        : phase === "running"
+          ? "Run startet..."
+          : "Lobby";
+
+      const playerRows = players.length > 0
+        ? players.map((p) => {
+          const tag = p.id === hostId ? " (Host)" : "";
+          const me = p.id === selfId ? " (Du)" : "";
+          const readyText = p.ready ? "Bereit" : "Nicht bereit";
+          const readyColor = p.ready ? "#9dffd0" : "#ffd1ad";
+          return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(9,23,46,0.48);"><span>${p.name}${tag}${me}</span><span style="color:${readyColor};">${readyText}</span></div>`;
+        }).join("")
+        : `<div style="padding:8px 10px;border-radius:8px;background:rgba(9,23,46,0.48);color:#9ec8e9;">Warte auf Spieler...</div>`;
+
+      const startButton = isHost
+        ? `<button data-action="multiplayer-start" ${(!connected || !canStart || phase !== "lobby") ? "disabled" : ""} style="padding:11px 18px;">Run starten</button>`
+        : "";
+
+      overlay.classList.remove("hidden");
+      overlay.innerHTML = `
+        <h1>Multiplayer Lobby</h1>
+        <p>Raum: <strong>${roomId}</strong> | Status: <strong>${stateText}</strong></p>
+        <div style="width:min(92vw,520px);display:grid;gap:10px;text-align:left;">
+          <div style="font-size:12px;color:#9ec8e9;">Server: ${status.wsUrl || "-"}</div>
+          <div style="display:grid;gap:6px;max-height:210px;overflow:auto;">${playerRows}</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <button data-action="multiplayer-ready-toggle" style="padding:11px 18px;">${localReady ? "Bereit zuruecknehmen" : "Bereit"}</button>
+            ${startButton}
+            <button data-action="multiplayer-open-config" style="padding:11px 18px;">Raum wechseln</button>
+            <button data-action="multiplayer-leave" style="padding:11px 18px;">Lobby verlassen</button>
+          </div>
+          <div style="font-size:12px;color:#9ec8e9;">Host kann starten, sobald alle in der Lobby bereit sind.</div>
+        </div>
+      `;
+    }
+
+    function showMultiplayerWaitingForHostConfig(status = {}, lobby = {}) {
+      state.running = false;
+      state.pauseReason = "multiplayer-await-host-setup";
+      setPauseIndicatorVisible(false);
+      if (typeof playMusicCategory === "function") {
+        playMusicCategory("menu");
+      }
+
+      const roomId = lobby.roomId || status.roomId || "alpha";
+      const isHost = Boolean(lobby && lobby.hostId && lobby.selfId && lobby.selfId === lobby.hostId);
+      const infoText = isHost
+        ? "Deine Einstellungen werden an den Server uebernommen. Danach wechselt ihr beide zur Schiffsauswahl."
+        : "Der Host waehlt gerade Schwierigkeitsgrad und Seed. Danach kommst du direkt zur Schiffsauswahl.";
+      overlay.classList.remove("hidden");
+      overlay.innerHTML = `
+        <h1>Warte auf Host</h1>
+        <p>Raum: <strong>${roomId}</strong></p>
+        <div style="width:min(92vw,460px);display:grid;gap:12px;text-align:left;">
+          <div style="padding:10px 12px;border:1px solid rgba(255,255,255,0.18);border-radius:10px;background:rgba(9,23,46,0.45);color:#cfe7ff;">
+            ${infoText}
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button data-action="multiplayer-back-to-lobby" style="padding:11px 18px;">Zur Lobby</button>
+            <button data-action="multiplayer-leave" style="padding:11px 18px;">Lobby verlassen</button>
+          </div>
+        </div>
       `;
     }
 
@@ -195,6 +319,9 @@
 
     return {
       showMainLandingMenu,
+      showMultiplayerMenu,
+      showMultiplayerLobby,
+      showMultiplayerWaitingForHostConfig,
       showOptionsMenu,
       showDifficultySelectionMenu,
       showShipSelectionMenu,

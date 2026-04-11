@@ -88,6 +88,12 @@
       plasma: 1,
       shield: 1,
     };
+    let progressionBaseline = null;
+    const appliedUpgradeHistory = [];
+
+    function cloneData(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
 
     function activeProfile() {
       return BALANCE_PROFILES[activeProfileId];
@@ -534,6 +540,86 @@
       if (state.weapon.drillUnlocked) state.weaponLevels.drill = 1;
       if (state.weapon.plasmaUnlocked) state.weaponLevels.plasma = 1;
       if (state.shield.unlocked) state.weaponLevels.shield = 1;
+
+      appliedUpgradeHistory.length = 0;
+      progressionBaseline = {
+        shipStats: cloneData(state.shipStats || {}),
+        shotCooldown: Number.isFinite(state.shotCooldown) ? state.shotCooldown : 0.14,
+        weapon: cloneData(state.weapon || {}),
+        shield: cloneData(state.shield || {}),
+        ship: state.ship
+          ? {
+            maxHp: Number.isFinite(state.ship.maxHp) ? state.ship.maxHp : 1,
+            maxArmor: Number.isFinite(state.ship.maxArmor) ? state.ship.maxArmor : 0,
+            thrust: Number.isFinite(state.ship.thrust) ? state.ship.thrust : 0,
+            maxSpeed: Number.isFinite(state.ship.maxSpeed) ? state.ship.maxSpeed : 0,
+            acidResist: Number.isFinite(state.ship.acidResist) ? state.ship.acidResist : 0,
+            scannerHarden: Number.isFinite(state.ship.scannerHarden) ? state.ship.scannerHarden : 0,
+            acidDps: Number.isFinite(state.ship.acidDps) ? state.ship.acidDps : 0,
+          }
+          : null,
+        weaponLevels: cloneData(state.weaponLevels || {}),
+        weaponMilestones: cloneData(state.weaponMilestones || {}),
+        weaponCounters: cloneData(state.weaponCounters || {}),
+        weaponSpecials: cloneData(state.weaponSpecials || {}),
+      };
+    }
+
+    function applyUpgradeEffects(upgrade, options = {}) {
+      if (!upgrade) return false;
+
+      const recordHistory = options.recordHistory !== false;
+
+      state.upgradesTaken[upgrade.id] = (state.upgradesTaken[upgrade.id] || 0) + 1;
+      upgrade.apply();
+      gainWeaponLevel(weaponUpgradeTrack[upgrade.id], 1);
+
+      if (recordHistory) {
+        appliedUpgradeHistory.push(upgrade.id);
+      }
+
+      return true;
+    }
+
+    function rollbackRecentLevelUpgrades(count = 0) {
+      const wanted = Math.max(0, Math.floor(count));
+      if (wanted <= 0 || !progressionBaseline) return 0;
+
+      const removed = Math.min(wanted, appliedUpgradeHistory.length);
+      if (removed <= 0) return 0;
+
+      appliedUpgradeHistory.splice(appliedUpgradeHistory.length - removed, removed);
+
+      state.upgradesTaken = {};
+      state.pendingUpgradeOptions = [];
+      state.shipStats = cloneData(progressionBaseline.shipStats || {});
+      state.shotCooldown = Number.isFinite(progressionBaseline.shotCooldown) ? progressionBaseline.shotCooldown : state.shotCooldown;
+      state.weapon = cloneData(progressionBaseline.weapon || {});
+      state.shield = cloneData(progressionBaseline.shield || {});
+      state.weaponLevels = cloneData(progressionBaseline.weaponLevels || {});
+      state.weaponMilestones = cloneData(progressionBaseline.weaponMilestones || {});
+      state.weaponCounters = cloneData(progressionBaseline.weaponCounters || {});
+      state.weaponSpecials = cloneData(progressionBaseline.weaponSpecials || {});
+
+      if (state.ship && progressionBaseline.ship) {
+        state.ship.maxHp = progressionBaseline.ship.maxHp;
+        state.ship.maxArmor = progressionBaseline.ship.maxArmor;
+        state.ship.thrust = progressionBaseline.ship.thrust;
+        state.ship.maxSpeed = progressionBaseline.ship.maxSpeed;
+        state.ship.acidResist = progressionBaseline.ship.acidResist;
+        state.ship.scannerHarden = progressionBaseline.ship.scannerHarden;
+        state.ship.acidDps = progressionBaseline.ship.acidDps;
+        state.ship.hp = Math.min(state.ship.hp, state.ship.maxHp);
+        state.ship.armor = Math.min(state.ship.armor, state.ship.maxArmor);
+      }
+
+      const history = appliedUpgradeHistory.slice();
+      for (const id of history) {
+        const upgrade = upgradeDefs.find((u) => u.id === id);
+        applyUpgradeEffects(upgrade, { recordHistory: false, playAudio: false });
+      }
+
+      return removed;
     }
 
     function applyUpgrade(id) {
@@ -541,9 +627,7 @@
       if (!upgrade) return;
       if (!canOfferUpgrade(upgrade)) return;
 
-      state.upgradesTaken[id] = (state.upgradesTaken[id] || 0) + 1;
-      upgrade.apply();
-      gainWeaponLevel(weaponUpgradeTrack[id], 1);
+      applyUpgradeEffects(upgrade, { recordHistory: true, playAudio: true });
       finishLevelUp();
     }
 
@@ -626,6 +710,7 @@
       showLevelUpChoice,
       rerollLevelUpOptions,
       applyUpgrade,
+      rollbackRecentLevelUpgrades,
       initializeWeaponLevelsFromLoadout,
       gainWeaponLevel,
       showBossRewardChoice,

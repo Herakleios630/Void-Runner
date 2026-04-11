@@ -1,4 +1,4 @@
-# Void Runner Assets
+# THAUMOR Assets
 
 Lege hier eigene Grafiken (PNG, WebP oder JPG) ab.
 
